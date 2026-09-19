@@ -24,6 +24,7 @@ class Profile {
     this.totalOrders = 0,
     this.referralCount = 0,
     this.fcmToken,
+    this.isActive = true,
   });
 
   factory Profile.fromMap(Map<String, dynamic> map) {
@@ -52,6 +53,7 @@ class Profile {
       totalOrders: map['total_orders'] as int? ?? 0,
       referralCount: map['referral_count'] as int? ?? 0,
       fcmToken: map['fcm_token'] as String?,
+      isActive: map['is_active'] as bool? ?? true,
     );
   }
 
@@ -80,6 +82,11 @@ class Profile {
   final int totalOrders;
   final int referralCount;
   final String? fcmToken;
+
+  /// Post-testing fixes, Section 7: false once Admin has removed/
+  /// deactivated this account (currently only exposed for riders). The
+  /// account and its history are never deleted — only sign-in is blocked.
+  final bool isActive;
 
   /// True when this admin account is restricted to the kitchen queue only.
   bool get isKitchenStaff => role == UserRole.admin && adminTier == 'kitchen_staff';

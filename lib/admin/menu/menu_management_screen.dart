@@ -159,6 +159,7 @@ class MenuManagementScreen extends ConsumerWidget {
           basePrice: product.basePrice,
           imageUrl: product.imageUrl,
           isAvailable: available,
+          requiresPack: product.requiresPack,
         );
     ref.invalidate(adminVendorProductsProvider(_uniflexVendorId));
   }

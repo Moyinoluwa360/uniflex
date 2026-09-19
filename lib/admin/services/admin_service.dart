@@ -2,10 +2,55 @@ import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/models/around_category.dart';
 import '../../shared/models/order.dart';
 import '../../shared/models/order_item.dart';
 import '../../shared/models/product.dart';
 import '../../shared/models/vendor.dart';
+
+/// One row from `admin_list_riders()` — a rider account as Admin sees it
+/// in the Rider Management screen (post-testing fixes, Section 7).
+class RiderAccount {
+  const RiderAccount({
+    required this.id,
+    required this.fullName,
+    required this.email,
+    required this.phone,
+    required this.isActive,
+    required this.isOnline,
+    required this.createdAt,
+  });
+
+  factory RiderAccount.fromMap(Map<String, dynamic> map) {
+    return RiderAccount(
+      id: map['id'] as String,
+      fullName: map['full_name'] as String? ?? '—',
+      email: map['email'] as String? ?? '—',
+      phone: map['phone'] as String?,
+      isActive: map['is_active'] as bool? ?? true,
+      isOnline: map['rider_is_online'] as bool? ?? false,
+      createdAt: DateTime.parse(map['created_at'] as String),
+    );
+  }
+
+  final String id;
+  final String fullName;
+  final String email;
+  final String? phone;
+  final bool isActive;
+  final bool isOnline;
+  final DateTime createdAt;
+}
+
+/// Thrown when the `admin-create-rider` Edge Function rejects a request
+/// (e.g. duplicate email), with a message safe to show directly to Admin.
+class AdminException implements Exception {
+  AdminException(this.message);
+  final String message;
+
+  @override
+  String toString() => 'AdminException: $message';
+}
 
 /// A kitchen order: an active Uniflex-source order (placed/preparing/ready)
 /// together with its resolved line items. Used exclusively by the Kitchen
@@ -52,6 +97,7 @@ class AdminService {
     String? imageUrl,
     String? location,
     String? contact,
+    double? packPrice,
   }) async {
     final map = <String, dynamic>{
       'name': name,
@@ -61,6 +107,7 @@ class AdminService {
       'image_url': imageUrl,
       'location': location,
       'contact': contact,
+      if (packPrice != null) 'pack_price': packPrice,
     };
     if (id != null) {
       await _client.from('vendors').update(map).eq('id', id);
@@ -99,6 +146,7 @@ class AdminService {
     required double basePrice,
     String? imageUrl,
     bool isAvailable = true,
+    bool requiresPack = false,
   }) async {
     final map = <String, dynamic>{
       'vendor_id': vendorId,
@@ -108,6 +156,7 @@ class AdminService {
       'base_price': basePrice,
       'image_url': imageUrl,
       'is_available': isAvailable,
+      'requires_pack': requiresPack,
     };
     if (id != null) {
       await _client.from('products').update(map).eq('id', id);
@@ -195,6 +244,111 @@ class AdminService {
       'p_order_id': orderId,
       'p_new_status': newStatus,
     });
+  }
+
+  // ── Rider management (post-testing fixes, Section 7) ───────────────────
+
+  /// All rider accounts, active and inactive, via the admin_list_riders()
+  /// RPC (profiles has no admin SELECT-all policy, so this can't be a
+  /// plain table select).
+  Future<List<RiderAccount>> fetchRiders() async {
+    final data = await _client.rpc('admin_list_riders');
+    return (data as List)
+        .map((m) => RiderAccount.fromMap(Map<String, dynamic>.from(m as Map)))
+        .toList();
+  }
+
+  /// Soft "remove"/"deactivate" (and reversible "reactivate") — never
+  /// deletes the rider's account or delivery history, only flips whether
+  /// they can sign in and appear in the active roster.
+  Future<void> setRiderActive(String riderId, bool active) async {
+    await _client.rpc('admin_set_rider_active', params: {
+      'p_rider_id': riderId,
+      'p_active': active,
+    });
+  }
+
+  /// Invites a new Rider account. Invite-only, consistent with the Phase 1
+  /// pattern (no public Rider signup path) — this just moves "seed the
+  /// account by hand in Supabase" into an in-app action for Admin, via the
+  /// `admin-create-rider` Edge Function (needs a service-role key, which
+  /// this Dart client never holds).
+  Future<void> createRider({
+    required String email,
+    required String password,
+    required String fullName,
+    String? phone,
+  }) async {
+    try {
+      final res = await _client.functions.invoke('admin-create-rider', body: {
+        'email': email,
+        'password': password,
+        'full_name': fullName,
+        'phone': phone,
+      });
+      final data = res.data;
+      if (data is Map && data['error'] != null) {
+        throw AdminException(data['error'].toString());
+      }
+    } on FunctionException catch (e) {
+      final body = e.details;
+      final message = body is Map && body['error'] != null
+          ? body['error'].toString()
+          : 'Could not create rider (${e.status}).';
+      throw AdminException(message);
+    }
+  }
+
+  // ── Around categories (post-testing fixes, Section 9) ───────────────────
+
+  /// All Around categories, active and inactive, for the admin management
+  /// screen. Students only ever see the active ones (see
+  /// activeAroundCategoriesProvider).
+  Future<List<AroundCategoryData>> fetchAllAroundCategories() async {
+    final data = await _client
+        .from('around_categories')
+        .select()
+        .order('sort_order');
+    return data.map((m) => AroundCategoryData.fromMap(m)).toList();
+  }
+
+  /// Insert a new category (id == null) or update an existing one. [key]
+  /// is only used on insert — it's the stable identifier `around_requests`
+  /// rows reference, so it's never edited afterwards.
+  Future<void> upsertAroundCategory({
+    String? id,
+    String? key,
+    required String title,
+    required String subtitle,
+    required String description,
+    required String iconName,
+    required double flatFee,
+    required bool isActive,
+    required int sortOrder,
+  }) async {
+    final map = <String, dynamic>{
+      'title': title,
+      'subtitle': subtitle,
+      'description': description,
+      'icon_name': iconName,
+      'flat_fee': flatFee,
+      'is_active': isActive,
+      'sort_order': sortOrder,
+    };
+    if (id != null) {
+      await _client.from('around_categories').update(map).eq('id', id);
+    } else {
+      await _client.from('around_categories').insert({
+        ...map,
+        'key': key,
+      });
+    }
+  }
+
+  /// Hard-delete a category. Blocked by the `around_requests` foreign key
+  /// if any past request used it — deactivate instead in that case.
+  Future<void> deleteAroundCategory(String id) async {
+    await _client.from('around_categories').delete().eq('id', id);
   }
 
   // ── Dashboard ─────────────────────────────────────────────────────────

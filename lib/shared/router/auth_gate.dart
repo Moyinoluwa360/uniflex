@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/screens/complete_profile_screen.dart';
 import '../auth/screens/login_screen.dart';
 import '../services/auth/auth_providers.dart';
+import '../theme/app_spacing.dart';
 import 'role_router.dart';
 import 'splash_screen.dart';
 
@@ -66,6 +67,51 @@ class _AuthGateState extends ConsumerState<AuthGate> {
     if (!profile.onboardingComplete) {
       return const CompleteProfileScreen();
     }
+    if (!profile.isActive) {
+      // Post-testing fixes, Section 7: an admin-removed/deactivated
+      // account (currently only riders) never reaches a role shell.
+      // Sign out as a side effect so the next currentProfileProvider
+      // resolution sees no session and swaps to LoginScreen on its own.
+      return const _AccountDeactivatedScreen();
+    }
     return RoleRouter(role: profile.role);
+  }
+}
+
+class _AccountDeactivatedScreen extends ConsumerWidget {
+  const _AccountDeactivatedScreen();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.screenGutter),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.block_outlined, size: 56),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                'Account deactivated',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Your account has been deactivated by an admin. '
+                'Contact Uniflex support if you think this is a mistake.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              FilledButton(
+                onPressed: () => ref.read(authServiceProvider).signOut(),
+                child: const Text('Back to Login'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

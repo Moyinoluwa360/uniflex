@@ -5,17 +5,17 @@ import '../shared/services/auth/auth_providers.dart';
 import '../shared/widgets/navigation/app_bottom_nav_shell.dart';
 import 'dashboard/admin_dashboard_screen.dart';
 import 'kitchen/kitchen_queue_screen.dart';
+import 'manage/manage_hub_screen.dart';
 import 'menu/menu_management_screen.dart';
 import 'profile/admin_profile_screen.dart';
 import 'scheduled/admin_scheduled_orders_screen.dart';
-import 'vendors/vendor_management_screen.dart';
 
 /// Root of the Admin experience. Reads [currentProfileProvider] to
 /// determine the admin tier and shows tabs accordingly:
 ///
 /// - `kitchen_staff` → Queue + Profile only
 /// - `super_admin` (or null, for backwards-compat) → Dashboard + Queue +
-///   Menu + Vendors + Profile
+///   Menu + Manage + Profile
 ///
 /// Owns its own navigation stack — no screen inside here should import
 /// from lib/student/ or lib/rider/.
@@ -77,10 +77,10 @@ const _superAdminTabs = [
     screen: MenuManagementScreen(),
   ),
   AppNavTab(
-    label: 'Vendors',
-    icon: Icons.storefront_outlined,
-    selectedIcon: Icons.storefront,
-    screen: VendorManagementScreen(),
+    label: 'Manage',
+    icon: Icons.tune_outlined,
+    selectedIcon: Icons.tune,
+    screen: ManageHubScreen(),
   ),
   AppNavTab(
     label: 'Profile',

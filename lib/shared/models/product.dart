@@ -43,6 +43,7 @@ class Product {
     required this.basePrice,
     this.imageUrl,
     this.isAvailable = true,
+    this.requiresPack = false,
     this.options = const [],
   });
 
@@ -56,6 +57,7 @@ class Product {
       basePrice: (map['base_price'] as num).toDouble(),
       imageUrl: map['image_url'] as String?,
       isAvailable: map['is_available'] as bool? ?? true,
+      requiresPack: map['requires_pack'] as bool? ?? false,
     );
   }
 
@@ -67,6 +69,11 @@ class Product {
   final double basePrice;
   final String? imageUrl;
   final bool isAvailable;
+
+  /// Post-testing fixes, Section 11: true when this item needs to be
+  /// packaged into a container to be handed over (most food); false for
+  /// items that never do (drinks, etc.). Admin-editable per product.
+  final bool requiresPack;
 
   /// Protein and extra options, loaded separately by the product repository.
   final List<ProductOption> options;
@@ -90,6 +97,7 @@ class Product {
       basePrice: basePrice,
       imageUrl: imageUrl,
       isAvailable: isAvailable,
+      requiresPack: requiresPack,
       options: options ?? this.options,
     );
   }

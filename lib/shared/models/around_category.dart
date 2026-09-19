@@ -54,7 +54,10 @@ class AroundCategoryData {
     'print': Icons.print_outlined,
   };
 
-  IconData get icon => _iconsByName[iconName] ?? Icons.explore_outlined;
+  IconData get icon => iconFor(iconName);
+
+  static IconData iconFor(String name) =>
+      _iconsByName[name] ?? Icons.explore_outlined;
 
   /// Every icon name selectable in the admin category form — keeps the
   /// dropdown and the render-time lookup above in one place.

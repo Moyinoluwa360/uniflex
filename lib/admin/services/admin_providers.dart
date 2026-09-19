@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/models/around_category.dart';
 import '../../shared/models/order.dart';
 import '../../shared/models/product.dart';
 import '../../shared/models/vendor.dart';
@@ -44,4 +45,18 @@ final dashboardStatsProvider =
 final scheduledOrdersProvider =
     StreamProvider<List<Order>>((ref) {
   return ref.watch(adminServiceProvider).streamScheduledOrders();
+});
+
+/// Post-testing fixes, Section 7: all rider accounts for the Rider
+/// Management screen. Refresh with `ref.invalidate(adminRidersProvider)`
+/// after add/remove/activate.
+final adminRidersProvider = FutureProvider<List<RiderAccount>>((ref) async {
+  return ref.watch(adminServiceProvider).fetchRiders();
+});
+
+/// Post-testing fixes, Section 9: all Around categories (active +
+/// inactive) for the admin management screen under the Manage hub.
+final adminAroundCategoriesProvider =
+    FutureProvider<List<AroundCategoryData>>((ref) async {
+  return ref.watch(adminServiceProvider).fetchAllAroundCategories();
 });

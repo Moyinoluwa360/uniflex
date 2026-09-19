@@ -12,6 +12,7 @@ class Vendor {
     this.imageUrl,
     this.location,
     this.contact,
+    this.packPrice = 200,
   });
 
   factory Vendor.fromMap(Map<String, dynamic> map) {
@@ -25,6 +26,7 @@ class Vendor {
       imageUrl: map['image_url'] as String?,
       location: map['location'] as String?,
       contact: map['contact'] as String?,
+      packPrice: (map['pack_price'] as num?)?.toDouble() ?? 200,
     );
   }
 
@@ -43,6 +45,11 @@ class Vendor {
   /// Contact details for the vendor (phone number, WhatsApp, etc.). Added
   /// in Phase 4. May be null.
   final String? contact;
+
+  /// Post-testing fixes, Section 11: price of one pack (₦) for this
+  /// vendor's pack-requiring items. Set per vendor — Uniflex and each
+  /// partner vendor can each have their own.
+  final double packPrice;
 
   /// True for the primary Uniflex vendor — used to render its home card
   /// differently from partner vendor cards.

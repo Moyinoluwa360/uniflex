@@ -129,6 +129,7 @@ class VendorProductsScreen extends ConsumerWidget {
           basePrice: product.basePrice,
           imageUrl: product.imageUrl,
           isAvailable: available,
+          requiresPack: product.requiresPack,
         );
     ref.invalidate(adminVendorProductsProvider(vendor.id));
   }
