@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/order.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/async/retry_section.dart';
 import '../ordering/cart_provider.dart';
 import '../ordering/order_repository.dart';
 import '../tracking/order_tracking_screen.dart';
@@ -218,7 +219,7 @@ class _CompletedOrdersTab extends ConsumerWidget {
 
 // ── Shared list widget ────────────────────────────────────────────────────────
 
-class _OrderList extends StatelessWidget {
+class _OrderList extends ConsumerWidget {
   const _OrderList({
     required this.ordersAsync,
     required this.filter,
@@ -234,16 +235,14 @@ class _OrderList extends StatelessWidget {
   final Future<void> Function() onRefresh;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
 
     return ordersAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.screenGutter),
-          child: Text('Could not load orders: $e'),
-        ),
+      error: (e, _) => RetrySection(
+        message: 'Could not load orders.',
+        onRetry: () => ref.invalidate(studentOrdersProvider),
       ),
       data: (orders) {
         final filtered = orders.where(filter).toList();

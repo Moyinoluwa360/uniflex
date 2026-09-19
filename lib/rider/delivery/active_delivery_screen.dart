@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../shared/models/order.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/async/retry_section.dart';
 import '../services/rider_providers.dart';
 import '../services/rider_service.dart';
 
@@ -214,7 +215,10 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
       ),
       body: orderAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => RetrySection(
+          message: 'Could not load this delivery.',
+          onRetry: () => ref.invalidate(activeDeliveryProvider),
+        ),
         data: (Order? liveOrder) {
           if (liveOrder == null) {
             return const Center(child: Text('No active delivery.'));

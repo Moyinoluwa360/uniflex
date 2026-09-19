@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/order.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/async/retry_section.dart';
 import '../ordering/order_repository.dart';
 
 /// Live order tracking — shows the current order status as a vertical
@@ -36,11 +37,9 @@ class OrderTrackingScreen extends ConsumerWidget {
       ),
       body: liveAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.screenGutter),
-            child: Text('Could not load order: $e'),
-          ),
+        error: (e, _) => RetrySection(
+          message: 'Could not load this order.',
+          onRetry: () => ref.invalidate(orderByIdProvider(order.id)),
         ),
         data: (liveOrder) {
           final o = liveOrder ?? order;

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/async/retry_section.dart';
 import '../services/admin_providers.dart';
 
 class AdminDashboardScreen extends ConsumerWidget {
@@ -70,8 +71,8 @@ class AdminDashboardScreen extends ConsumerWidget {
                     child: CircularProgressIndicator(),
                   ),
                 ),
-                error: (e, _) => _ErrorCard(
-                  message: 'Could not load stats',
+                error: (e, _) => RetrySection(
+                  message: 'Could not load stats.',
                   onRetry: () => ref.invalidate(dashboardStatsProvider),
                 ),
                 data: (stats) => _StatsContent(stats: stats),
@@ -253,34 +254,6 @@ class _StatusBreakdown extends StatelessWidget {
             if (i < rows.length - 1)
               const Divider(height: 1, indent: AppSpacing.md),
           ],
-        ],
-      ),
-    );
-  }
-}
-
-class _ErrorCard extends StatelessWidget {
-  const _ErrorCard({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-      ),
-      child: Column(
-        children: [
-          const Icon(Icons.error_outline, color: AppColors.error, size: 32),
-          const SizedBox(height: AppSpacing.sm),
-          Text(message, style: theme.textTheme.bodyMedium),
-          const SizedBox(height: AppSpacing.sm),
-          TextButton(onPressed: onRetry, child: const Text('Retry')),
         ],
       ),
     );

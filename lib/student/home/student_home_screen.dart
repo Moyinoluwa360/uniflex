@@ -700,10 +700,10 @@ class _VendorList extends ConsumerWidget {
         padding: EdgeInsets.all(AppSpacing.lg),
         child: Center(child: CircularProgressIndicator()),
       ),
-      error: (e, _) => Padding(
-        padding: const EdgeInsets.all(AppSpacing.screenGutter),
-        child:
-            Text('Could not load vendors', style: theme.textTheme.bodySmall),
+      error: (e, _) => RetrySection(
+        message: 'Could not load vendors.',
+        onRetry: () => ref.invalidate(vendorsProvider),
+        compact: true,
       ),
       data: (vendors) {
         if (vendors.isEmpty) {

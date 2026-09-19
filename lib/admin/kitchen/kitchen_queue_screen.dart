@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/order.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/async/retry_section.dart';
 import '../services/admin_providers.dart';
 import '../services/admin_service.dart';
 
@@ -53,22 +54,9 @@ class KitchenQueueScreen extends ConsumerWidget {
       ),
       body: ordersAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.screenGutter),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.wifi_off_outlined, size: 48),
-                const SizedBox(height: AppSpacing.md),
-                Text(
-                  'Could not connect to the queue.\nCheck your connection.',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium,
-                ),
-              ],
-            ),
-          ),
+        error: (e, _) => RetrySection(
+          message: 'Could not connect to the queue. Check your connection.',
+          onRetry: () => ref.invalidate(kitchenOrdersProvider),
         ),
         data: (orders) {
           if (orders.isEmpty) {

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/order.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/async/retry_section.dart';
 import '../services/admin_providers.dart';
 
 /// Admin view of all upcoming scheduled orders, ordered by scheduled_for
@@ -47,7 +48,10 @@ class AdminScheduledOrdersScreen extends ConsumerWidget {
       ),
       body: ordersAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => RetrySection(
+          message: 'Could not load scheduled orders.',
+          onRetry: () => ref.invalidate(scheduledOrdersProvider),
+        ),
         data: (orders) {
           if (orders.isEmpty) {
             return Center(

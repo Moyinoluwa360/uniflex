@@ -9,6 +9,7 @@ import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/services/wallet/wallet_service.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/async/retry_section.dart';
 import 'paystack_checkout_page.dart';
 import 'saving_plan_screen.dart';
 
@@ -233,6 +234,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                       _BalanceCard(
                         infoAsync: infoAsync,
                         onFundTap: _openFundWallet,
+                        onRetry: () => ref.invalidate(walletInfoProvider),
                       ),
 
                       const SizedBox(height: AppSpacing.md),
@@ -275,10 +277,10 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                 ),
               ),
               error: (e, _) => SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.screenGutter),
-                  child:
-                      Text('Could not load transactions: $e'),
+                child: RetrySection(
+                  message: 'Could not load transactions.',
+                  onRetry: () => ref.invalidate(walletTransactionsProvider),
+                  compact: true,
                 ),
               ),
               data: (txs) {
@@ -337,10 +339,15 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
 // ── Balance card ──────────────────────────────────────────────────────────────
 
 class _BalanceCard extends StatelessWidget {
-  const _BalanceCard({required this.infoAsync, required this.onFundTap});
+  const _BalanceCard({
+    required this.infoAsync,
+    required this.onFundTap,
+    required this.onRetry,
+  });
 
   final AsyncValue<Map<String, dynamic>?> infoAsync;
   final VoidCallback onFundTap;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -379,10 +386,22 @@ class _BalanceCard extends StatelessWidget {
               child: CircularProgressIndicator(
                   color: AppColors.pureWhite, strokeWidth: 2),
             ),
-            error: (_, __) => Text(
-              '₦--',
-              style: theme.textTheme.headlineLarge
-                  ?.copyWith(color: AppColors.pureWhite),
+            error: (_, __) => Row(
+              children: [
+                Text(
+                  '₦--',
+                  style: theme.textTheme.headlineLarge
+                      ?.copyWith(color: AppColors.pureWhite),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                TextButton.icon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh,
+                      size: 16, color: AppColors.pureWhite),
+                  label: const Text('Retry',
+                      style: TextStyle(color: AppColors.pureWhite)),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: AppSpacing.md),

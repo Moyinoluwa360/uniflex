@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/async/retry_section.dart';
 import '../delivery/active_delivery_screen.dart';
 import '../services/rider_providers.dart';
 import 'pool_order.dart';
@@ -58,22 +59,9 @@ class JobPoolScreen extends ConsumerWidget {
           : poolAsync.when(
               loading: () =>
                   const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.screenGutter),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.wifi_off_outlined, size: 48),
-                      const SizedBox(height: AppSpacing.md),
-                      Text(
-                        'Could not load jobs.\nCheck your connection.',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
+              error: (e, _) => RetrySection(
+                message: 'Could not load jobs. Check your connection.',
+                onRetry: () => ref.invalidate(jobPoolProvider),
               ),
               data: (pool) {
                 if (pool.isEmpty) {
