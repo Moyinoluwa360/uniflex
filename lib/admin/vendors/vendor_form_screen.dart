@@ -26,6 +26,7 @@ class _VendorFormScreenState extends ConsumerState<VendorFormScreen> {
   late final TextEditingController _descCtrl;
   late final TextEditingController _locationCtrl;
   late final TextEditingController _contactCtrl;
+  late final TextEditingController _packPriceCtrl;
   late bool _isActive;
   bool _isSaving = false;
 
@@ -37,6 +38,8 @@ class _VendorFormScreenState extends ConsumerState<VendorFormScreen> {
     _descCtrl = TextEditingController(text: v?.description ?? '');
     _locationCtrl = TextEditingController(text: v?.location ?? '');
     _contactCtrl = TextEditingController(text: v?.contact ?? '');
+    _packPriceCtrl = TextEditingController(
+        text: (v?.packPrice ?? 200).toStringAsFixed(0));
     _isActive = v?.isActive ?? true;
   }
 
@@ -46,6 +49,7 @@ class _VendorFormScreenState extends ConsumerState<VendorFormScreen> {
     _descCtrl.dispose();
     _locationCtrl.dispose();
     _contactCtrl.dispose();
+    _packPriceCtrl.dispose();
     super.dispose();
   }
 
@@ -67,6 +71,7 @@ class _VendorFormScreenState extends ConsumerState<VendorFormScreen> {
             contact: _contactCtrl.text.trim().isEmpty
                 ? null
                 : _contactCtrl.text.trim(),
+            packPrice: double.tryParse(_packPriceCtrl.text.trim()) ?? 200,
           );
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
@@ -125,6 +130,20 @@ class _VendorFormScreenState extends ConsumerState<VendorFormScreen> {
                 controller: _contactCtrl,
                 hint: 'Contact (phone / WhatsApp)',
                 keyboardType: TextInputType.phone,
+              ),
+
+              const SizedBox(height: AppSpacing.md),
+
+              // ── Pack price (Section 11) ───────────────────────────────
+              AppTextField(
+                controller: _packPriceCtrl,
+                hint: 'Pack price (₦) — charged per pack at checkout',
+                keyboardType: TextInputType.number,
+                validator: (v) {
+                  final price = double.tryParse(v?.trim() ?? '');
+                  if (price == null || price < 0) return 'Enter a valid price';
+                  return null;
+                },
               ),
 
               const SizedBox(height: AppSpacing.md),

@@ -35,6 +35,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   late final TextEditingController _priceCtrl;
   late String _category;
   late bool _isAvailable;
+  late bool _requiresPack;
   String? _imageUrl; // existing URL (from product being edited)
   Uint8List? _pickedBytes; // newly picked image bytes
   String? _pickedFileName;
@@ -62,6 +63,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
         text: p != null ? p.basePrice.toStringAsFixed(0) : '');
     _category = p?.category ?? _categories.first;
     _isAvailable = p?.isAvailable ?? true;
+    _requiresPack = p?.requiresPack ?? false;
     _imageUrl = p?.imageUrl;
   }
 
@@ -114,6 +116,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
         basePrice: double.parse(_priceCtrl.text.trim()),
         imageUrl: imageUrl,
         isAvailable: _isAvailable,
+        requiresPack: _requiresPack,
       );
 
       if (mounted) Navigator.of(context).pop(true);
@@ -238,6 +241,35 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                   Switch(
                     value: _isAvailable,
                     onChanged: (v) => setState(() => _isAvailable = v),
+                    activeThumbColor: AppColors.emerald,
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: AppSpacing.md),
+
+              // ── Requires Pack toggle (Section 11) ─────────────────────
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Requires Pack', style: theme.textTheme.labelLarge),
+                        Text(
+                          'On for food that needs a container to hand over '
+                          '(off for drinks, etc.)',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface
+                                .withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: _requiresPack,
+                    onChanged: (v) => setState(() => _requiresPack = v),
                     activeThumbColor: AppColors.emerald,
                   ),
                 ],

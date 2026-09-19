@@ -18,8 +18,9 @@ final vendorsProvider = FutureProvider<List<Vendor>>((ref) async {
       .toList();
 });
 
-/// Products for [vendorId], grouped — each product's options are
-/// fetched in a second query and merged in before returning.
+/// Products for [vendorId] — each one independently orderable (post-
+/// testing fixes, Section 11: no more per-product options merge here,
+/// since the catalog no longer drives a protein/extras combo-builder).
 final vendorProductsProvider =
     FutureProvider.family<List<Product>, String>((ref, vendorId) async {
   final client = ref.watch(supabaseClientProvider);
@@ -32,27 +33,7 @@ final vendorProductsProvider =
       .order('category')
       .order('name');
 
-  final products = (productsData as List)
+  return (productsData as List)
       .map((m) => Product.fromMap(m as Map<String, dynamic>))
-      .toList();
-
-  if (products.isEmpty) return products;
-
-  final productIds = products.map((p) => p.id).toList();
-  final optionsData = await client
-      .from('product_options')
-      .select()
-      .inFilter('product_id', productIds);
-
-  // Group options by product_id
-  final optionsByProduct = <String, List<ProductOption>>{};
-  for (final m in optionsData as List) {
-    final map = m as Map<String, dynamic>;
-    final opt = ProductOption.fromMap(map);
-    optionsByProduct.putIfAbsent(map['product_id'] as String, () => []).add(opt);
-  }
-
-  return products
-      .map((p) => p.copyWith(options: optionsByProduct[p.id] ?? []))
       .toList();
 });

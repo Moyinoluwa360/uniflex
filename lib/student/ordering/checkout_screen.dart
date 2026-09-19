@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/models/cart_item.dart';
 import '../../shared/models/vendor.dart';
 import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
@@ -12,16 +13,21 @@ import '../../shared/widgets/pin/pin_entry_sheet.dart';
 import 'cart_provider.dart';
 import 'order_confirmation_screen.dart';
 import 'order_repository.dart';
+import 'pack_allocation_screen.dart';
 
 /// Checkout — steps 6 and 7 of the ordering flow:
 ///   step 6: pickup / campus delivery / hostel room delivery
 ///   step 7: delivery location (shown for delivery types)
 ///   step 7b: schedule date/time (optional)
 ///
-/// Step 8 (payment): checks the wallet balance and calls
-/// [place_food_order_with_payment] RPC which atomically deducts the
-/// wallet and creates the order. If the balance is insufficient, the
-/// confirm button is disabled and a "Fund Wallet" link is shown.
+/// Post-testing fixes, Section 11: if the cart has any pack-requiring
+/// items, a "Packing" section asks the student up front whether they
+/// want packs, so the total shown by the time they reach Confirm is
+/// already accurate.
+///
+/// Step 8 (payment): gates on the transaction PIN (Section 6), then
+/// checks the wallet balance and calls [place_food_order_with_payment]
+/// RPC which atomically deducts the wallet and creates the order.
 class CheckoutScreen extends ConsumerStatefulWidget {
   const CheckoutScreen({super.key, required this.vendor});
 
@@ -38,6 +44,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final _formKey = GlobalKey<FormState>();
   DateTime? _scheduledFor;
 
+  // Pack allocation (Section 11) — null until the student answers the
+  // "Will you be using packs?" prompt; empty list means "No".
+  List<PackAllocation>? _packs;
+
   static const _campusDeliveryFee = 200.0;
   static const _hostelDeliveryFee = 300.0;
 
@@ -50,6 +60,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   bool get _needsLocation =>
       _deliveryType == 'campus_delivery' ||
       _deliveryType == 'hostel_delivery';
+
+  List<CartItem> _packableItems(List<CartItem> items) =>
+      items.where((i) => i.product.requiresPack).toList();
+
+  double get _packFee => (_packs?.length ?? 0) * widget.vendor.packPrice;
 
   @override
   void dispose() {
@@ -92,18 +107,71 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     return showEnterPinSheet(context);
   }
 
-  Future<void> _confirmOrder() async {
+  /// "Will you be using packs for this order?" — Yes opens the
+  /// allocation flow, No records an empty pack list. Does nothing (keeps
+  /// `_packs` null / undecided) if the student backs out of either.
+  Future<void> _decidePacks(List<CartItem> packableItems) async {
+    final wantsPacks = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Using packs?'),
+        content: const Text(
+          'Will you be using packs for this order? Some items in your '
+          'cart need to be packaged into a container to be handed over.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('No'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
+    );
+    if (wantsPacks == null || !mounted) return;
+
+    if (!wantsPacks) {
+      setState(() => _packs = []);
+      return;
+    }
+
+    final result = await Navigator.of(context).push<List<PackAllocation>>(
+      MaterialPageRoute(
+        builder: (_) => PackAllocationScreen(
+          vendor: widget.vendor,
+          packableItems: packableItems,
+        ),
+      ),
+    );
+    if (!mounted || result == null) return;
+    setState(() => _packs = result);
+  }
+
+  Future<void> _confirmOrder(List<CartItem> packableItems) async {
     if (_needsLocation) {
       if (!_formKey.currentState!.validate()) return;
     }
+    if (packableItems.isNotEmpty && _packs == null) return;
 
     final pin = await _collectPin();
     if (pin == null || !mounted) return;
+
+    final itemsByProductId = {
+      for (final item in packableItems) item.product.id: item,
+    };
+    final packs = (_packs ?? [])
+        .map((p) => p.toJson(itemsByProductId))
+        .toList();
 
     final order = await ref.read(orderNotifierProvider.notifier).placeFoodOrder(
           vendor: widget.vendor,
           deliveryType: _deliveryType,
           pin: pin,
+          packs: packs,
+          packFee: _packFee,
           deliveryLocation: _needsLocation
               ? _locationController.text.trim()
               : null,
@@ -170,8 +238,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final orderState = ref.watch(orderNotifierProvider);
     final balanceAsync = ref.watch(walletBalanceProvider);
 
+    final packableItems = _packableItems(cart.items);
+    final packDecisionPending = packableItems.isNotEmpty && _packs == null;
+
     final balance = balanceAsync.valueOrNull ?? 0.0;
-    final total = cart.subtotal + _deliveryFee;
+    final total = cart.subtotal + _deliveryFee + _packFee;
     final hasSufficientBalance = balance >= total;
 
     return Scaffold(
@@ -251,6 +322,54 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               ),
 
               const SizedBox(height: AppSpacing.lg),
+
+              // ── Packing (Section 11) — only when the cart has any
+              // pack-requiring items. Asked up front so the total below
+              // is accurate by the time the student reaches Confirm.
+              if (packableItems.isNotEmpty) ...[
+                Text('Packing', style: theme.textTheme.titleSmall),
+                const SizedBox(height: AppSpacing.sm),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: packDecisionPending
+                        ? AppColors.orange.withValues(alpha: 0.08)
+                        : theme.colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(AppRadius.card),
+                    border: packDecisionPending
+                        ? Border.all(color: AppColors.orange.withValues(alpha: 0.3))
+                        : null,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.inventory_2_outlined,
+                        color: packDecisionPending
+                            ? AppColors.orange
+                            : theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          packDecisionPending
+                              ? 'This order needs packs for some items.'
+                              : (_packs!.isEmpty
+                                  ? 'No packs — you\'re eating in / providing your own.'
+                                  : '${_packs!.length} pack${_packs!.length == 1 ? '' : 's'} '
+                                    '· +₦${_packFee.toStringAsFixed(0)}'),
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => _decidePacks(packableItems),
+                        child: Text(packDecisionPending ? 'Set up' : 'Change'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+              ],
 
               // ── Step 6: Fulfillment type ─────────────────────────────
               Text('How would you like to receive it?',
@@ -353,6 +472,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         bold: false,
                         theme: theme,
                       ),
+                    if (_packFee > 0)
+                      _TotalRow(
+                        label: 'Packs (${_packs!.length})',
+                        value: '+₦${_packFee.toStringAsFixed(0)}',
+                        bold: false,
+                        theme: theme,
+                      ),
                     const Divider(height: AppSpacing.md),
                     _TotalRow(
                       label: 'Total',
@@ -452,9 +578,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             AppSpacing.md,
           ),
           child: PrimaryButton(
-            label: 'Confirm Order  ₦${total.toStringAsFixed(0)}',
+            label: packDecisionPending
+                ? 'Set up packs to continue'
+                : 'Confirm Order  ₦${total.toStringAsFixed(0)}',
             isLoading: orderState.isLoading,
-            onPressed: hasSufficientBalance ? _confirmOrder : null,
+            onPressed: (hasSufficientBalance && !packDecisionPending)
+                ? () => _confirmOrder(packableItems)
+                : null,
           ),
         ),
       ),

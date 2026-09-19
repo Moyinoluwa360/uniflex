@@ -3490,3 +3490,63 @@ end;
 $$;
 
 grant execute on function public.get_rider_info(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- Section 11 seed migration — split the old combo meals into
+-- independent items on whatever products already exist from the Phase 2
+-- seed (matched by name, since products have no natural key besides
+-- `id`, which this environment never captured). Safe to re-run: each
+-- step either matches nothing the second time or uses NOT EXISTS.
+-- ---------------------------------------------------------------------
+
+-- Uniflex's protein-meal names drop "+ Protein" — protein is no longer
+-- bundled into the base item.
+update public.products set name = 'Jollof Rice'
+  where vendor_id = '00000000-0000-0000-0000-000000000001' and name = 'Jollof Rice + Protein';
+update public.products set name = 'Fried Rice'
+  where vendor_id = '00000000-0000-0000-0000-000000000001' and name = 'Fried Rice + Protein';
+update public.products set name = 'White Rice + Stew'
+  where vendor_id = '00000000-0000-0000-0000-000000000001' and name = 'White Rice + Stew + Protein';
+update public.products set name = 'Spaghetti'
+  where vendor_id = '00000000-0000-0000-0000-000000000001' and name = 'Spaghetti + Protein';
+
+-- The former protein product_options become their own standalone
+-- "Proteins" category items — each independently orderable with its own
+-- quantity, not a required choice bolted onto a rice item.
+insert into public.products (vendor_id, name, description, category, base_price, requires_pack)
+select '00000000-0000-0000-0000-000000000001', v.name, v.description, 'Proteins', v.price, true
+from (values
+  ('Chicken',              'A well-seasoned piece of grilled/fried chicken.', 400::numeric),
+  ('Beef',                 'Tender stewed beef.',                             450::numeric),
+  ('Fish',                 'Fried fish, deboned.',                            500::numeric),
+  ('Turkey',               'Grilled turkey.',                                 550::numeric),
+  ('Egg',                  'A boiled or fried egg.',                         150::numeric),
+  ('Mixed Protein (x2)',   'Two pieces, your choice of protein mix.',        700::numeric)
+) as v(name, description, price)
+where not exists (
+  select 1 from public.products p
+  where p.vendor_id = '00000000-0000-0000-0000-000000000001'
+    and p.category = 'Proteins' and p.name = v.name
+);
+
+-- "Extra Stew" was only ever a product_option, never a standalone item —
+-- add it alongside the Sides that already exist standalone (Moi Moi,
+-- Coleslaw, Fried Plantain).
+insert into public.products (vendor_id, name, description, category, base_price, requires_pack)
+select '00000000-0000-0000-0000-000000000001', 'Extra Stew', 'A generous scoop of stew on the side.', 'Sides', 150, true
+where not exists (
+  select 1 from public.products p
+  where p.vendor_id = '00000000-0000-0000-0000-000000000001'
+    and p.category = 'Sides' and p.name = 'Extra Stew'
+);
+
+-- requires_pack: on for savoury food that needs to be packaged to hand
+-- over, off for drinks/snacks that don't.
+update public.products set requires_pack = true
+  where category in ('Protein Meals', 'Sides', 'Main', 'Grills');
+update public.products set requires_pack = false
+  where category in ('Drinks', 'Snacks', 'Smoothies', 'Juices');
+
+-- Note: the old protein/extra product_options rows are left in place
+-- (harmless, unread by the new catalog UI) rather than dropped — see
+-- CHANGELOG.md "Post-testing fixes & changes" for why.

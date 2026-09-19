@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/models/product.dart';
+import '../../shared/models/vendor.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/inputs/app_text_field.dart';
 import '../services/admin_providers.dart';
 import 'product_form_screen.dart';
 
@@ -26,9 +29,27 @@ class MenuManagementScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final productsAsync =
         ref.watch(adminVendorProductsProvider(_uniflexVendorId));
+    final vendorsAsync = ref.watch(allVendorsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Menu Management')),
+      appBar: AppBar(
+        title: const Text('Menu Management'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.inventory_2_outlined),
+            tooltip: 'Pack price',
+            onPressed: () {
+              final vendors = vendorsAsync.valueOrNull ?? [];
+              for (final v in vendors) {
+                if (v.id == _uniflexVendorId) {
+                  _editPackPrice(context, ref, v);
+                  break;
+                }
+              }
+            },
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openForm(context, ref, null),
         icon: const Icon(Icons.add),
@@ -143,6 +164,81 @@ class MenuManagementScreen extends ConsumerWidget {
         );
       }
     }
+  }
+
+  /// Uniflex is excluded from VendorManagementScreen (it's not a
+  /// "partner"), so its own Pack Price (Section 11) is edited here
+  /// instead, from its own menu management screen.
+  Future<void> _editPackPrice(
+    BuildContext context,
+    WidgetRef ref,
+    Vendor uniflex,
+  ) async {
+    final controller =
+        TextEditingController(text: uniflex.packPrice.toStringAsFixed(0));
+    final formKey = GlobalKey<FormState>();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          left: AppSpacing.screenGutter,
+          right: AppSpacing.screenGutter,
+          top: AppSpacing.lg,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.lg,
+        ),
+        child: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Uniflex pack price', style: Theme.of(ctx).textTheme.titleMedium),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Charged per pack when a student uses packs at checkout.',
+                style: Theme.of(ctx).textTheme.bodySmall,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              AppTextField(
+                controller: controller,
+                hint: 'Pack price (₦)',
+                keyboardType: TextInputType.number,
+                validator: (v) {
+                  final price = double.tryParse(v?.trim() ?? '');
+                  if (price == null || price < 0) return 'Enter a valid price';
+                  return null;
+                },
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              PrimaryButton(
+                label: 'Save',
+                onPressed: () async {
+                  if (!formKey.currentState!.validate()) return;
+                  await ref.read(adminServiceProvider).upsertVendor(
+                        id: uniflex.id,
+                        name: uniflex.name,
+                        description: uniflex.description,
+                        isActive: uniflex.isActive,
+                        badgeLabel: uniflex.badgeLabel,
+                        imageUrl: uniflex.imageUrl,
+                        location: uniflex.location,
+                        contact: uniflex.contact,
+                        packPrice: double.parse(controller.text.trim()),
+                      );
+                  ref.invalidate(allVendorsProvider);
+                  if (ctx.mounted) Navigator.of(ctx).pop();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _toggleAvailability(
