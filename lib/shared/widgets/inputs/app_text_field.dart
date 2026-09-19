@@ -18,6 +18,10 @@ class AppTextField extends StatelessWidget {
     this.enabled = true,
     this.onChanged,
     this.textInputAction,
+    this.validator,
+    this.autovalidateMode,
+    this.maxLength,
+    this.maxLines = 1,
   });
 
   final TextEditingController? controller;
@@ -31,6 +35,10 @@ class AppTextField extends StatelessWidget {
   final bool enabled;
   final ValueChanged<String>? onChanged;
   final TextInputAction? textInputAction;
+  final FormFieldValidator<String>? validator;
+  final AutovalidateMode? autovalidateMode;
+  final int? maxLength;
+  final int? maxLines;
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +49,10 @@ class AppTextField extends StatelessWidget {
       enabled: enabled,
       onChanged: onChanged,
       textInputAction: textInputAction,
+      validator: validator,
+      autovalidateMode: autovalidateMode,
+      maxLength: maxLength,
+      maxLines: obscureText ? 1 : maxLines,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,

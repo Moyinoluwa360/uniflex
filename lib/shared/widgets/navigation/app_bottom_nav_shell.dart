@@ -16,6 +16,27 @@ class AppNavTab {
   final Widget screen;
 }
 
+/// Lets a descendant screen switch the enclosing shell's active tab —
+/// e.g. the Home header's "Top up" button jumping to the Wallet tab —
+/// without threading callbacks through every widget. Obtain it with
+/// `AppNavShellScope.of(context)?.go(index)`.
+class AppNavShellScope extends InheritedWidget {
+  const AppNavShellScope({
+    super.key,
+    required this.go,
+    required super.child,
+  });
+
+  /// Switch the shell to the tab at [index].
+  final void Function(int index) go;
+
+  static AppNavShellScope? of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AppNavShellScope>();
+
+  @override
+  bool updateShouldNotify(AppNavShellScope oldWidget) => go != oldWidget.go;
+}
+
 /// Reusable bottom-nav scaffold: [IndexedStack] body + [BottomNavigationBar],
 /// so each role builds it own tab shell (StudentShell, RiderShell,
 /// AdminShell) from the same widget rather than each hand-rolling
@@ -33,13 +54,22 @@ class AppBottomNavShell extends StatefulWidget {
 class _AppBottomNavShellState extends State<AppBottomNavShell> {
   int _index = 0;
 
+  void _go(int index) {
+    if (index >= 0 && index < widget.tabs.length) {
+      setState(() => _index = index);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: IndexedStack(
-          index: _index,
-          children: widget.tabs.map((tab) => tab.screen).toList(),
+        child: AppNavShellScope(
+          go: _go,
+          child: IndexedStack(
+            index: _index,
+            children: widget.tabs.map((tab) => tab.screen).toList(),
+          ),
         ),
       ),
       bottomNavigationBar: BottomNavigationBar(

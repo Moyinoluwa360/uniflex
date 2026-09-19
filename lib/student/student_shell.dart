@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../shared/widgets/navigation/app_bottom_nav_shell.dart';
 import 'home/student_home_screen.dart';
+import 'orders/orders_screen.dart';
 import 'profile/student_profile_screen.dart';
+import 'wallet/wallet_screen.dart';
 
-/// Root of the Student experience. Owns its own navigation stack — no
-/// screen in here should ever import from lib/rider/ or lib/admin/.
-/// Add new Student-only screens as new files under lib/student/, and wire
-/// new top-level tabs into the `tabs` list below.
+/// Root of the Student experience. Phase 2 adds Orders and Wallet tabs.
+/// No screen in here should import from lib/rider/ or lib/admin/.
 class StudentShell extends StatelessWidget {
   const StudentShell({super.key});
 
@@ -20,6 +20,18 @@ class StudentShell extends StatelessWidget {
           icon: Icons.home_outlined,
           selectedIcon: Icons.home,
           screen: StudentHomeScreen(),
+        ),
+        AppNavTab(
+          label: 'Orders',
+          icon: Icons.receipt_long_outlined,
+          selectedIcon: Icons.receipt_long,
+          screen: OrdersScreen(),
+        ),
+        AppNavTab(
+          label: 'Wallet',
+          icon: Icons.account_balance_wallet_outlined,
+          selectedIcon: Icons.account_balance_wallet,
+          screen: WalletScreen(),
         ),
         AppNavTab(
           label: 'Profile',

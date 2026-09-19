@@ -10,9 +10,10 @@ based on their account role. There is no separate web dashboard —
 everything lives in this one codebase. See [ARCHITECTURE.md](ARCHITECTURE.md)
 for how that's structured.
 
-This repository is being built in phases. **Phase 0** (current) is the
-project scaffold and design system only — no real feature screens, no real
-backend. See [CHANGELOG.md](CHANGELOG.md) for what's shipped so far.
+This repository is being built in phases. **Phase 1** (current) wires up
+real Supabase authentication and the Student onboarding flow, plus
+invite-only Rider/Admin login — no ordering/catalog/other feature screens
+yet. See [CHANGELOG.md](CHANGELOG.md) for what's shipped so far.
 
 ## Prerequisites
 
@@ -38,10 +39,13 @@ which is **not** committed to git.
 cp .env.example .env
 ```
 
-Then fill in real values in `.env` as each service is wired up. In Phase 0
-every key can stay blank — the app runs entirely on mocked/local data and
-does not call any real backend yet. See `.env.example` for the full list
-of keys and what each is for.
+Then fill in real values in `.env` as each service is wired up.
+`SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `TERMII_API_KEY` are required as
+of Phase 1 (auth and phone OTP won't work without them); the rest can
+stay blank until their phase. Before testing sign-up/login against a
+real Supabase project, run `supabase/schema.sql` once in that project's
+SQL editor — see the comments at the top of that file. See
+`.env.example` for the full list of keys and what each is for.
 
 ## Run locally
 
@@ -49,9 +53,11 @@ of keys and what each is for.
 flutter run
 ```
 
-This launches the mock role picker (Phase 0 has no real sign-in yet —
-see [ARCHITECTURE.md](ARCHITECTURE.md)). Choose Student, Rider, or Admin
-to see that role's shell.
+This launches the splash screen, then the Login screen (or straight to
+the right role's home if a session is already persisted). Create Account
+signs up a Student; Rider/Admin accounts are invite-only and must be
+seeded by hand in Supabase first (see `supabase/schema.sql`). See
+[ARCHITECTURE.md](ARCHITECTURE.md) for how the auth flow is wired.
 
 Useful variants:
 

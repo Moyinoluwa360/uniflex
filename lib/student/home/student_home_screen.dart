@@ -1,16 +1,1193 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../shared/widgets/placeholder/role_placeholder_screen.dart';
+import '../../shared/models/around_request.dart';
+import '../../shared/models/vendor.dart';
+import '../../shared/services/auth/auth_providers.dart';
+import '../../shared/services/wallet/wallet_providers.dart';
+import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/media/app_image.dart';
+import '../../shared/widgets/navigation/app_bottom_nav_shell.dart';
+import '../around/around_screen.dart';
+import '../ordering/catalog_screen.dart';
+import '../ordering/product_repository.dart';
 
-class StudentHomeScreen extends StatelessWidget {
+/// Index of the Wallet tab in [StudentShell] — used by the header's
+/// "Top up" affordance to jump straight to it.
+const int _kWalletTabIndex = 2;
+
+/// Soft emerald glow beneath vendor cards — a tight, low-opacity brand
+/// shadow that lifts the cards off the canvas (per the design).
+final List<BoxShadow> _cardGlow = [
+  BoxShadow(
+    color: AppColors.emerald.withValues(alpha: 0.16),
+    blurRadius: 18,
+    spreadRadius: -6,
+    offset: const Offset(0, 10),
+  ),
+];
+
+enum _HomeMode { around, foodDelivery }
+
+class StudentHomeScreen extends ConsumerStatefulWidget {
   const StudentHomeScreen({super.key});
 
   @override
+  ConsumerState<StudentHomeScreen> createState() => _StudentHomeScreenState();
+}
+
+class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> {
+  _HomeMode _mode = _HomeMode.foodDelivery;
+
+  String _greeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    if (hour < 21) return 'Good evening';
+    return 'Good night';
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return const RolePlaceholderScreen(
-      title: 'Student Home',
-      message: 'Student Shell — placeholder\nOrdering flow starts in a later phase.',
-      icon: Icons.restaurant_menu_outlined,
+    final profileAsync = ref.watch(currentProfileProvider);
+    final balanceAsync = ref.watch(walletBalanceProvider);
+
+    final nickname = profileAsync.whenOrNull(
+          data: (profile) => profile?.nickname ?? 'there',
+        ) ??
+        'there';
+    final balance = balanceAsync.whenOrNull(data: (b) => b);
+    final isFood = _mode == _HomeMode.foodDelivery;
+
+    return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: _HomeHeader(
+              greeting: _greeting(),
+              nickname: nickname,
+              balance: balance,
+              searchHint: isFood
+                  ? 'Search meals, vendors, errands'
+                  : 'Search errands, hostels, vendors',
+              onTopUp: () => AppNavShellScope.of(context)?.go(_kWalletTabIndex),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: _ModeToggle(
+              mode: _mode,
+              onChanged: (m) => setState(() => _mode = m),
+            ),
+          ),
+          if (isFood) ...[
+            const SliverToBoxAdapter(child: _PromoBannerCarousel()),
+            const SliverToBoxAdapter(
+              child: _SectionHeader(
+                title: 'Vendors around you',
+                action: 'See all',
+              ),
+            ),
+            const SliverToBoxAdapter(child: _VendorList()),
+          ] else ...[
+            const SliverToBoxAdapter(child: _AroundServiceGrid()),
+            const SliverToBoxAdapter(child: _RunnersOnline()),
+          ],
+          const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.xl)),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Header ──────────────────────────────────────────────────────────────────
+
+class _HomeHeader extends StatelessWidget {
+  const _HomeHeader({
+    required this.greeting,
+    required this.nickname,
+    required this.balance,
+    required this.searchHint,
+    required this.onTopUp,
+  });
+
+  final String greeting;
+  final String nickname;
+  final double? balance;
+  final String searchHint;
+  final VoidCallback onTopUp;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    const white = AppColors.pureWhite;
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [AppColors.darkEmerald, AppColors.darkCanvas]
+              : const [AppColors.emerald, Color(0xFF059669)],
+        ),
+        borderRadius: const BorderRadius.vertical(
+          bottom: Radius.circular(AppRadius.sheet),
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenGutter,
+        AppSpacing.md,
+        AppSpacing.screenGutter,
+        AppSpacing.lg,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Greeting + notification bell + avatar
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      greeting,
+                      style: theme.textTheme.bodyMedium
+                          ?.copyWith(color: white.withValues(alpha: 0.85)),
+                    ),
+                    Text(
+                      nickname,
+                      style: theme.textTheme.headlineSmall
+                          ?.copyWith(color: white, height: 1.1),
+                    ),
+                  ],
+                ),
+              ),
+              _GlassCircle(
+                child: const Icon(Icons.notifications_none_rounded,
+                    color: white, size: 22),
+                onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('No new notifications')),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              // Avatar — emerald in dark mode, white in light
+              Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.emerald : white,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  nickname.isNotEmpty ? nickname[0].toUpperCase() : 'U',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: isDark ? AppColors.pureWhite : AppColors.emerald,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          // Wallet balance card (glass)
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.md - 2,
+            ),
+            decoration: BoxDecoration(
+              color: white.withValues(alpha: isDark ? 0.08 : 0.16),
+              borderRadius: BorderRadius.circular(AppRadius.control),
+              border: Border.all(color: white.withValues(alpha: 0.18)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'WALLET BALANCE',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: white.withValues(alpha: 0.75),
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        balance != null
+                            ? '₦${balance!.toStringAsFixed(2)}'
+                            : '₦--',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          color: white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _TopUpButton(onTap: onTopUp),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          // Search bar — dark surface in dark mode, white in light
+          GestureDetector(
+            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Search coming soon')),
+            ),
+            child: Container(
+              height: AppSpacing.controlHeight - 8,
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkCard : white,
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                border: isDark
+                    ? Border.all(color: AppColors.darkHairline)
+                    : null,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+              child: Row(
+                children: [
+                  Icon(Icons.search,
+                      color: isDark
+                          ? AppColors.darkInkSecondary
+                          : AppColors.mediumGrey,
+                      size: 20),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      searchHint,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: isDark
+                            ? AppColors.darkInkSecondary
+                            : AppColors.mediumGrey,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GlassCircle extends StatelessWidget {
+  const _GlassCircle({required this.child, required this.onTap});
+  final Widget child;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppColors.pureWhite.withValues(alpha: 0.16),
+          shape: BoxShape.circle,
+          border: Border.all(
+              color: AppColors.pureWhite.withValues(alpha: 0.18)),
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _TopUpButton extends StatelessWidget {
+  const _TopUpButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    // Emerald fill in dark mode (pops against the deep-green header),
+    // white in light mode. Dark ink reads on both.
+    final bg = isDark ? AppColors.emerald : AppColors.pureWhite;
+    const fg = AppColors.matteBlack;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.add, size: 16, color: fg),
+            const SizedBox(width: 4),
+            Text(
+              'Top up',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: fg,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Section header ───────────────────────────────────────────────────────────
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title, this.action});
+  final String title;
+  final String? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenGutter,
+        AppSpacing.md,
+        AppSpacing.screenGutter,
+        AppSpacing.sm,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(title, style: theme.textTheme.titleMedium),
+          if (action != null)
+            Text(
+              action!,
+              style: theme.textTheme.labelMedium
+                  ?.copyWith(color: theme.colorScheme.primary),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Mode toggle ──────────────────────────────────────────────────────────────
+
+class _ModeToggle extends StatelessWidget {
+  const _ModeToggle({required this.mode, required this.onChanged});
+
+  final _HomeMode mode;
+  final ValueChanged<_HomeMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenGutter,
+        AppSpacing.md,
+        AppSpacing.screenGutter,
+        0,
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(AppRadius.control),
+        ),
+        padding: const EdgeInsets.all(4),
+        child: Row(
+          children: [
+            _ToggleTab(
+              label: 'Around',
+              icon: Icons.explore_outlined,
+              selected: mode == _HomeMode.around,
+              onTap: () => onChanged(_HomeMode.around),
+            ),
+            _ToggleTab(
+              label: 'Food Delivery',
+              icon: Icons.restaurant_outlined,
+              selected: mode == _HomeMode.foodDelivery,
+              onTap: () => onChanged(_HomeMode.foodDelivery),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ToggleTab extends StatelessWidget {
+  const _ToggleTab({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: selected ? theme.colorScheme.surface : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppRadius.control - 4),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    )
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                selected && label == 'Around'
+                    ? Icons.check_circle
+                    : icon,
+                size: 16,
+                color: selected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: selected
+                      ? theme.colorScheme.onSurface
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Promo banner carousel ────────────────────────────────────────────────────
+
+class _PromoBannerCarousel extends StatefulWidget {
+  const _PromoBannerCarousel();
+
+  @override
+  State<_PromoBannerCarousel> createState() => _PromoBannerCarouselState();
+}
+
+class _PromoBannerCarouselState extends State<_PromoBannerCarousel> {
+  final _controller = PageController(viewportFraction: 0.86);
+  int _page = 0;
+
+  static const _banners = [
+    (
+      title: 'Free delivery over ₦5,000',
+      subtitle: 'All Uniflex Kitchen orders · ends Sunday',
+      dark: false,
+    ),
+    (
+      title: 'Flex Fridays',
+      subtitle: '15% back to your wallet every Friday',
+      dark: true,
+    ),
+    (
+      title: 'Refer a friend, earn ₦500',
+      subtitle: 'Share your code — you both get wallet credit',
+      dark: false,
+    ),
+  ];
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: AppSpacing.md),
+        SizedBox(
+          height: 128,
+          child: PageView.builder(
+            controller: _controller,
+            // Align the strip flush to the left gutter rather than
+            // centring each page in the viewport.
+            padEnds: false,
+            itemCount: _banners.length,
+            onPageChanged: (p) => setState(() => _page = p),
+            itemBuilder: (context, i) {
+              final b = _banners[i];
+              return Padding(
+                padding: EdgeInsets.only(
+                  left: i == 0 ? AppSpacing.screenGutter : AppSpacing.sm,
+                  right: i == _banners.length - 1
+                      ? AppSpacing.screenGutter
+                      : AppSpacing.sm,
+                ),
+                child: _PromoCard(
+                  title: b.title,
+                  subtitle: b.subtitle,
+                  dark: b.dark,
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        // Dots — left-aligned under the strip, tracking the gutter.
+        Padding(
+          padding: const EdgeInsets.only(left: AppSpacing.screenGutter),
+          child: Row(
+            children: List.generate(
+              _banners.length,
+              (i) => AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: _page == i ? 16 : 6,
+                height: 6,
+                margin: const EdgeInsets.only(right: 6),
+                decoration: BoxDecoration(
+                  color: _page == i
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.outline,
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A promo strip card. Beyond the flat colour it carries a pair of very
+/// faint concentric circles bleeding off the right edge — the subtle
+/// interior shape the design uses so the cards don't read as plain boxes.
+class _PromoCard extends StatelessWidget {
+  const _PromoCard({
+    required this.title,
+    required this.subtitle,
+    required this.dark,
+  });
+
+  final String title;
+  final String subtitle;
+  final bool dark;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final base = dark ? AppColors.matteBlack : AppColors.orange;
+    final shape = AppColors.pureWhite.withValues(alpha: dark ? 0.05 : 0.09);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppRadius.card),
+      child: Container(
+        color: base,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Subtle interior shapes — soft concentric circles off the right.
+            Positioned(
+              right: -34,
+              top: -30,
+              child: Container(
+                width: 150,
+                height: 150,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: shape),
+              ),
+            ),
+            Positioned(
+              right: 26,
+              bottom: -52,
+              child: Container(
+                width: 96,
+                height: 96,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: shape),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm + 4,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    title,
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(color: AppColors.pureWhite),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: AppColors.pureWhite.withValues(alpha: 0.85),
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Vendor list ──────────────────────────────────────────────────────────────
+
+class _VendorList extends ConsumerWidget {
+  const _VendorList();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final vendorsAsync = ref.watch(vendorsProvider);
+    final theme = Theme.of(context);
+
+    return vendorsAsync.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.all(AppSpacing.lg),
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => Padding(
+        padding: const EdgeInsets.all(AppSpacing.screenGutter),
+        child:
+            Text('Could not load vendors', style: theme.textTheme.bodySmall),
+      ),
+      data: (vendors) {
+        if (vendors.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.all(AppSpacing.screenGutter),
+            child: Text(
+              'No vendors available right now.',
+              style: theme.textTheme.bodyMedium,
+            ),
+          );
+        }
+
+        final uniflex = vendors.firstWhere(
+          (v) => v.isUniflex,
+          orElse: () => vendors.first,
+        );
+        final partners = vendors.where((v) => !v.isUniflex).toList();
+
+        return Padding(
+          padding:
+              const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
+          child: Column(
+            children: [
+              _UniflexVendorCard(vendor: uniflex),
+              if (partners.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.cardGap),
+                ...partners.asMap().entries.map(
+                      (e) => Padding(
+                        padding:
+                            const EdgeInsets.only(bottom: AppSpacing.cardGap),
+                        child:
+                            _PartnerVendorCard(vendor: e.value, seed: e.key + 10),
+                      ),
+                    ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Small rating · time · fee strip shown on vendor cards. The Vendor model
+/// carries no rating/prep/fee yet, so these mirror the design's sample
+/// values until the data model gains them.
+class _VendorMetaRow extends StatelessWidget {
+  const _VendorMetaRow({required this.onDark});
+  final bool onDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = onDark
+        ? AppColors.pureWhite.withValues(alpha: 0.85)
+        : theme.colorScheme.onSurface.withValues(alpha: 0.6);
+    return Row(
+      children: [
+        Icon(Icons.star_rounded,
+            size: 15, color: onDark ? AppColors.pureWhite : AppColors.orange),
+        const SizedBox(width: 3),
+        Text('4.9  ·  15–20 min  ·  ₦300',
+            style: theme.textTheme.labelSmall?.copyWith(color: color)),
+      ],
+    );
+  }
+}
+
+class _UniflexVendorCard extends StatelessWidget {
+  const _UniflexVendorCard({required this.vendor});
+  final Vendor vendor;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => CatalogScreen(vendor: vendor)),
+      ),
+      borderRadius: BorderRadius.circular(AppRadius.card),
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.cardTheme.color,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: theme.dividerColor),
+          boxShadow: _cardGlow,
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Hero image with badges overlaid
+            Stack(
+              children: [
+                SizedBox(
+                  height: 132,
+                  width: double.infinity,
+                  child: AppImage(
+                    url: vendor.imageUrl,
+                    keywords: 'jollof,rice,nigerian,food',
+                    seed: 1,
+                    borderRadius: BorderRadius.zero,
+                  ),
+                ),
+                Positioned(
+                  top: AppSpacing.sm,
+                  left: AppSpacing.sm,
+                  child: _Badge(
+                    label: (vendor.badgeLabel ?? 'Major').toUpperCase(),
+                    background: AppColors.orange,
+                    foreground: AppColors.pureWhite,
+                  ),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                vendor.name,
+                                style: theme.textTheme.titleMedium,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.verified,
+                                size: 16, color: AppColors.emerald),
+                            const SizedBox(width: AppSpacing.sm),
+                            _Badge(
+                              label: 'OPEN',
+                              background:
+                                  AppColors.emerald.withValues(alpha: 0.15),
+                              foreground: AppColors.emerald,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          vendor.description.isNotEmpty
+                              ? vendor.description
+                              : 'Rice bowls · Grills · Small chops',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface
+                                .withValues(alpha: 0.6),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        const _VendorMetaRow(onDark: false),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.emerald,
+                      foregroundColor: AppColors.pureWhite,
+                      minimumSize: const Size(0, 44),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.lg),
+                    ),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                          builder: (_) => CatalogScreen(vendor: vendor)),
+                    ),
+                    child: const Text('Order'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PartnerVendorCard extends StatelessWidget {
+  const _PartnerVendorCard({required this.vendor, required this.seed});
+  final Vendor vendor;
+  final int seed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => CatalogScreen(vendor: vendor)),
+      ),
+      borderRadius: BorderRadius.circular(AppRadius.card),
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.cardTheme.color,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: theme.dividerColor),
+          boxShadow: _cardGlow,
+        ),
+        padding: const EdgeInsets.all(AppSpacing.sm + 2),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 56,
+              height: 56,
+              child: AppImage(
+                url: vendor.imageUrl,
+                keywords: 'restaurant,food',
+                seed: seed,
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                icon: Icons.storefront_outlined,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(vendor.name, style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 2),
+                  Text(
+                    vendor.description.isNotEmpty
+                        ? vendor.description
+                        : 'Swallow · Soups · Local',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color:
+                          theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  const _VendorMetaRow(onDark: false),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.4)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Badge extends StatelessWidget {
+  const _Badge({
+    required this.label,
+    required this.background,
+    required this.foreground,
+  });
+  final String label;
+  final Color background;
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 3),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: foreground,
+              fontWeight: FontWeight.w700,
+              fontSize: 11,
+            ),
+      ),
+    );
+  }
+}
+
+// ── Around service grid ──────────────────────────────────────────────────────
+
+class _AroundServiceGrid extends StatelessWidget {
+  const _AroundServiceGrid();
+
+  // Short display label + subtitle per functional category, styled after the
+  // design's service tiles. All five backend categories are kept (the design
+  // shows four) so no Around request type is silently dropped.
+  static const Map<AroundCategory, ({String title, String subtitle})> _copy = {
+    AroundCategory.errand: (
+      title: 'Errand request',
+      subtitle: 'Post a task, get a runner',
+    ),
+    AroundCategory.hostel: (
+      title: 'Pickup & drop-off',
+      subtitle: 'Between hostels',
+    ),
+    AroundCategory.vendorFetch: (
+      title: 'Nearby vendors',
+      subtitle: 'Fetch from any shop',
+    ),
+    AroundCategory.laundry: (
+      title: 'Laundry run',
+      subtitle: 'Pickup & drop at the point',
+    ),
+    AroundCategory.peerCourier: (
+      title: 'Peer courier',
+      subtitle: 'Student to student',
+    ),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenGutter,
+        AppSpacing.md,
+        AppSpacing.screenGutter,
+        0,
+      ),
+      child: GridView.count(
+        crossAxisCount: 2,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisSpacing: AppSpacing.cardGap,
+        mainAxisSpacing: AppSpacing.cardGap,
+        childAspectRatio: 1.5,
+        children: [
+          for (final entry in _copy.entries)
+            _AroundServiceCard(
+              category: entry.key,
+              title: entry.value.title,
+              subtitle: entry.value.subtitle,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AroundServiceCard extends StatelessWidget {
+  const _AroundServiceCard({
+    required this.category,
+    required this.title,
+    required this.subtitle,
+  });
+  final AroundCategory category;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => AroundScreen(category: category)),
+      ),
+      borderRadius: BorderRadius.circular(AppRadius.card),
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.cardTheme.color,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: theme.dividerColor),
+        ),
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppRadius.control - 4),
+              ),
+              child: Icon(category.icon,
+                  color: theme.colorScheme.primary, size: 20),
+            ),
+            const Spacer(),
+            Text(title,
+                style: theme.textTheme.titleSmall,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Runners online ───────────────────────────────────────────────────────────
+
+class _RunnersOnline extends StatelessWidget {
+  const _RunnersOnline();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenGutter,
+        AppSpacing.md,
+        AppSpacing.screenGutter,
+        0,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Runners online now', style: theme.textTheme.titleMedium),
+              Text('12 nearby',
+                  style: theme.textTheme.labelMedium
+                      ?.copyWith(color: theme.colorScheme.primary)),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Container(
+            decoration: BoxDecoration(
+              color: theme.cardTheme.color,
+              borderRadius: BorderRadius.circular(AppRadius.card),
+              border: Border.all(color: theme.dividerColor),
+            ),
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Row(
+              children: [
+                Stack(
+                  children: [
+                    const CircleAvatar(
+                      radius: 22,
+                      backgroundColor: AppColors.softGrey,
+                      child: Icon(Icons.person, color: AppColors.mediumGrey),
+                    ),
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: AppColors.emerald,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                              color: theme.cardTheme.color ??
+                                  AppColors.pureWhite,
+                              width: 2),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Emeka A.', style: theme.textTheme.titleSmall),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Campus rider · 4 min away',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.55),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.emerald,
+                    foregroundColor: AppColors.pureWhite,
+                    minimumSize: const Size(0, 40),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                  ),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          const AroundScreen(category: AroundCategory.errand),
+                    ),
+                  ),
+                  child: const Text('Request'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

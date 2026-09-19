@@ -41,6 +41,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/app/build/
+/android/build/
 
 # Machine-specific local SDK paths — regenerated per developer machine
 /android/local.properties

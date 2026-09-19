@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'shared/router/role_router.dart';
+import 'shared/router/auth_gate.dart';
 import 'shared/theme/app_theme.dart';
 import 'shared/theme/theme_mode_provider.dart';
 
-/// Root widget. Everything role-specific happens inside [RoleRouter] —
+/// Root widget. Everything auth/role-related happens inside [AuthGate] —
 /// this widget only owns the app-wide theme and MaterialApp shell.
 class UniflexApp extends ConsumerWidget {
   const UniflexApp({super.key});
@@ -20,7 +20,7 @@ class UniflexApp extends ConsumerWidget {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: themeMode,
-      home: const RoleRouter(),
+      home: const AuthGate(),
     );
   }
 }

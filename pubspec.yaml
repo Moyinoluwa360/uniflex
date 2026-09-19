@@ -22,16 +22,77 @@ dependencies:
   # Loads runtime config (API keys, service URLs) from .env / .env.example
   flutter_dotenv: ^5.1.0
 
-  # Brand typography (Inter) — used across the design system
-  google_fonts: ^6.2.1
+  # Backend: auth, database, session persistence (Phase 1+)
+  supabase_flutter: ^2.5.6
+
+  # Direct REST calls to Termii for phone OTP (Supabase's built-in phone
+  # auth is not used — Termii is the OTP provider per spec)
+  http: ^1.2.1
+
+  # Paystack payment checkout — renders the Paystack Popup JS inside a
+  # native WebView. Only the public key (safe to bundle) is loaded here;
+  # the secret key lives exclusively inside the Edge Function.
+  webview_flutter: ^4.8.0
+
+  # Admin product image picking — lets admin pick a photo from the device
+  # gallery or camera when adding/editing a menu item. Bytes are then
+  # uploaded to Supabase Storage.
+  image_picker: ^1.0.7
+
+  # Phase 5 — Rider Shell
+  # Opens Google Maps (navigation) and tel: links (call customer) from the
+  # active delivery screen without embedding a map widget.
+  url_launcher: ^6.3.0
+  # Single position fetch during active delivery to enrich the Maps deep-link
+  # with a current-location origin. Never used in the background.
+  geolocator: ^13.0.2
+
+  # Phase 6 — Notifications, Sharing
+  # Firebase core + cloud messaging for push notifications.
+  firebase_core: ^3.4.0
+  firebase_messaging: ^15.1.0
+  # Local notification display (required to show heads-up banners on Android).
+  flutter_local_notifications: ^17.2.3
+  # Referral code / link sharing via the native share sheet.
+  share_plus: ^10.0.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
 
+  # Generates Android/iOS launcher icons from assets/icon/app_icon.png
+  flutter_launcher_icons: ^0.14.1
+
 flutter:
   uses-material-design: true
 
   assets:
     - .env
+
+  # Real brand type from the design handoff, bundled as local assets:
+  # Clash Display (Semibold) for the wordmark + display/headline slots,
+  # Switzer for body/labels/UI text. See lib/shared/theme/app_typography.dart.
+  fonts:
+    - family: ClashDisplay
+      fonts:
+        - asset: assets/fonts/ClashDisplay-Semibold.ttf
+          weight: 600
+    - family: Switzer
+      fonts:
+        - asset: assets/fonts/Switzer-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Switzer-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Switzer-Semibold.ttf
+          weight: 600
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  image_path: "assets/icon/app_icon.png"
+  # The source mark has a transparent background — give Android's adaptive
+  # icon a solid backdrop instead of transparency showing through as black.
+  adaptive_icon_background: "#101312"
+  adaptive_icon_foreground: "assets/icon/app_icon.png"

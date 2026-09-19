@@ -9,17 +9,21 @@ import 'app_typography.dart';
 /// and Admin shells all consume these directly — no role has its own
 /// theme. Only [AppColors]/[AppTypography]/[AppSpacing] should be edited
 /// to change the app's look; avoid inlining styling in screens.
+///
+/// Dark mode is a deliberately separate system from light mode, not a
+/// filter over it — see the design handoff's "How dark mode is built"
+/// panel, summarised in the [dark] getter below.
 abstract final class AppTheme {
   static ThemeData get light {
     const colorScheme = ColorScheme.light(
       primary: AppColors.emerald,
       onPrimary: AppColors.pureWhite,
-      primaryContainer: AppColors.emeraldLight,
-      onPrimaryContainer: AppColors.emeraldDark,
+      primaryContainer: Color(0xFFD1FAE5),
+      onPrimaryContainer: AppColors.emerald,
       secondary: AppColors.orange,
       onSecondary: AppColors.pureWhite,
-      secondaryContainer: AppColors.orangeLight,
-      onSecondaryContainer: AppColors.orangeDark,
+      secondaryContainer: Color(0xFFFFEDD5),
+      onSecondaryContainer: AppColors.orange,
       surface: AppColors.pureWhite,
       onSurface: AppColors.matteBlack,
       surfaceContainerHighest: AppColors.softGrey,
@@ -38,28 +42,31 @@ abstract final class AppTheme {
   }
 
   static ThemeData get dark {
+    // Emerald's dark-mode job changes: it drops from a full field to a
+    // deep gradient accent, and orange never dims — it stays full-chroma
+    // in both themes (see AppColors doc comments).
     const colorScheme = ColorScheme.dark(
       primary: AppColors.emerald,
       onPrimary: AppColors.matteBlack,
-      primaryContainer: AppColors.emeraldDark,
-      onPrimaryContainer: AppColors.emeraldLight,
+      primaryContainer: AppColors.darkEmerald,
+      onPrimaryContainer: AppColors.emerald,
       secondary: AppColors.orange,
       onSecondary: AppColors.matteBlack,
-      secondaryContainer: AppColors.orangeDark,
-      onSecondaryContainer: AppColors.orangeLight,
-      surface: AppColors.darkSurface,
-      onSurface: AppColors.pureWhite,
-      surfaceContainerHighest: AppColors.darkSurfaceElevated,
+      secondaryContainer: AppColors.darkEmerald,
+      onSecondaryContainer: AppColors.orange,
+      surface: AppColors.darkCard,
+      onSurface: AppColors.darkInkPrimary,
+      surfaceContainerHighest: AppColors.darkSurface,
       error: AppColors.error,
       onError: AppColors.pureWhite,
-      outline: AppColors.darkBorder,
+      outline: AppColors.darkHairline,
     );
 
     return _build(
       colorScheme: colorScheme,
-      scaffoldBackground: AppColors.matteBlack,
-      cardColor: AppColors.darkSurface,
-      dividerColor: AppColors.darkBorder,
+      scaffoldBackground: AppColors.darkCanvas,
+      cardColor: AppColors.darkCard,
+      dividerColor: AppColors.darkHairline,
       brightness: Brightness.dark,
     );
   }
@@ -72,6 +79,8 @@ abstract final class AppTheme {
     required Brightness brightness,
   }) {
     final textTheme = AppTypography.textTheme(colorScheme.onSurface);
+    final isDark = brightness == Brightness.dark;
+    final secondaryInk = isDark ? AppColors.darkInkSecondary : AppColors.mediumGrey;
 
     return ThemeData(
       useMaterial3: true,
@@ -98,7 +107,7 @@ abstract final class AppTheme {
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderRadius: BorderRadius.circular(AppRadius.card),
           side: BorderSide(color: dividerColor),
         ),
       ),
@@ -109,7 +118,7 @@ abstract final class AppTheme {
           foregroundColor: AppColors.pureWhite,
           disabledBackgroundColor: colorScheme.outline,
           textStyle: textTheme.labelLarge,
-          minimumSize: const Size.fromHeight(52),
+          minimumSize: const Size.fromHeight(AppSpacing.controlHeight),
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -123,7 +132,7 @@ abstract final class AppTheme {
           foregroundColor: colorScheme.onSurface,
           side: BorderSide(color: dividerColor),
           textStyle: textTheme.labelLarge,
-          minimumSize: const Size.fromHeight(52),
+          minimumSize: const Size.fromHeight(AppSpacing.controlHeight),
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -140,28 +149,26 @@ abstract final class AppTheme {
 
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: brightness == Brightness.light
-            ? AppColors.softGrey
-            : AppColors.darkSurfaceElevated,
+        fillColor: isDark ? AppColors.darkSurface : AppColors.softGrey,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
           vertical: AppSpacing.md,
         ),
-        hintStyle: textTheme.bodyMedium?.copyWith(color: AppColors.mediumGrey),
+        hintStyle: textTheme.bodyMedium?.copyWith(color: secondaryInk),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderRadius: BorderRadius.circular(AppRadius.control),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderRadius: BorderRadius.circular(AppRadius.control),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderRadius: BorderRadius.circular(AppRadius.control),
           borderSide: const BorderSide(color: AppColors.emerald, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderRadius: BorderRadius.circular(AppRadius.control),
           borderSide: const BorderSide(color: AppColors.error, width: 1.5),
         ),
       ),
@@ -169,7 +176,7 @@ abstract final class AppTheme {
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: scaffoldBackground,
         selectedItemColor: AppColors.emerald,
-        unselectedItemColor: AppColors.mediumGrey,
+        unselectedItemColor: secondaryInk,
         selectedLabelStyle: textTheme.labelSmall,
         unselectedLabelStyle: textTheme.labelSmall,
         type: BottomNavigationBarType.fixed,
@@ -183,7 +190,7 @@ abstract final class AppTheme {
         ),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderRadius: BorderRadius.circular(AppRadius.control),
         ),
       ),
 
