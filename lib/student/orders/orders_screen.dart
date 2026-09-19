@@ -5,7 +5,9 @@ import '../../shared/models/order.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/async/retry_section.dart';
+import '../../shared/widgets/buttons/primary_button.dart';
 import '../ordering/cart_provider.dart';
+import '../ordering/checkout_screen.dart';
 import '../ordering/order_repository.dart';
 import '../tracking/order_tracking_screen.dart';
 
@@ -155,12 +157,16 @@ class _CartTab extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                Text(
-                  'Go to the Home tab to complete checkout.',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
-                  textAlign: TextAlign.center,
+                PrimaryButton(
+                  label: 'Proceed to Checkout',
+                  onPressed: cart.vendor == null
+                      ? null
+                      : () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  CheckoutScreen(vendor: cart.vendor!),
+                            ),
+                          ),
                 ),
               ],
             ),

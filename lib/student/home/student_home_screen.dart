@@ -12,6 +12,8 @@ import '../../shared/widgets/media/app_image.dart';
 import '../../shared/widgets/navigation/app_bottom_nav_shell.dart';
 import '../around/around_category_providers.dart';
 import '../around/around_screen.dart';
+import '../ordering/cart_provider.dart';
+import '../ordering/cart_screen.dart';
 import '../ordering/catalog_screen.dart';
 import '../ordering/product_repository.dart';
 
@@ -103,6 +105,36 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> {
           ],
           const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.xl)),
         ],
+      ),
+      // Post-testing fixes, Section 13: a persistent, badge-carrying cart
+      // button visible from Home whenever the cart is non-empty — there
+      // used to be no way to reach the cart from Home at all.
+      floatingActionButton: const _HomeCartButton(),
+    );
+  }
+}
+
+class _HomeCartButton extends ConsumerWidget {
+  const _HomeCartButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cart = ref.watch(cartProvider);
+    if (cart.isEmpty || cart.vendor == null) return const SizedBox.shrink();
+
+    return Badge(
+      label: Text('${cart.itemCount}'),
+      backgroundColor: AppColors.orange,
+      child: FloatingActionButton(
+        heroTag: 'home_cart_fab',
+        backgroundColor: AppColors.orange,
+        foregroundColor: AppColors.pureWhite,
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => CartScreen(vendor: cart.vendor!),
+          ),
+        ),
+        child: const Icon(Icons.shopping_cart_outlined),
       ),
     );
   }
