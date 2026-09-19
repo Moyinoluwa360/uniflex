@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/auth/auth_providers.dart';
@@ -45,6 +46,8 @@ class _CompleteProfileScreenState
   final _fullNameController = TextEditingController();
   final _matricController = TextEditingController();
   final _referralController = TextEditingController();
+  final _pinController = TextEditingController();
+  final _pinConfirmController = TextEditingController();
 
   String _school = _availableSchools.first;
   DateTime? _dateOfBirth;
@@ -57,6 +60,8 @@ class _CompleteProfileScreenState
     _fullNameController.dispose();
     _matricController.dispose();
     _referralController.dispose();
+    _pinController.dispose();
+    _pinConfirmController.dispose();
     super.dispose();
   }
 
@@ -75,6 +80,10 @@ class _CompleteProfileScreenState
     if (!(_formKey.currentState?.validate() ?? false)) return;
     if (_dateOfBirth == null) {
       setState(() => _errorText = 'Select your date of birth');
+      return;
+    }
+    if (_pinController.text.trim() != _pinConfirmController.text.trim()) {
+      setState(() => _errorText = 'PINs do not match');
       return;
     }
 
@@ -96,6 +105,16 @@ class _CompleteProfileScreenState
             dateOfBirth: _dateOfBirth!,
             referralCodeUsed: referralCode.isEmpty ? null : referralCode,
           );
+
+      // Best-effort — if this fails, the checkout-time PIN gate will
+      // prompt the student to set one the next time they try to confirm
+      // an order (see CheckoutScreen/AroundScreen), so onboarding itself
+      // never blocks on it.
+      try {
+        await ref
+            .read(profileServiceProvider)
+            .setTransactionPin(_pinController.text.trim());
+      } catch (_) {}
 
       // AuthGate watches this provider and moves to StudentShell once it
       // sees onboarding_complete == true — no navigation call needed here.
@@ -219,6 +238,51 @@ class _CompleteProfileScreenState
                   hint: 'FLEX500 (optional)',
                   prefixIcon: Icons.card_giftcard_outlined,
                   textInputAction: TextInputAction.done,
+                ),
+                const SizedBox(height: AppSpacing.xl),
+                Text('Transaction PIN', style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'You\'ll enter this 4-digit PIN to confirm every order.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppTextField(
+                        controller: _pinController,
+                        label: 'PIN',
+                        obscureText: true,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(4),
+                        ],
+                        validator: (v) => (v == null || v.length != 4)
+                            ? 'Enter 4 digits'
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: AppTextField(
+                        controller: _pinConfirmController,
+                        label: 'Confirm PIN',
+                        obscureText: true,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(4),
+                        ],
+                        validator: (v) => (v == null || v.length != 4)
+                            ? 'Enter 4 digits'
+                            : null,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 PrimaryButton(

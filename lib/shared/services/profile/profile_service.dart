@@ -112,4 +112,23 @@ class ProfileService {
       throw ProfileException(e.message);
     }
   }
+
+  // ── Transaction PIN (post-testing fixes, Section 6) ───────────────────
+
+  /// True once this student has set a 4-digit transaction PIN. Existing
+  /// accounts created before this feature return false until they set one.
+  Future<bool> hasTransactionPin() async {
+    final result = await _client.rpc('has_transaction_pin');
+    return result as bool;
+  }
+
+  /// Sets (or replaces) the signed-in student's transaction PIN. [pin] must
+  /// be exactly 4 digits — validated again server-side.
+  Future<void> setTransactionPin(String pin) async {
+    try {
+      await _client.rpc('set_transaction_pin', params: {'p_pin': pin});
+    } on PostgrestException catch (e) {
+      throw ProfileException(e.message);
+    }
+  }
 }

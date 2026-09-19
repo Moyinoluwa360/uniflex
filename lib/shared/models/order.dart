@@ -73,6 +73,9 @@ class Order {
     this.isBulk = false,
     this.bulkDiscountPct = 0,
     this.groupOrderId,
+    this.packCount = 0,
+    this.packFee = 0,
+    this.transferredToRiderAt,
     this.items = const [],
   });
 
@@ -102,6 +105,11 @@ class Order {
       isBulk: map['is_bulk'] as bool? ?? false,
       bulkDiscountPct: (map['bulk_discount_pct'] as num?)?.toDouble() ?? 0,
       groupOrderId: map['group_order_id'] as String?,
+      packCount: map['pack_count'] as int? ?? 0,
+      packFee: (map['pack_fee'] as num?)?.toDouble() ?? 0,
+      transferredToRiderAt: map['transferred_to_rider_at'] == null
+          ? null
+          : DateTime.parse(map['transferred_to_rider_at'] as String),
     );
   }
 
@@ -148,6 +156,17 @@ class Order {
   /// Phase 6: group order session this order belongs to (null if standalone).
   final String? groupOrderId;
 
+  /// Post-testing fixes, Section 11: number of packs the student built at
+  /// checkout, and the total pack fee (packCount * vendor.packPrice)
+  /// folded into totalAmount.
+  final int packCount;
+  final double packFee;
+
+  /// Post-testing fixes, Section 12: set once Admin/Kitchen explicitly
+  /// transfers this Uniflex delivery order into the rider pool. Null
+  /// until then, even if status is already 'ready'.
+  final DateTime? transferredToRiderAt;
+
   /// Populated only when the full order detail is fetched.
   final List<OrderItem> items;
 
@@ -187,6 +206,9 @@ class Order {
       isBulk: isBulk,
       bulkDiscountPct: bulkDiscountPct,
       groupOrderId: groupOrderId,
+      packCount: packCount,
+      packFee: packFee,
+      transferredToRiderAt: transferredToRiderAt,
       items: items ?? this.items,
     );
   }

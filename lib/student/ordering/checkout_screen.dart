@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/models/vendor.dart';
+import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
+import '../../shared/widgets/pin/pin_entry_sheet.dart';
 import 'cart_provider.dart';
 import 'order_confirmation_screen.dart';
 import 'order_repository.dart';
@@ -75,14 +77,33 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     });
   }
 
+  /// Runs the transaction-PIN gate before any wallet funds move: prompts
+  /// existing-without-a-PIN accounts to set one first, then always asks
+  /// for the PIN itself. Returns null if the student backs out at either
+  /// step — the caller should abort the order in that case.
+  Future<String?> _collectPin() async {
+    final hasPin =
+        await ref.read(profileServiceProvider).hasTransactionPin();
+    if (!mounted) return null;
+    if (!hasPin) {
+      final didSet = await showSetPinSheet(context, ref);
+      if (!mounted || !didSet) return null;
+    }
+    return showEnterPinSheet(context);
+  }
+
   Future<void> _confirmOrder() async {
     if (_needsLocation) {
       if (!_formKey.currentState!.validate()) return;
     }
 
+    final pin = await _collectPin();
+    if (pin == null || !mounted) return;
+
     final order = await ref.read(orderNotifierProvider.notifier).placeFoodOrder(
           vendor: widget.vendor,
           deliveryType: _deliveryType,
+          pin: pin,
           deliveryLocation: _needsLocation
               ? _locationController.text.trim()
               : null,
@@ -101,6 +122,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Insufficient wallet balance. Please top up first.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else if (error == 'invalid_pin') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Incorrect PIN. Please try again.'),
             behavior: SnackBarBehavior.floating,
           ),
         );

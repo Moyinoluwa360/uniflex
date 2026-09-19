@@ -2738,3 +2738,755 @@ end;
 $$;
 
 grant execute on function public.accept_order(uuid) to authenticated;
+
+-- =====================================================================
+-- POST-TESTING FIXES & CHANGES — first on-device Android QA pass
+-- =====================================================================
+-- Everything below is new as of the post-testing pass (see CHANGELOG.md
+-- "Post-testing fixes & changes"). Run this once, appended after
+-- everything above it. It is additive only — no destructive drops.
+-- =====================================================================
+
+-- pgcrypto — needed for crypt()/gen_salt() used by the transaction PIN
+-- (Section 6). Supabase projects ship this extension; this just makes
+-- sure it's enabled.
+create extension if not exists pgcrypto;
+
+-- ---------------------------------------------------------------------
+-- Section 6 — Order confirmation PIN
+-- ---------------------------------------------------------------------
+-- transaction_pins — one row per student who has set a 4-digit
+-- transaction PIN. Mirrors the wallet_transactions pattern: no direct
+-- client SELECT/INSERT/UPDATE policy at all — every read/write goes
+-- through the SECURITY DEFINER RPCs below, keyed off auth.uid(), so a
+-- client can never read another user's hash or set a PIN for someone
+-- else.
+create table if not exists public.transaction_pins (
+  user_id    uuid primary key references public.profiles (id) on delete cascade,
+  pin_hash   text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.transaction_pins enable row level security;
+
+create or replace function public.set_transaction_pin(p_pin text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then
+    raise exception 'Not authenticated';
+  end if;
+  if p_pin !~ '^[0-9]{4}$' then
+    raise exception 'PIN must be exactly 4 digits';
+  end if;
+
+  insert into public.transaction_pins (user_id, pin_hash, updated_at)
+  values (v_user_id, crypt(p_pin, gen_salt('bf')), now())
+  on conflict (user_id) do update
+    set pin_hash = excluded.pin_hash, updated_at = now();
+end;
+$$;
+
+grant execute on function public.set_transaction_pin(text) to authenticated;
+
+-- Lets the client ask "does this student have a PIN yet?" without ever
+-- exposing the hash itself.
+create or replace function public.has_transaction_pin()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from public.transaction_pins where user_id = auth.uid()
+  );
+$$;
+
+grant execute on function public.has_transaction_pin() to authenticated;
+
+create or replace function public.verify_transaction_pin(p_pin text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_hash text;
+begin
+  select pin_hash into v_hash
+    from public.transaction_pins
+   where user_id = auth.uid();
+
+  if v_hash is null then
+    return false;
+  end if;
+
+  return crypt(p_pin, v_hash) = v_hash;
+end;
+$$;
+
+grant execute on function public.verify_transaction_pin(text) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- Section 7 — Admin rider management (add / remove / activate)
+-- ---------------------------------------------------------------------
+-- is_active gates sign-in for ANY profile (defaults true, so students
+-- and existing admins/riders are unaffected). Only the rider management
+-- screen exposes a UI to flip it — "remove" and "deactivate" are both
+-- implemented as is_active = false so a rider's account and delivery
+-- history (delivery_records, past orders) are never deleted, only their
+-- ability to sign in and appear in the active roster.
+alter table public.profiles add column if not exists is_active boolean not null default true;
+
+create or replace function public.admin_list_riders()
+returns table (
+  id              uuid,
+  full_name       text,
+  email           text,
+  phone           text,
+  is_active       boolean,
+  rider_is_online boolean,
+  created_at      timestamptz
+)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select p.id, p.full_name, p.email, p.phone, p.is_active, p.rider_is_online, p.created_at
+  from public.profiles p
+  where p.role = 'rider' and public.is_admin()
+  order by p.created_at desc;
+$$;
+
+grant execute on function public.admin_list_riders() to authenticated;
+
+create or replace function public.admin_set_rider_active(p_rider_id uuid, p_active boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Unauthorized';
+  end if;
+
+  update public.profiles
+    set is_active = p_active
+  where id = p_rider_id and role = 'rider';
+
+  if not found then
+    raise exception 'Rider not found';
+  end if;
+end;
+$$;
+
+grant execute on function public.admin_set_rider_active(uuid, boolean) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- Section 9 — Admin-configurable Around categories
+-- ---------------------------------------------------------------------
+create table if not exists public.around_categories (
+  id          uuid primary key default gen_random_uuid(),
+  key         text unique not null,
+  title       text not null,
+  subtitle    text not null default '',
+  description text not null default '',
+  icon_name   text not null default 'explore',
+  flat_fee    numeric(10, 2) not null default 500,
+  is_active   boolean not null default true,
+  sort_order  int not null default 0,
+  created_at  timestamptz not null default now()
+);
+
+alter table public.around_categories enable row level security;
+
+drop policy if exists "around_categories: authenticated read active" on public.around_categories;
+create policy "around_categories: authenticated read active"
+  on public.around_categories for select to authenticated
+  using (is_active or public.is_admin());
+
+drop policy if exists "around_categories: admin insert" on public.around_categories;
+create policy "around_categories: admin insert"
+  on public.around_categories for insert to authenticated
+  with check (public.is_admin());
+
+drop policy if exists "around_categories: admin update" on public.around_categories;
+create policy "around_categories: admin update"
+  on public.around_categories for update to authenticated
+  using (public.is_admin());
+
+drop policy if exists "around_categories: admin delete" on public.around_categories;
+create policy "around_categories: admin delete"
+  on public.around_categories for delete to authenticated
+  using (public.is_admin());
+
+-- Seed the 5 categories that used to be hardcoded in the Dart enum, so
+-- the Student-facing Around flow keeps working unchanged the moment
+-- this migrates to reading from this table.
+insert into public.around_categories (key, title, subtitle, description, icon_name, flat_fee, sort_order)
+values
+  ('errand', 'General Errand', 'Post a task, get a runner',
+   'Free-text description of any item or task you need fetched on or near campus.',
+   'assignment', 500, 0),
+  ('laundry', 'Laundry Pickup & Dropoff', 'Pickup & drop at the point',
+   'Rider picks up your laundry bag and drops it at the laundry point — or picks it up when ready. No washing service included.',
+   'laundry', 600, 1),
+  ('hostel', 'Hostel Transfer', 'Between hostels',
+   'Move items between hostels or any two campus points.',
+   'home', 400, 2),
+  ('vendor_fetch', 'Nearby Shop Fetch', 'Fetch from any shop',
+   'Fetch an item from any nearby off-catalog shop or vendor.',
+   'storefront', 500, 3),
+  ('peer_courier', 'Peer Courier', 'Student to student',
+   'Point-to-point delivery from you to another student, or vice versa.',
+   'send', 400, 4)
+on conflict (key) do nothing;
+
+-- around_requests.category used to be a hardcoded CHECK against the 5
+-- values above; it's now a foreign key into around_categories so admin
+-- can add/edit/remove categories without a schema change.
+alter table public.around_requests drop constraint if exists around_requests_category_check;
+alter table public.around_requests drop constraint if exists around_requests_category_fkey;
+alter table public.around_requests
+  add constraint around_requests_category_fkey
+  foreign key (category) references public.around_categories (key);
+
+-- Anonymous rider-availability signal for the Around tab (Section 10) —
+-- returns whether ANY rider is currently online, with no names or
+-- per-rider status ever leaving the server.
+create or replace function public.any_riders_available()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from public.profiles
+    where role = 'rider' and rider_is_online = true and is_active = true
+  );
+$$;
+
+grant execute on function public.any_riders_available() to authenticated;
+
+-- ---------------------------------------------------------------------
+-- Section 11 — Catalog & ordering flow rework (independent items + packs)
+-- ---------------------------------------------------------------------
+-- Every product is now its own orderable catalog item (no more
+-- protein/extra options bolted onto a "meal" — product_options stays in
+-- the schema for backward compatibility but the new catalog UI no
+-- longer drives a combo-builder from it).
+alter table public.products add column if not exists requires_pack boolean not null default false;
+
+-- Pack price is per-vendor (Uniflex and each partner vendor set their
+-- own), not a single global value.
+alter table public.vendors add column if not exists pack_price numeric(10, 2) not null default 200;
+
+alter table public.orders add column if not exists pack_count int not null default 0;
+alter table public.orders add column if not exists pack_fee   numeric(10, 2) not null default 0;
+
+-- order_packs — one row per pack the student built at checkout, so
+-- Kitchen/Admin can see exactly what goes in each pack, not just a
+-- total count.
+create table if not exists public.order_packs (
+  id         uuid primary key default gen_random_uuid(),
+  order_id   uuid not null references public.orders (id) on delete cascade,
+  pack_index int  not null,
+  -- [{product_id, product_name, quantity}, ...]
+  items      jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+alter table public.order_packs enable row level security;
+
+drop policy if exists "order_packs: read own via order" on public.order_packs;
+create policy "order_packs: read own via order"
+  on public.order_packs for select to authenticated
+  using (
+    exists (
+      select 1 from public.orders o
+      where o.id = order_packs.order_id and o.student_id = auth.uid()
+    )
+  );
+
+drop policy if exists "order_packs: admin read all" on public.order_packs;
+create policy "order_packs: admin read all"
+  on public.order_packs for select to authenticated
+  using (public.is_admin());
+-- No client insert policy — order_packs rows are written exclusively by
+-- place_food_order_with_payment() below.
+
+-- place_food_order_with_payment — extended with the transaction PIN gate
+-- (Section 6) and pack fields (Section 11). Postgres treats a longer
+-- parameter list as a new overload rather than replacing the Phase 6
+-- version in place (same append-only pattern already used for
+-- p_scheduled_for/p_is_bulk/p_bulk_discount_pct) — existing callers are
+-- unaffected, and the Flutter client always calls with the full current
+-- set of named params, so it always resolves to this version.
+create or replace function public.place_food_order_with_payment(
+  p_vendor_id       uuid,
+  p_source          text,
+  p_delivery_type   text,
+  p_delivery_location text,
+  p_total_amount    numeric,
+  p_estimated_time  text,
+  p_line_items      jsonb,
+  p_scheduled_for   timestamptz default null,
+  p_is_bulk         boolean default false,
+  p_bulk_discount_pct numeric default 0,
+  p_pin             text default null,
+  p_pack_fee        numeric default 0,
+  p_packs           jsonb default '[]'::jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id   uuid := auth.uid();
+  v_balance      numeric;
+  v_new_balance  numeric;
+  v_order_id     uuid;
+  v_item         jsonb;
+  v_plan_id      uuid;
+  v_plan_period  text;
+  v_plan_budget  numeric;
+  v_plan_spent   numeric;
+  v_period_start timestamptz;
+  v_period_end   timestamptz;
+  v_new_spent    numeric;
+  v_plan_over    boolean := false;
+  v_pack         jsonb;
+  v_pack_idx     int := 0;
+begin
+  if v_student_id is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  if not public.verify_transaction_pin(p_pin) then
+    raise exception 'INVALID_PIN';
+  end if;
+
+  select balance into v_balance
+    from public.wallets
+   where user_id = v_student_id
+  for update;
+
+  if not found then
+    raise exception 'WALLET_NOT_FOUND';
+  end if;
+
+  if v_balance < p_total_amount then
+    raise exception 'INSUFFICIENT_BALANCE';
+  end if;
+
+  update public.wallets
+    set balance = balance - p_total_amount
+  where user_id = v_student_id
+  returning balance into v_new_balance;
+
+  insert into public.orders
+    (student_id, vendor_id, source, type, status, delivery_type,
+     delivery_location, total_amount, estimated_time, scheduled_for,
+     is_bulk, bulk_discount_pct, pack_count, pack_fee)
+  values
+    (v_student_id, p_vendor_id, p_source, 'food', 'placed', p_delivery_type,
+     p_delivery_location, p_total_amount, p_estimated_time, p_scheduled_for,
+     p_is_bulk, p_bulk_discount_pct, jsonb_array_length(p_packs), p_pack_fee)
+  returning id into v_order_id;
+
+  for v_item in select * from jsonb_array_elements(p_line_items)
+  loop
+    insert into public.order_items
+      (order_id, product_id, product_name, quantity, unit_price, selected_options)
+    values
+      (v_order_id,
+       (v_item ->> 'product_id')::uuid,
+       v_item ->> 'product_name',
+       (v_item ->> 'quantity')::int,
+       (v_item ->> 'unit_price')::numeric,
+       coalesce(v_item -> 'selected_options', '[]'::jsonb));
+  end loop;
+
+  for v_pack in select * from jsonb_array_elements(p_packs)
+  loop
+    insert into public.order_packs (order_id, pack_index, items)
+    values (v_order_id, v_pack_idx, coalesce(v_pack -> 'items', '[]'::jsonb));
+    v_pack_idx := v_pack_idx + 1;
+  end loop;
+
+  insert into public.wallet_transactions
+    (user_id, type, amount, source, order_id, balance_after)
+  values
+    (v_student_id, 'debit', p_total_amount, 'order_payment', v_order_id, v_new_balance);
+
+  -- Lazily update the active saving plan's spent counter, resetting it
+  -- if the current period boundary has passed (unchanged from Phase 3).
+  select id, period, budget, spent, period_start
+    into v_plan_id, v_plan_period, v_plan_budget, v_plan_spent, v_period_start
+  from public.saving_plans
+  where user_id = v_student_id and is_active
+  limit 1;
+
+  if v_plan_id is not null then
+    v_period_end := case v_plan_period
+      when 'daily' then v_period_start + interval '1 day'
+      when 'weekly' then v_period_start + interval '7 days'
+      else v_period_start + interval '1 month'
+    end;
+
+    if now() >= v_period_end then
+      v_period_start := date_trunc('day', now());
+      v_new_spent := p_total_amount;
+    else
+      v_new_spent := v_plan_spent + p_total_amount;
+    end if;
+
+    update public.saving_plans
+      set spent = v_new_spent, period_start = v_period_start, updated_at = now()
+    where id = v_plan_id;
+
+    v_plan_over := v_new_spent > v_plan_budget;
+  end if;
+
+  return jsonb_build_object(
+    'order_id', v_order_id,
+    'balance_after', v_new_balance,
+    'plan_over_budget', v_plan_over,
+    'plan_period_reset', false
+  );
+end;
+$$;
+
+grant execute on function public.place_food_order_with_payment(
+  uuid, text, text, text, numeric, text, jsonb, timestamptz, boolean, numeric, text, numeric, jsonb
+) to authenticated;
+
+-- place_around_with_payment — extended with the transaction PIN gate.
+create or replace function public.place_around_with_payment(
+  p_category          text,
+  p_pickup_location   text,
+  p_dropoff_location  text,
+  p_item_description  text,
+  p_total_amount      numeric,
+  p_pin               text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id   uuid    := auth.uid();
+  v_balance      numeric;
+  v_new_balance  numeric;
+  v_order_id     uuid;
+  v_plan_id      uuid;
+  v_plan_period  text;
+  v_plan_budget  numeric;
+  v_plan_spent   numeric;
+  v_period_start timestamptz;
+  v_period_end   timestamptz;
+  v_new_spent    numeric;
+  v_plan_over    boolean := false;
+begin
+  if v_student_id is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  if not public.verify_transaction_pin(p_pin) then
+    raise exception 'INVALID_PIN';
+  end if;
+
+  select balance into v_balance
+    from public.wallets
+   where user_id = v_student_id
+  for update;
+
+  if not found then
+    raise exception 'WALLET_NOT_FOUND';
+  end if;
+
+  if v_balance < p_total_amount then
+    raise exception 'INSUFFICIENT_BALANCE';
+  end if;
+
+  update public.wallets
+    set balance = balance - p_total_amount
+  where user_id = v_student_id
+  returning balance into v_new_balance;
+
+  insert into public.orders
+    (student_id, source, type, status, delivery_type, total_amount, estimated_time)
+  values
+    (v_student_id, 'uniflex', 'around', 'placed', 'delivery',
+     p_total_amount, '15–25 min')
+  returning id into v_order_id;
+
+  insert into public.around_requests
+    (order_id, category, pickup_location, dropoff_location,
+     item_description, estimated_fee)
+  values
+    (v_order_id, p_category, p_pickup_location, p_dropoff_location,
+     p_item_description, p_total_amount);
+
+  insert into public.wallet_transactions
+    (user_id, type, amount, source, order_id, balance_after)
+  values
+    (v_student_id, 'debit', p_total_amount, 'order_payment', v_order_id, v_new_balance);
+
+  select id, period, budget, spent, period_start
+    into v_plan_id, v_plan_period, v_plan_budget, v_plan_spent, v_period_start
+  from public.saving_plans
+  where user_id = v_student_id and is_active
+  limit 1;
+
+  if v_plan_id is not null then
+    v_period_end := case v_plan_period
+      when 'daily' then v_period_start + interval '1 day'
+      when 'weekly' then v_period_start + interval '7 days'
+      else v_period_start + interval '1 month'
+    end;
+
+    if now() >= v_period_end then
+      v_period_start := date_trunc('day', now());
+      v_new_spent := p_total_amount;
+    else
+      v_new_spent := v_plan_spent + p_total_amount;
+    end if;
+
+    update public.saving_plans
+      set spent = v_new_spent, period_start = v_period_start, updated_at = now()
+    where id = v_plan_id;
+
+    v_plan_over := v_new_spent > v_plan_budget;
+  end if;
+
+  return jsonb_build_object(
+    'order_id', v_order_id,
+    'balance_after', v_new_balance,
+    'plan_over_budget', v_plan_over,
+    'plan_period_reset', false
+  );
+end;
+$$;
+
+grant execute on function public.place_around_with_payment(
+  text, text, text, text, numeric, text
+) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- Section 12 — Order status sync (single source of truth)
+-- ---------------------------------------------------------------------
+-- Marks the moment Admin/Kitchen explicitly hands a Uniflex delivery
+-- order to the rider pool — see transfer_order_to_rider() below. Pool
+-- eligibility for Uniflex-source delivery orders now requires this to
+-- be set, not just status = 'ready', so there is one explicit,
+-- auditable action instead of an implicit status side-effect.
+alter table public.orders add column if not exists transferred_to_rider_at timestamptz;
+
+drop policy if exists "orders: rider read pool" on public.orders;
+create policy "orders: rider read pool"
+  on public.orders for select to authenticated
+  using (
+    public.is_rider()
+    and rider_id is null
+    and (
+      (source = 'uniflex' and status = 'ready' and transferred_to_rider_at is not null
+         and delivery_type in ('delivery', 'campus_delivery', 'hostel_delivery'))
+      or (source = 'partner' and status = 'placed'
+         and delivery_type in ('delivery', 'campus_delivery', 'hostel_delivery'))
+      or (type = 'around' and status = 'placed')
+    )
+  );
+
+create or replace function public.accept_order(p_order_id uuid)
+returns void language plpgsql security definer as $$
+declare
+  v_order public.orders%rowtype;
+begin
+  if not public.is_rider() then
+    raise exception 'Unauthorized';
+  end if;
+
+  select * into v_order from public.orders
+  where id = p_order_id
+  for update nowait;
+
+  if not found then
+    raise exception 'Order not found';
+  end if;
+
+  if v_order.rider_id is not null then
+    raise exception 'Order already taken';
+  end if;
+
+  if not (
+    (v_order.source = 'uniflex' and v_order.status = 'ready'
+       and v_order.transferred_to_rider_at is not null
+       and v_order.delivery_type in ('delivery', 'campus_delivery', 'hostel_delivery'))
+    or (v_order.source = 'partner' and v_order.status = 'placed'
+       and v_order.delivery_type in ('delivery', 'campus_delivery', 'hostel_delivery'))
+    or (v_order.type = 'around' and v_order.status = 'placed')
+  ) then
+    raise exception 'Order is not eligible for acceptance';
+  end if;
+
+  update public.orders
+  set
+    rider_id       = auth.uid(),
+    delivery_stage = 'accepted',
+    status         = 'out_for_delivery'
+  where id = p_order_id;
+end;
+$$;
+
+grant execute on function public.accept_order(uuid) to authenticated;
+
+-- transfer_order_to_rider — the "Transfer to Rider" action from the
+-- Kitchen Queue (Section 12). Only Admin/Kitchen Staff can call it, only
+-- on a Uniflex food delivery order that is already Ready and has no
+-- rider yet.
+create or replace function public.transfer_order_to_rider(p_order_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_order public.orders%rowtype;
+begin
+  if not public.is_admin() then
+    raise exception 'Unauthorized';
+  end if;
+
+  select * into v_order from public.orders where id = p_order_id for update;
+  if not found then
+    raise exception 'Order not found';
+  end if;
+
+  if v_order.source <> 'uniflex' or v_order.type <> 'food' then
+    raise exception 'Only Uniflex food orders can be transferred to a rider here';
+  end if;
+
+  if v_order.delivery_type not in ('delivery', 'campus_delivery', 'hostel_delivery') then
+    raise exception 'Order is not a delivery order';
+  end if;
+
+  if v_order.status <> 'ready' then
+    raise exception 'Order must be marked Ready before it can be transferred to a rider';
+  end if;
+
+  if v_order.rider_id is not null then
+    raise exception 'Order already has a rider assigned';
+  end if;
+
+  update public.orders
+    set transferred_to_rider_at = now()
+  where id = p_order_id;
+end;
+$$;
+
+grant execute on function public.transfer_order_to_rider(uuid) to authenticated;
+
+-- update_order_status — hardened so the only path to 'out_for_delivery'
+-- or 'completed' on a delivery order (food delivery or around) is the
+-- rider workflow (accept_order / verify_delivery), which enforces the
+-- PIN gate. This is what makes "must not show as completed anywhere
+-- until the PIN is confirmed" actually true at the data layer instead
+-- of relying on every screen to agree not to call the wrong RPC.
+create or replace function public.update_order_status(
+  p_order_id   uuid,
+  p_new_status text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_order public.orders%rowtype;
+begin
+  if not (select public.is_admin()) then
+    raise exception 'Unauthorized';
+  end if;
+
+  if p_new_status not in (
+    'placed', 'preparing', 'ready',
+    'out_for_delivery', 'ready_for_pickup',
+    'completed', 'cancelled'
+  ) then
+    raise exception 'Invalid status: %', p_new_status;
+  end if;
+
+  select * into v_order from public.orders where id = p_order_id;
+  if not found then
+    raise exception 'Order not found: %', p_order_id;
+  end if;
+
+  if (
+       v_order.type = 'around'
+       or (v_order.type = 'food' and v_order.delivery_type in ('delivery', 'campus_delivery', 'hostel_delivery'))
+     )
+     and p_new_status in ('out_for_delivery', 'completed') then
+    raise exception 'Delivery orders can only reach that status through the rider workflow';
+  end if;
+
+  if v_order.type = 'food' and v_order.delivery_type = 'pickup'
+     and p_new_status = 'completed' and v_order.status <> 'ready_for_pickup' then
+    raise exception 'Pickup orders must be Ready for Pickup before they can be completed';
+  end if;
+
+  update public.orders
+    set status = p_new_status
+  where id = p_order_id;
+end;
+$$;
+
+grant execute on function public.update_order_status(uuid, text) to authenticated;
+
+-- get_rider_info — lets the STUDENT see their assigned rider's name and
+-- phone once one is accepted (mirrors get_customer_info, which already
+-- does the reverse for the rider). Only the order's own student can call
+-- it, and only once a rider is actually assigned.
+create or replace function public.get_rider_info(p_order_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_rider_id   uuid;
+  v_student_id uuid;
+  v_result     jsonb;
+begin
+  select rider_id, student_id into v_rider_id, v_student_id
+    from public.orders where id = p_order_id;
+
+  if v_student_id is null or v_student_id <> auth.uid() then
+    raise exception 'Unauthorized';
+  end if;
+
+  if v_rider_id is null then
+    return null;
+  end if;
+
+  select jsonb_build_object('full_name', full_name, 'phone', phone)
+    into v_result
+  from public.profiles where id = v_rider_id;
+
+  return v_result;
+end;
+$$;
+
+grant execute on function public.get_rider_info(uuid) to authenticated;

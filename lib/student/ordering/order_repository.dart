@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../shared/models/around_request.dart';
 import '../../shared/models/order.dart';
 import '../../shared/models/vendor.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
@@ -86,13 +85,23 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
   OrderPlacementState build() => const OrderPlacementState();
 
   /// Places a food order for all items currently in the cart.
+  ///
+  /// [pin] is the student's transaction PIN, verified server-side before
+  /// any wallet funds move (see Section 6 — Order confirmation PIN).
+  /// [packs] is the pack allocation built at checkout (Section 11) — a
+  /// list of `{'items': [{'product_id', 'product_name', 'quantity'}]}`
+  /// maps, one per pack; [packFee] is `packs.length * vendor.packPrice`,
+  /// already folded into the total the caller computed.
   Future<Order?> placeFoodOrder({
     required Vendor vendor,
     required String deliveryType, // 'pickup' | 'campus_delivery' | 'hostel_delivery'
+    required String pin,
     String? deliveryLocation,
     DateTime? scheduledFor,
     bool isBulk = false,
     double bulkDiscountPct = 0,
+    List<Map<String, dynamic>> packs = const [],
+    double packFee = 0,
   }) async {
     final cart = ref.read(cartProvider);
     if (cart.isEmpty) return null;
@@ -106,7 +115,7 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
         'hostel_delivery' => 300.0,
         _ => 0.0,
       };
-      final total = cart.subtotal + deliveryFee;
+      final total = cart.subtotal + deliveryFee + packFee;
 
       // Build the JSONB line-items array expected by the RPC.
       final lineItems = cart.items
@@ -134,6 +143,9 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
             'p_scheduled_for': scheduledFor.toUtc().toIso8601String(),
           if (isBulk) 'p_is_bulk': isBulk,
           if (bulkDiscountPct > 0) 'p_bulk_discount_pct': bulkDiscountPct,
+          'p_pin': pin,
+          'p_pack_fee': packFee,
+          'p_packs': packs,
         },
       ) as Map<String, dynamic>;
 
@@ -158,6 +170,8 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
         scheduledFor: scheduledFor,
         isBulk: isBulk,
         bulkDiscountPct: bulkDiscountPct,
+        packCount: packs.length,
+        packFee: packFee,
         createdAt: DateTime.now(),
       );
 
@@ -176,25 +190,29 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
   }
 
   /// Places an Around request (errand, laundry, hostel transfer, etc.).
+  /// [categoryKey] and [fee] come from the admin-configurable
+  /// `around_categories` table (Section 9) rather than a hardcoded enum.
   Future<Order?> placeAroundRequest({
-    required AroundCategory category,
+    required String categoryKey,
+    required double fee,
     required String pickupLocation,
     required String dropoffLocation,
     required String itemDescription,
+    required String pin,
   }) async {
     state = const OrderPlacementState(isLoading: true);
     try {
       final client = ref.read(supabaseClientProvider);
-      final fee = category.estimatedFee;
 
       final result = await client.rpc(
         'place_around_with_payment',
         params: {
-          'p_category': category.rawValue,
+          'p_category': categoryKey,
           'p_pickup_location': pickupLocation,
           'p_dropoff_location': dropoffLocation,
           'p_item_description': itemDescription,
           'p_total_amount': fee,
+          'p_pin': pin,
         },
       ) as Map<String, dynamic>;
 
@@ -231,6 +249,7 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
   /// show a "Fund Wallet" shortcut rather than a generic error.
   String _mapError(String raw) {
     if (raw.contains('INSUFFICIENT_BALANCE')) return 'insufficient_balance';
+    if (raw.contains('INVALID_PIN')) return 'invalid_pin';
     if (raw.contains('WALLET_NOT_FOUND')) {
       return 'Wallet not found — please contact support.';
     }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Standard text input. Styling comes entirely from
 /// `ThemeData.inputDecorationTheme` (see AppTheme) — this widget just
@@ -22,6 +23,7 @@ class AppTextField extends StatelessWidget {
     this.autovalidateMode,
     this.maxLength,
     this.maxLines = 1,
+    this.inputFormatters,
   });
 
   final TextEditingController? controller;
@@ -39,6 +41,7 @@ class AppTextField extends StatelessWidget {
   final AutovalidateMode? autovalidateMode;
   final int? maxLength;
   final int? maxLines;
+  final List<TextInputFormatter>? inputFormatters;
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +56,7 @@ class AppTextField extends StatelessWidget {
       autovalidateMode: autovalidateMode,
       maxLength: maxLength,
       maxLines: obscureText ? 1 : maxLines,
+      inputFormatters: inputFormatters,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,

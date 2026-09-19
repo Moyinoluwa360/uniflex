@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../shared/models/around_request.dart';
+import '../../shared/models/around_category.dart';
 import '../../shared/models/vendor.dart';
 import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/async/retry_section.dart';
 import '../../shared/widgets/media/app_image.dart';
 import '../../shared/widgets/navigation/app_bottom_nav_shell.dart';
+import '../around/around_category_providers.dart';
 import '../around/around_screen.dart';
 import '../ordering/catalog_screen.dart';
 import '../ordering/product_repository.dart';
@@ -16,6 +18,10 @@ import '../ordering/product_repository.dart';
 /// Index of the Wallet tab in [StudentShell] — used by the header's
 /// "Top up" affordance to jump straight to it.
 const int _kWalletTabIndex = 2;
+
+/// Index of the Profile tab in [StudentShell] — used by the header's
+/// avatar to jump straight to it.
+const int _kProfileTabIndex = 3;
 
 /// Soft emerald glow beneath vendor cards — a tight, low-opacity brand
 /// shadow that lifts the cards off the canvas (per the design).
@@ -44,8 +50,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> {
     final hour = DateTime.now().hour;
     if (hour < 12) return 'Good morning';
     if (hour < 17) return 'Good afternoon';
-    if (hour < 21) return 'Good evening';
-    return 'Good night';
+    return 'Good evening';
   }
 
   @override
@@ -73,6 +78,8 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> {
                   ? 'Search meals, vendors, errands'
                   : 'Search errands, hostels, vendors',
               onTopUp: () => AppNavShellScope.of(context)?.go(_kWalletTabIndex),
+              onAvatarTap: () =>
+                  AppNavShellScope.of(context)?.go(_kProfileTabIndex),
             ),
           ),
           SliverToBoxAdapter(
@@ -110,6 +117,7 @@ class _HomeHeader extends StatelessWidget {
     required this.balance,
     required this.searchHint,
     required this.onTopUp,
+    required this.onAvatarTap,
   });
 
   final String greeting;
@@ -117,6 +125,7 @@ class _HomeHeader extends StatelessWidget {
   final double? balance;
   final String searchHint;
   final VoidCallback onTopUp;
+  final VoidCallback onAvatarTap;
 
   @override
   Widget build(BuildContext context) {
@@ -174,19 +183,28 @@ class _HomeHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              // Avatar — emerald in dark mode, white in light
-              Container(
-                width: 40,
-                height: 40,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.emerald : white,
-                  shape: BoxShape.circle,
-                ),
-                child: Text(
-                  nickname.isNotEmpty ? nickname[0].toUpperCase() : 'U',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: isDark ? AppColors.pureWhite : AppColors.emerald,
+              // Avatar — emerald in dark mode, white in light. Tapping
+              // routes to the Profile tab.
+              Material(
+                color: isDark ? AppColors.emerald : white,
+                shape: const CircleBorder(),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: onAvatarTap,
+                  child: SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: Center(
+                      child: Text(
+                        nickname.trim().isNotEmpty
+                            ? nickname.trim()[0].toUpperCase()
+                            : 'U',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color:
+                              isDark ? AppColors.pureWhite : AppColors.emerald,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -970,37 +988,17 @@ class _Badge extends StatelessWidget {
 
 // ── Around service grid ──────────────────────────────────────────────────────
 
-class _AroundServiceGrid extends StatelessWidget {
+/// Reads categories from the admin-configurable `around_categories` table
+/// (post-testing fixes, Section 9) instead of a hardcoded enum, so
+/// add/edit/remove from the admin Manage hub shows up here immediately.
+class _AroundServiceGrid extends ConsumerWidget {
   const _AroundServiceGrid();
 
-  // Short display label + subtitle per functional category, styled after the
-  // design's service tiles. All five backend categories are kept (the design
-  // shows four) so no Around request type is silently dropped.
-  static const Map<AroundCategory, ({String title, String subtitle})> _copy = {
-    AroundCategory.errand: (
-      title: 'Errand request',
-      subtitle: 'Post a task, get a runner',
-    ),
-    AroundCategory.hostel: (
-      title: 'Pickup & drop-off',
-      subtitle: 'Between hostels',
-    ),
-    AroundCategory.vendorFetch: (
-      title: 'Nearby vendors',
-      subtitle: 'Fetch from any shop',
-    ),
-    AroundCategory.laundry: (
-      title: 'Laundry run',
-      subtitle: 'Pickup & drop at the point',
-    ),
-    AroundCategory.peerCourier: (
-      title: 'Peer courier',
-      subtitle: 'Student to student',
-    ),
-  };
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final categoriesAsync = ref.watch(activeAroundCategoriesProvider);
+    final theme = Theme.of(context);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.screenGutter,
@@ -1008,35 +1006,44 @@ class _AroundServiceGrid extends StatelessWidget {
         AppSpacing.screenGutter,
         0,
       ),
-      child: GridView.count(
-        crossAxisCount: 2,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisSpacing: AppSpacing.cardGap,
-        mainAxisSpacing: AppSpacing.cardGap,
-        childAspectRatio: 1.5,
-        children: [
-          for (final entry in _copy.entries)
-            _AroundServiceCard(
-              category: entry.key,
-              title: entry.value.title,
-              subtitle: entry.value.subtitle,
-            ),
-        ],
+      child: categoriesAsync.when(
+        loading: () => const Padding(
+          padding: EdgeInsets.all(AppSpacing.lg),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+        error: (e, _) => RetrySection(
+          message: 'Could not load Around categories.',
+          onRetry: () => ref.invalidate(activeAroundCategoriesProvider),
+          compact: true,
+        ),
+        data: (categories) {
+          if (categories.isEmpty) {
+            return Text(
+              'No Around services available right now.',
+              style: theme.textTheme.bodyMedium,
+            );
+          }
+          return GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: AppSpacing.cardGap,
+            mainAxisSpacing: AppSpacing.cardGap,
+            childAspectRatio: 1.5,
+            children: [
+              for (final category in categories)
+                _AroundServiceCard(category: category),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
 class _AroundServiceCard extends StatelessWidget {
-  const _AroundServiceCard({
-    required this.category,
-    required this.title,
-    required this.subtitle,
-  });
-  final AroundCategory category;
-  final String title;
-  final String subtitle;
+  const _AroundServiceCard({required this.category});
+  final AroundCategoryData category;
 
   @override
   Widget build(BuildContext context) {
@@ -1068,13 +1075,13 @@ class _AroundServiceCard extends StatelessWidget {
                   color: theme.colorScheme.primary, size: 20),
             ),
             const Spacer(),
-            Text(title,
+            Text(category.title,
                 style: theme.textTheme.titleSmall,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis),
             const SizedBox(height: 2),
             Text(
-              subtitle,
+              category.subtitle,
               style: theme.textTheme.labelSmall?.copyWith(
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
               ),
@@ -1088,14 +1095,21 @@ class _AroundServiceCard extends StatelessWidget {
   }
 }
 
-// ── Runners online ───────────────────────────────────────────────────────────
+// ── Rider availability ───────────────────────────────────────────────────────
 
-class _RunnersOnline extends StatelessWidget {
+/// Anonymous availability indicator for Around requests. Deliberately shows
+/// no individual rider's name or an "online" status tied to a person — just
+/// a dot signalling whether riders are available nearby right now.
+class _RunnersOnline extends ConsumerWidget {
   const _RunnersOnline();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final ridersAvailableAsync = ref.watch(ridersAvailableNearbyProvider);
+    final ridersAvailable = ridersAvailableAsync.valueOrNull ?? false;
+    final categories = ref.watch(activeAroundCategoriesProvider).valueOrNull;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.screenGutter,
@@ -1106,15 +1120,7 @@ class _RunnersOnline extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Runners online now', style: theme.textTheme.titleMedium),
-              Text('12 nearby',
-                  style: theme.textTheme.labelMedium
-                      ?.copyWith(color: theme.colorScheme.primary)),
-            ],
-          ),
+          Text('Rider availability', style: theme.textTheme.titleMedium),
           const SizedBox(height: AppSpacing.sm),
           Container(
             decoration: BoxDecoration(
@@ -1125,46 +1131,23 @@ class _RunnersOnline extends StatelessWidget {
             padding: const EdgeInsets.all(AppSpacing.md),
             child: Row(
               children: [
-                Stack(
-                  children: [
-                    const CircleAvatar(
-                      radius: 22,
-                      backgroundColor: AppColors.softGrey,
-                      child: Icon(Icons.person, color: AppColors.mediumGrey),
-                    ),
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: AppColors.emerald,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                              color: theme.cardTheme.color ??
-                                  AppColors.pureWhite,
-                              width: 2),
-                        ),
-                      ),
-                    ),
-                  ],
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: ridersAvailable
+                        ? AppColors.emerald
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.25),
+                    shape: BoxShape.circle,
+                  ),
                 ),
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Emeka A.', style: theme.textTheme.titleSmall),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Campus rider · 4 min away',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: 0.55),
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    ridersAvailable
+                        ? 'Riders available nearby'
+                        : 'No riders available right now',
+                    style: theme.textTheme.titleSmall,
                   ),
                 ),
                 ElevatedButton(
@@ -1175,12 +1158,19 @@ class _RunnersOnline extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: AppSpacing.md),
                   ),
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          const AroundScreen(category: AroundCategory.errand),
-                    ),
-                  ),
+                  onPressed: (categories == null || categories.isEmpty)
+                      ? null
+                      : () {
+                          final errand = categories.firstWhere(
+                            (c) => c.key == 'errand',
+                            orElse: () => categories.first,
+                          );
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => AroundScreen(category: errand),
+                            ),
+                          );
+                        },
                   child: const Text('Request'),
                 ),
               ],

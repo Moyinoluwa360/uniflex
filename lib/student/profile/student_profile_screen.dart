@@ -6,6 +6,7 @@ import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/pin/pin_entry_sheet.dart';
 import '../services/student_providers.dart';
 import 'badges_screen.dart';
 import 'gift_screen.dart';
@@ -263,6 +264,12 @@ class StudentProfileScreen extends ConsumerWidget {
                           label: 'Preferences',
                           onTap: () =>
                               _push(context, const PreferencesScreen()),
+                          theme: theme,
+                        ),
+                        _MenuRow(
+                          icon: Icons.pin_outlined,
+                          label: 'Change Transaction PIN',
+                          onTap: () => showSetPinSheet(context, ref),
                           theme: theme,
                         ),
                         _MenuRow(

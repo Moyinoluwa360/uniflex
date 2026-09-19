@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../shared/models/around_request.dart';
+import '../../shared/models/around_category.dart';
+import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
+import '../../shared/widgets/pin/pin_entry_sheet.dart';
 import '../ordering/order_confirmation_screen.dart';
 import '../ordering/order_repository.dart';
 
@@ -13,12 +15,12 @@ import '../ordering/order_repository.dart';
 /// the menu/cart entirely and calls [place_around_with_payment] which
 /// atomically deducts the wallet and creates the order record.
 ///
-/// Printing / photocopy requests are explicitly excluded: they need a
-/// file-upload + per-page pricing flow built separately.
+/// [category] comes from the admin-configurable `around_categories`
+/// table (post-testing fixes, Section 9) rather than a hardcoded enum.
 class AroundScreen extends ConsumerStatefulWidget {
   const AroundScreen({super.key, required this.category});
 
-  final AroundCategory category;
+  final AroundCategoryData category;
 
   @override
   ConsumerState<AroundScreen> createState() => _AroundScreenState();
@@ -38,38 +40,52 @@ class _AroundScreenState extends ConsumerState<AroundScreen> {
     super.dispose();
   }
 
-  String get _pickupLabel => switch (widget.category) {
-        AroundCategory.laundry => 'Pickup location (your hostel / room)',
-        AroundCategory.hostel => 'Pickup location',
-        AroundCategory.peerCourier => 'Pickup from',
+  String get _pickupLabel => switch (widget.category.key) {
+        'laundry' => 'Pickup location (your hostel / room)',
+        'hostel' => 'Pickup location',
+        'peer_courier' => 'Pickup from',
         _ => 'Pickup location',
       };
 
-  String get _dropoffLabel => switch (widget.category) {
-        AroundCategory.laundry => 'Laundry point / drop-off location',
-        AroundCategory.hostel => 'Drop-off location',
-        AroundCategory.peerCourier => 'Deliver to',
+  String get _dropoffLabel => switch (widget.category.key) {
+        'laundry' => 'Laundry point / drop-off location',
+        'hostel' => 'Drop-off location',
+        'peer_courier' => 'Deliver to',
         _ => 'Drop-off location',
       };
 
-  String get _descriptionLabel => switch (widget.category) {
-        AroundCategory.laundry =>
-          'Notes for the rider (bag colour, count, etc.)',
-        AroundCategory.vendorFetch =>
-          'What to fetch — include shop name and item details',
+  String get _descriptionLabel => switch (widget.category.key) {
+        'laundry' => 'Notes for the rider (bag colour, count, etc.)',
+        'vendor_fetch' => 'What to fetch — include shop name and item details',
         _ => 'Describe what needs to be carried / fetched',
       };
+
+  Future<String?> _collectPin() async {
+    final hasPin =
+        await ref.read(profileServiceProvider).hasTransactionPin();
+    if (!mounted) return null;
+    if (!hasPin) {
+      final didSet = await showSetPinSheet(context, ref);
+      if (!mounted || !didSet) return null;
+    }
+    return showEnterPinSheet(context);
+  }
 
   Future<void> _confirm() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final pin = await _collectPin();
+    if (pin == null || !mounted) return;
+
     final order = await ref
         .read(orderNotifierProvider.notifier)
         .placeAroundRequest(
-          category: widget.category,
+          categoryKey: widget.category.key,
+          fee: widget.category.flatFee,
           pickupLocation: _pickupController.text.trim(),
           dropoffLocation: _dropoffController.text.trim(),
           itemDescription: _descriptionController.text.trim(),
+          pin: pin,
         );
 
     if (!mounted) return;
@@ -83,6 +99,13 @@ class _AroundScreenState extends ConsumerState<AroundScreen> {
             content: Text(
               'Insufficient wallet balance. Please top up your wallet first.',
             ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else if (error == 'invalid_pin') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Incorrect PIN. Please try again.'),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -120,10 +143,10 @@ class _AroundScreenState extends ConsumerState<AroundScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final orderState = ref.watch(orderNotifierProvider);
-    final fee = widget.category.estimatedFee;
+    final fee = widget.category.flatFee;
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.category.label)),
+      appBar: AppBar(title: Text(widget.category.title)),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
         child: Form(
@@ -228,7 +251,7 @@ class _AroundScreenState extends ConsumerState<AroundScreen> {
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
-                      'Flat rate for this category. Dynamic pricing comes in a later phase.',
+                      'Flat rate for this category, set by Admin.',
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: theme.colorScheme.onSurface
                             .withValues(alpha: 0.5),
