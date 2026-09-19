@@ -44,9 +44,11 @@ lib/
 
   student/                   # Student-only screens and navigation. Root: student_shell.dart
     home/                    # Home screen (Food Delivery + Around mode toggle, vendor list)
-    ordering/                # Catalog, MealCustomization, Cart, Checkout, Confirmation
-                              # + cart_provider, product_repository, order_repository
-    around/                  # AroundScreen (errand requests with real wallet deduction)
+    ordering/                # Catalog (independent items, no combo-builder), Cart, Checkout
+                              # (PIN gate + pack decision), PackAllocationScreen, Confirmation
+                              # + cart_provider, product_repository, order_repository (realtime)
+    around/                  # AroundScreen (reads categories from around_categories table)
+                              # + around_category_providers.dart (active list, rider availability)
     orders/                  # OrdersScreen (Cart / Preparing / Completed tabs)
     tracking/                # OrderTrackingScreen (status timeline, refreshable)
     wallet/                  # WalletScreen, PaystackCheckoutPage, SavingPlanScreen
@@ -72,20 +74,34 @@ lib/
     services/                # AdminService + admin Riverpod providers
     dashboard/               # AdminDashboardScreen — real-time stats
     kitchen/                 # KitchenQueueScreen — live queue via Supabase Realtime
-                              # (Phase 6: BULK badge + campus/hostel delivery labels)
+                              # (Phase 6: BULK badge + campus/hostel delivery labels;
+                              #  post-testing fixes: Ready split by pickup/delivery,
+                              #  Transfer to Rider action)
     scheduled/               # AdminScheduledOrdersScreen — Phase 6 pre-order countdown
     menu/                    # MenuManagementScreen, ProductFormScreen — Uniflex catalog CRUD
+                              # (+ Requires Pack toggle, Uniflex pack price editor)
+    manage/                  # ManageHubScreen — single "Manage" nav entry branching into
+                              # Vendors / Riders / Around Categories (post-testing fixes)
     vendors/                 # VendorManagementScreen, VendorFormScreen,
-                              # VendorProductsScreen — partner vendor CRUD
+                              # VendorProductsScreen — partner vendor CRUD (+ pack price)
+    riders/                  # RiderManagementScreen — invite/remove/reactivate riders
+                              # (post-testing fixes)
+    around_categories/       # AroundCategoriesScreen, AroundCategoryFormScreen — CRUD for
+                              # the around_categories table (post-testing fixes)
     profile/                 # AdminProfileScreen — name, email, tier + logout
 
   shared/
     models/                  # Profile, Vendor, Product, Order, OrderItem, CartItem,
-                              # AroundRequest, WalletTransaction, SavingPlan,
+                              # AroundCategory, WalletTransaction, SavingPlan,
                               # Gift, Achievement (Phase 6)
     services/
       notifications/         # NotificationService — FCM init, token storage, local
-                              # notification display (Phase 6)
+                              # notification display (Phase 6); showLocal() is also used
+                              # directly by the order-status-change listener (Section 12)
+    widgets/
+      async/                 # RetrySection — reusable "failed to load, tap to retry"
+                              # control used by every realtime/live data screen
+      pin/                   # showEnterPinSheet / showSetPinSheet — transaction PIN UI
 
 supabase/
   schema.sql                 # All DDL and seed data (run by hand in Supabase SQL editor)
@@ -94,6 +110,9 @@ supabase/
     create-virtual-account/  # Edge Function: Paystack DVA issuance with graceful fallback
     send-notification/       # Edge Function: FCM push via legacy HTTP API (Phase 6)
     birthday-rewards/        # Edge Function: invokes birthday reward RPC (Phase 6)
+    admin-create-rider/      # Edge Function: Supabase Admin API rider account creation
+                              # (post-testing fixes — needs the service-role key, hence a
+                              #  function rather than a client-side RPC)
 ```
 
 **The rule that matters most:** `student/`, `rider/`, and `admin/` must
@@ -244,11 +263,11 @@ Phase 2 additions follow these conventions:
   Wraps the two-step Supabase write (insert `orders` row, then insert
   `order_items` or `around_requests`). After a successful placement it
   clears the cart and invalidates `studentOrdersProvider`.
-- `vendorProductsProvider` and `orderByIdProvider` use
-  `FutureProvider.family` — the `.family` modifier creates a separate
-  cached instance per vendor ID / order ID. Swap `FutureProvider` for
-  `StreamProvider` (same `.family` pattern) in Phase 3 to get Supabase
-  realtime order-status updates without touching the tracking screen UI.
+- `vendorProductsProvider` uses `FutureProvider.family` (a one-shot
+  catalog read is fine — the menu doesn't need to be live). `orderByIdProvider`
+  and `studentOrdersProvider` are **`StreamProvider`/`StreamProvider.family`**
+  as of the post-testing fixes pass — see "Order status sync" below for why
+  this mattered.
 - Providers are colocated with the feature that owns them (e.g.
   `student/ordering/`). Only promote to `shared/services/` if more than
   one role genuinely needs the provider (e.g. `walletBalanceProvider` is
@@ -257,16 +276,55 @@ Phase 2 additions follow these conventions:
 **Order status state machine** (`shared/models/order.dart` — `OrderStatus`):
 
 ```
-placed → preparing → ready → out_for_delivery → completed
-                           ↘ ready_for_pickup ↗
+placed → preparing → ready ─────────────────→ out_for_delivery → completed
+       (pickup:)  ↘ ready_for_pickup → completed
                   ↘ cancelled (from any non-terminal state)
 ```
 
-The tracking screen builds its timeline steps from the order's `type`
-and `delivery_type`; the actual status comes from Supabase. Swapping the
-`FutureProvider.family` for a realtime stream in Phase 3 requires only a
-one-line provider change — the timeline widget reads `OrderStatus` and
-doesn't care about the data source.
+`ready` is delivery-only and `ready_for_pickup` is pickup-only — Kitchen's
+"Mark Ready" action branches on `delivery_type` to set the right one (see
+`kitchen_queue_screen.dart`). The two used to be conflated (Kitchen always
+set `ready`), which is why a ready pickup order's tracking timeline used to
+show nothing as done — its steps list only contains `ready_for_pickup`.
+
+## Order status sync — single source of truth (post-testing fixes)
+
+Audited end-to-end after testing found status changes not reliably
+reaching every shell. The root cause: `studentOrdersProvider` and
+`orderByIdProvider` were one-shot `FutureProvider`s — nothing re-fetched
+them after Kitchen or a rider changed a status until the student manually
+refreshed. Both are now `StreamProvider`s backed by
+`supabase.from('orders').stream(primaryKey: ['id'])`, the same pattern
+`kitchenOrdersProvider` and `jobPoolProvider` already used, so a change to
+one order row now reaches Kitchen Queue, the rider pool/active-delivery
+screen, and the student's Orders tab/tracking screen from the same
+underlying Realtime event — one write, three shells update.
+
+Two more gaps fixed in the same pass:
+
+- **`update_order_status` had no transition guards.** Any admin call could
+  set a delivery order (food delivery or Around) straight to
+  `out_for_delivery`/`completed`, bypassing the rider PIN gate entirely.
+  It's now hardened so those two statuses are only reachable through the
+  existing rider workflow (`accept_order` → `confirm_pickup` →
+  `verify_delivery`, which is what actually enforces "not completed until
+  the PIN is confirmed") — this is enforced in the RPC itself, not just by
+  which buttons the Kitchen Queue UI happens to show.
+- **No explicit "Transfer to Rider" action existed.** A Uniflex delivery
+  order becoming pool-eligible used to be an implicit side effect of
+  `status = 'ready'`. There is now a `transferred_to_rider_at` column and a
+  `transfer_order_to_rider()` RPC (admin-only) — a Ready delivery order
+  only enters the rider pool once Admin/Kitchen explicitly taps "Transfer
+  to Rider", which also attaches the student's delivery info to the job.
+  The rider pool RLS policy and `accept_order()`'s eligibility check both
+  require this column to be set.
+
+`StudentShell` also watches `studentOrdersProvider` with `ref.listen` and
+fires a local notification (`NotificationService.showLocal`) on
+`preparing → ready(_for_pickup) → picked_up → out_for_delivery →
+completed` transitions, using the same realtime stream — this only fires
+while the app is open; background push still needs FCM fully configured
+(a pre-existing gap from Phase 6, not closed by this pass).
 
 ## Design system
 
@@ -321,6 +379,7 @@ directly, so there's one place that knows every key the app depends on.
 | Rider delivery flow              | `rider/jobs/`, `rider/navigation/`, `rider/earnings/` |
 | Push notifications (Firebase)    | `shared/services/notifications/` |
 | Maps / live tracking             | `shared/services/maps/`, consumed from `student/tracking/` and `rider/navigation/` |
+| Post-testing fixes ✅ (first Android QA pass) | `admin/manage/`, `admin/riders/`, `admin/around_categories/`, `student/ordering/pack_allocation_screen.dart`, `shared/widgets/{async,pin}/`, `shared/models/around_category.dart`, `supabase/functions/admin-create-rider/`, schema.sql "POST-TESTING FIXES & CHANGES" block |
 
 Update this table as phases land so it stays a reliable map of the repo.
 
@@ -337,11 +396,19 @@ admin_tier = 'kitchen_staff'        →  AdminShell: Queue + Profile only
 The tier check happens once, in `AdminShell.build()`, by reading
 `currentProfileProvider.valueOrNull?.isKitchenStaff`. There is no
 client-side gate — a kitchen_staff account simply never sees the
-Dashboard, Menu, or Vendor tabs, so there are no buttons to press that
+Dashboard, Menu, or Manage tabs, so there are no buttons to press that
 would reach those screens. Server-side, the admin RLS policies (which use
 `is_admin()`, not a tier check) apply equally to both tiers; restricting
 the kitchen_staff *further* at the DB level (e.g. only allowing ORDER
 reads/writes) is a hardening step deferred to a later phase.
+
+**"Manage" hub (post-testing fixes):** the `super_admin` tabs are now
+Dashboard / Queue / Scheduled / Menu / **Manage** / Profile — a single
+"Manage" tab replacing the old standalone "Vendors" tab. It opens
+`ManageHubScreen`, which branches into Manage Vendors (unchanged Phase 4
+screen, just relocated), Manage Riders, and Around Categories. New admin
+capabilities should add an entry to this hub rather than a new bottom-nav
+tab, so the nav bar doesn't grow every phase.
 
 Seeding a kitchen_staff account:
 1. Create the Supabase Auth user by hand (Dashboard → Authentication →
@@ -371,15 +438,31 @@ The `.stream()` call:
 
 On each emission, the service batch-fetches `order_items` for all active
 orders in one `inFilter` query, yielding a `List<KitchenOrder>` (order
-+ items). The screen filters by status (`placed | preparing | ready`)
-client-side and groups them into visual sections.
++ items). The screen filters to `type = 'food'` and status in
+`placed | preparing | ready | ready_for_pickup` client-side (the
+`type = 'food'` filter is a post-testing fix — Around requests are also
+`source = 'uniflex'` and used to show up in the queue alongside food
+orders) and groups them into four visual sections: Scheduled, Preparing,
+Ready for Pickup, Ready for Delivery.
 
-Status transitions (`placed → preparing → ready`) go through the
-`update_order_status` SECURITY DEFINER RPC rather than a direct UPDATE,
-so the server validates both the caller's admin role and the status string
-before writing. The Realtime subscription then delivers the change back to
-all connected admin sessions automatically — no `ref.invalidate` is
-needed after a status update.
+Status transitions go through the `update_order_status` SECURITY DEFINER
+RPC rather than a direct UPDATE, so the server validates the caller's
+admin role, the status string, **and** (post-testing fixes) the
+transition itself — see "Order status sync" above. The primary action
+button's label and target status both depend on the order's current
+status and `delivery_type`:
+
+| Current status | delivery_type | Button | RPC call |
+|---|---|---|---|
+| `placed` | any | Start Preparing | `update_order_status(..., 'preparing')` |
+| `preparing` | pickup | Mark Ready for Pickup | `update_order_status(..., 'ready_for_pickup')` |
+| `preparing` | delivery/campus/hostel | Mark Ready | `update_order_status(..., 'ready')` |
+| `ready_for_pickup` | pickup | Mark Completed | `update_order_status(..., 'completed')` |
+| `ready` | delivery/campus/hostel | Transfer to Rider | `transfer_order_to_rider(...)` |
+
+The Realtime subscription then delivers each change back to all connected
+admin sessions automatically — no `ref.invalidate` is needed after a
+status update.
 
 ## Rider job pool — pull model (Phase 5)
 
@@ -389,7 +472,10 @@ Riders see the pool of available orders on `JobPoolScreen`, which watches
 
 1. Subscribes to `supabase.from('orders').stream(primaryKey: ['id'])`.
 2. Filters client-side to pool-eligible rows (`rider_id IS NULL` + correct
-   source/status/delivery_type combination).
+   source/status/delivery_type combination — for `source = 'uniflex'`
+   delivery orders this now also requires `transferred_to_rider_at is not
+   null`, set only by the admin "Transfer to Rider" action above; see
+   "Order status sync").
 3. Batch-fetches vendor rows (partner food) and `around_requests` rows
    (around orders) to build `PoolOrder` objects with pre-resolved pickup
    info.
@@ -398,12 +484,15 @@ When a rider taps **Accept**, `RiderService.acceptOrder()` calls the
 `accept_order` SECURITY DEFINER RPC. The RPC:
 - Locks the row with `FOR UPDATE NOWAIT` to prevent concurrent accepts.
 - Re-validates eligibility (in case the pool changed between the tap and
-  the DB write).
+  the DB write) — including the same `transferred_to_rider_at` check.
 - Sets `rider_id = auth.uid()`, `delivery_stage = 'accepted'`,
   `status = 'out_for_delivery'`.
 
 The row immediately disappears from the pool for all other riders (RLS
-`rider_id IS NULL` filter) via the Realtime subscription.
+`rider_id IS NULL` filter) via the Realtime subscription. Once accepted,
+the student can see the rider's name/phone via `get_rider_info()` (mirrors
+`get_customer_info()`, which already gave the rider the student's
+contact) — shown on `OrderTrackingScreen`.
 
 ## Delivery workflow and PIN gate (Phase 5)
 
@@ -447,3 +536,132 @@ times out, the URL falls back to a destination-only query. Location is
 never polled in the background — `geolocator` has no background service
 configured, and calls happen only within the lifecycle of
 `ActiveDeliveryScreen`.
+
+## Transaction PIN (post-testing fixes)
+
+A 4-digit PIN, separate from the account password, gates every order
+payment (food checkout and Around). Storage follows the same pattern as
+`wallet_transactions`: a dedicated `transaction_pins` table with **no**
+client SELECT/INSERT/UPDATE policy at all — every read/write goes through
+a SECURITY DEFINER RPC keyed off `auth.uid()`:
+
+- `set_transaction_pin(p_pin)` — hashes with `pgcrypto`'s `crypt()` +
+  `gen_salt('bf')`, upserts.
+- `has_transaction_pin()` — existence check only, never returns the hash.
+- `verify_transaction_pin(p_pin)` — compares a fresh `crypt()` against the
+  stored hash.
+
+New students set a PIN as part of Step Two onboarding
+(`CompleteProfileScreen`). Existing accounts have none; `CheckoutScreen`
+and `AroundScreen` both call `has_transaction_pin()` before confirming and
+show `showSetPinSheet` first if it's false, then always
+`showEnterPinSheet`. The PIN itself is enforced **server-side**:
+`place_food_order_with_payment` and `place_around_with_payment` both take
+a `p_pin` param and raise `INVALID_PIN` via `verify_transaction_pin`
+before touching the wallet — a client bug can't skip the check.
+
+## Pack system (post-testing fixes, Section 11)
+
+Some food items need to be packaged into a container to be handed over;
+others (drinks) never do. `products.requires_pack` (admin toggle, per
+item) marks which; `vendors.pack_price` (admin field, per vendor) sets
+what one pack costs — Uniflex and each partner vendor price their own
+packs independently, since the Uniflex vendor row is excluded from
+`VendorManagementScreen`, its pack price is edited from
+`MenuManagementScreen`'s app bar instead.
+
+At checkout, if the cart contains any `requires_pack` items,
+`CheckoutScreen` shows a "Packing" section asking "Will you be using
+packs?" before the total is finalized. "Yes" pushes
+`PackAllocationScreen`, which lets the student build one pack at a time —
+a single pack can mix different pack-requiring items together (e.g. 6×
+Jollof Rice + 2× Chicken in one pack) — repeating "Add Pack" until every
+pack-requiring unit is allocated, then "Done". Each pack adds the
+vendor's `pack_price` to the order total; non-pack items (drinks) are
+just added normally, no pack step involved.
+
+Pack contents are recorded server-side in a new `order_packs` table (one
+row per pack, `items` jsonb array of `{product_id, product_name,
+quantity}`), written by `place_food_order_with_payment` in the same
+transaction as the order — Kitchen/Admin can see exactly what to put in
+each pack, not just a total count. `orders.pack_count`/`pack_fee` mirror
+the totals for quick display without joining `order_packs`.
+
+## Catalog: independent items, no combo-builder (post-testing fixes, Section 11)
+
+Phase 2's catalog modeled a "meal" as one product (e.g. "Jollof Rice +
+Protein") with `product_options` bolted on for protein (radio, required)
+and extras (checkboxes) — `MealCustomizationScreen` walked
+quantity → protein → extras → drink as one guided flow per tap. That
+screen and pattern are removed, not kept alongside the new one:
+
+- Every product is independently orderable. Former protein choices
+  (Chicken, Beef, Fish, Turkey, Egg) are now standalone products under a
+  "Proteins" category, each with its own price and quantity.
+- `CatalogScreen`'s `_ProductTile` adds directly to the cart via an
+  inline "+" (or "− qty +" once added) — no navigation, no per-item
+  wizard screen. Drinks are just products in a "Drinks" category, added
+  the same way.
+- `product_options`/`ProductOption` stay in the schema (harmless,
+  unread by the new UI) rather than being dropped.
+
+## Cart visibility (post-testing fixes, Section 13)
+
+The cart (`cartProvider`) is a single app-wide `Notifier`, so every entry
+point reads the same state with no extra wiring:
+
+- `StudentHomeScreen` shows a persistent, badge-carrying FAB
+  (`_HomeCartButton`) whenever the cart is non-empty, going straight to
+  `CartScreen`.
+- `CatalogScreen` keeps its own "View Cart (N)" FAB.
+- The Orders tab's Cart view has a working "Proceed to Checkout" button
+  (it used to be a dead-end "go to Home" message with nothing to tap).
+
+## Rider account management (post-testing fixes, Section 7)
+
+Rider accounts are still invite-only — there is no public Rider signup
+path — but Admin can now invite one from `RiderManagementScreen` (under
+the Manage hub) instead of seeding one by hand in the Supabase dashboard.
+Creating an `auth.users` row needs the Supabase Admin API, which needs
+the service-role key, so this goes through a new Edge Function,
+`admin-create-rider`, rather than a client-side RPC — it verifies the
+caller is an admin (via the `is_admin()` RPC over the caller's own JWT),
+then calls `auth.admin.createUser()` and inserts the `profiles` row
+itself using the service-role client.
+
+"Remove" and "deactivate/reactivate" are both implemented as a single
+`profiles.is_active` flag (default `true`, so it doesn't affect anyone
+else) flipped via `admin_set_rider_active()` — never a hard delete.
+`AuthGate` blocks sign-in for `is_active = false` (any role, though only
+riders currently have UI to flip it) by showing a "deactivated" screen and
+signing the session out; the account, its orders, and `delivery_records`
+are all untouched. (A hard delete was deliberately avoided:
+`delivery_records.rider_id` is `on delete cascade`, so deleting the auth
+user would have silently wiped the rider's delivery history.)
+
+## Around categories (post-testing fixes, Section 9)
+
+The five Around categories used to be a hardcoded `AroundCategory` enum.
+They're now rows in an `around_categories` table (`key`, `title`,
+`subtitle`, `description`, `icon_name`, `flat_fee`, `is_active`,
+`sort_order`), managed from `AroundCategoriesScreen` under the Manage hub.
+`around_requests.category` is a foreign key into `around_categories.key`
+instead of a fixed `CHECK` constraint, so adding a category needs no
+schema change. Students only ever see `is_active = true` rows
+(`activeAroundCategoriesProvider`); `AroundScreen` takes an
+`AroundCategoryData` instead of an enum value.
+
+`icon_name` is one of a small fixed set mapped to `IconData` in
+`AroundCategoryData.iconFor()` (`shared/models/around_category.dart`) —
+add a new admin-selectable icon there if a future category needs one not
+already listed.
+
+## Anonymous rider availability (post-testing fixes, Section 10)
+
+The Around tab used to show an individual rider's name and an
+"is online" badge tied to that person (e.g. "Emeka A. · Campus rider").
+It's now a single anonymous signal: a green/grey dot plus "Riders
+available nearby" / "No riders available right now", backed by
+`any_riders_available()` (`SECURITY DEFINER`, checks whether any
+`role = 'rider' and rider_is_online and is_active` row exists) — no name
+or per-rider status ever leaves the server.

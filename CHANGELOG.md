@@ -2,6 +2,149 @@
 
 All notable changes to this project are documented here, phase by phase.
 
+## Post-testing fixes & changes (2026-09-19)
+
+First on-device Android QA pass across all three shells. Thirteen issues
+found; addressed here in order. Sections 11, 12, and 13 are structural
+changes to how Phase 2's catalog, the cross-shell order status flow, and
+cart/checkout navigation work, not small tweaks — see ARCHITECTURE.md for
+the full explanation of each.
+
+Not done in this pass, deliberately: no automated tests were written for
+any of the fixes below (a dedicated testing pass follows once this is
+verified manually).
+
+### Added
+
+- **1 — Profile navigation**: the Student home header's avatar is now a
+  real tappable `Material`/`InkWell` routing to the Profile tab (it was
+  an inert `Container` with no `onTap` at all). Rider/Admin dashboards
+  don't have this avatar-in-header pattern, so nothing to fix there.
+- **3 — Forgot password**: `AuthService.sendPasswordResetOtp` /
+  `verifyPasswordResetOtp` / `updatePassword`, two new screens
+  (`ForgotPasswordScreen`, `ResetPasswordScreen`), and a "Forgot
+  password?" link on `LoginScreen`. Uses Supabase Auth's OTP-based
+  recovery (`resetPasswordForEmail` + `verifyOTP(type: recovery)`) rather
+  than an email deep link, matching this app's existing in-app-OTP-entry
+  pattern (Termii) and needing no native URL-scheme setup. **Manual step
+  required**: edit the "Reset Password" email template in the Supabase
+  dashboard to include `{{ .Token }}` so the email carries a 6-digit code.
+- **5 — Retry control**: `shared/widgets/async/retry_section.dart`
+  (`RetrySection`) — a small icon/message/Retry-button widget — applied
+  to every realtime/live data section: wallet balance, wallet transaction
+  history, Kitchen Queue, order tracking, the Orders list, the admin
+  dashboard, admin Scheduled Orders, the rider Job Pool, the rider
+  active-delivery screen, and the student vendor/Around-categories lists.
+  Replaces the admin dashboard's own one-off `_ErrorCard`.
+- **6 — Transaction PIN**: `transaction_pins` table + `set_transaction_pin`
+  / `has_transaction_pin` / `verify_transaction_pin` RPCs (pgcrypto
+  hash, no client SELECT/INSERT policy — mirrors the `wallet_transactions`
+  pattern). New students set a 4-digit PIN during Step Two onboarding;
+  existing accounts are prompted via `showSetPinSheet` the first time
+  they confirm an order. `CheckoutScreen` and `AroundScreen` both collect
+  the PIN via `showEnterPinSheet` before calling the order-placement RPC,
+  which itself calls `verify_transaction_pin` server-side and raises
+  `INVALID_PIN` on mismatch — the gate can't be skipped by a client bug.
+  "Change Transaction PIN" added to the Student profile's More menu.
+- **7 — Admin rider management**: `RiderManagementScreen` (invite via a
+  new `admin-create-rider` Edge Function using the Supabase Admin API;
+  remove/reactivate via a new `profiles.is_active` flag +
+  `admin_set_rider_active()`). `AuthGate` blocks sign-in for a deactivated
+  account without deleting anything — account and delivery history are
+  untouched (a hard delete was avoided on purpose:
+  `delivery_records.rider_id` cascades on delete, which would have wiped
+  the rider's history).
+- **8 — Admin "Manage" hub**: `ManageHubScreen`, replacing the standalone
+  "Vendors" bottom-nav tab with "Manage", branching into Manage Vendors
+  (relocated, unchanged), Manage Riders, and Around Categories. Future
+  admin capabilities should add a hub entry, not a new tab.
+- **9 — Admin-configurable Around categories**: `around_categories` table
+  (seeded with the 5 former hardcoded values) + full admin CRUD
+  (`AroundCategoriesScreen`/`AroundCategoryFormScreen`, under the Manage
+  hub). `around_requests.category` is now a foreign key into it instead
+  of a fixed `CHECK` constraint. The Student Around grid reads the active
+  list live via `activeAroundCategoriesProvider`.
+- **11 — Pack system**: `products.requires_pack` (admin toggle per item)
+  + `vendors.pack_price` (admin field per vendor — Uniflex's own is
+  edited from Menu Management's app bar, since Uniflex is excluded from
+  Vendor Management). New `PackAllocationScreen`: at checkout, if the
+  cart has pack-requiring items, the student is asked "Will you be using
+  packs?"; if yes, they build one pack at a time (mixing different
+  pack-requiring items freely) until every unit is allocated. Each pack
+  adds the vendor's pack price to the total. Pack contents are recorded
+  per-order in a new `order_packs` table.
+- **12 — Order status sync**: `transferred_to_rider_at` column +
+  `transfer_order_to_rider()` RPC (the "Transfer to Rider" admin action —
+  see Changed below), `get_rider_info()` RPC (student sees their assigned
+  rider's contact, mirroring `get_customer_info()`), and a
+  `StudentShell`-level realtime listener that fires a local notification
+  on `preparing → ready(_for_pickup) → picked_up → out_for_delivery →
+  completed`.
+- **13 — Cart visibility**: persistent badge-carrying cart FAB on the
+  Student home screen (`_HomeCartButton`), visible whenever the cart is
+  non-empty, going straight to `CartScreen`.
+
+### Changed
+
+- **2 — Greeting**: removed the "Good night" branch from the Student home
+  greeting — only Good Morning / Good Afternoon / Good Evening now,
+  Evening covering the rest of the day into the night.
+- **4 — Wallet top-up loaders**: removed the two redundant custom loaders
+  stacked on top of Paystack's own SDK loading state on
+  `PaystackCheckoutPage` (a native `CircularProgressIndicator` layered
+  over the WebView, plus a custom HTML/CSS spinner shown until Paystack's
+  `inline.js` loaded) — exactly one loading state is visible at a time
+  now.
+- **10 — Anonymous rider availability**: replaced the "Emeka A. · Campus
+  rider · online" card on the Student home Around mode with an anonymous
+  green/grey dot + "Riders available nearby" / "No riders available right
+  now", backed by a new `any_riders_available()` RPC. No individual rider
+  name or per-person online status is shown before booking.
+- **11 — Catalog rework**: removed `MealCustomizationScreen` and the
+  quantity → protein → extras → drink combo-builder wizard entirely (not
+  kept alongside the new flow). Former protein `product_options`
+  (Chicken, Beef, Fish, Turkey, Egg) became standalone Uniflex "Proteins"
+  category products via a seed migration that updates the existing Phase
+  2 rows in place. `CatalogScreen` now adds each item directly via an
+  inline "+"/"− qty +" stepper on its own tile — no per-item navigation.
+  `product_options`/`ProductOption` are left in the schema (unread by the
+  new UI) rather than dropped.
+- **12 — Order status sync (root cause + fix)**: `studentOrdersProvider`
+  and `orderByIdProvider` were one-shot `FutureProvider`s — nothing ever
+  re-fetched them after Kitchen/a rider changed a status until the
+  student manually refreshed. Both are now Supabase Realtime
+  `StreamProvider`s, the same pattern `kitchenOrdersProvider` already
+  used. Also: Kitchen Queue was mixing Around requests into the food
+  queue (`type = 'food'` filter added); Kitchen's "Mark Ready" always set
+  `status = 'ready'` even for pickup orders, whose tracking timeline
+  expects `ready_for_pickup` (now branches on `delivery_type`); there was
+  no way to mark a pickup order Completed at all (added); and
+  `update_order_status` had no transition guards, so an admin call could
+  set a delivery order straight to `out_for_delivery`/`completed`,
+  bypassing the rider PIN gate — it's now hardened so the only path to
+  `completed` on a delivery order (food delivery or Around) is the
+  existing rider workflow (`accept_order` → `confirm_pickup` →
+  `verify_delivery`).
+- **13 — Cart / checkout dead-end**: the Orders tab's Cart view's
+  "Go to the Home tab to complete checkout" text (with nothing to tap)
+  is now a working "Proceed to Checkout" button.
+
+### Notes
+
+- **Run the new schema.sql block** — everything above lives in the
+  "POST-TESTING FIXES & CHANGES" section appended to the end of
+  `supabase/schema.sql`. Additive only, safe to run once against the
+  already-migrated project.
+- **Deploy the new Edge Function**: `supabase functions deploy
+  admin-create-rider --no-verify-jwt` (Section 7).
+- **Edit the recovery email template** in the Supabase dashboard to
+  include `{{ .Token }}` (Section 3) — without this, `resetPasswordForEmail`
+  still sends an email, but it won't contain the 6-digit code
+  `ResetPasswordScreen` asks for.
+- Verified via `flutter analyze` (clean) and `flutter test` (14/14
+  passing). On-device re-verification of these specific fixes on Android
+  is the natural next step before the dedicated testing pass.
+
 ## Phase 6 — Profile & Loyalty, Referral, Gifting, Group Checkout, Bulk Delivery, Birthday Rewards, Smart Pre-Order, Extended Delivery, Push Notifications, Admin Scheduling (2026-09-13)
 
 Final phase. Completes the full student experience and admin tools needed
