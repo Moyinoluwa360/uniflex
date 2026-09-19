@@ -69,7 +69,13 @@ class RiderService {
         // 'delivery' — the student food-order path only ever sends the
         // campus_delivery/hostel_delivery variants (never bare 'delivery').
         const deliveryTypes = ['delivery', 'campus_delivery', 'hostel_delivery'];
-        return (source == 'uniflex' && status == 'ready' && deliveryTypes.contains(deliveryType))
+        // Post-testing fixes, Section 12: a Uniflex delivery order is
+        // only pool-eligible once Admin/Kitchen explicitly taps "Transfer
+        // to Rider" — status = 'ready' alone is no longer enough. Mirrors
+        // the "orders: rider read pool" RLS policy in schema.sql.
+        final transferredToRiderAt = m['transferred_to_rider_at'];
+        return (source == 'uniflex' && status == 'ready' && transferredToRiderAt != null
+                && deliveryTypes.contains(deliveryType))
             || (source == 'partner' && status == 'placed' && deliveryTypes.contains(deliveryType))
             || (type == 'around' && status == 'placed');
       }).toList();

@@ -152,6 +152,55 @@ class OrderTrackingScreen extends ConsumerWidget {
                   ),
                 ],
 
+                // Assigned rider's contact — shown once one is assigned
+                // (post-testing fixes, Section 12: the student previously
+                // had no way to see who was delivering their order).
+                if (o.riderId != null) ...[
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final riderInfoAsync =
+                          ref.watch(orderRiderInfoProvider(o.id));
+                      final info = riderInfoAsync.valueOrNull;
+                      if (info == null) return const SizedBox.shrink();
+                      final name = info['full_name'] as String?;
+                      final phone = info['phone'] as String?;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(AppRadius.card),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.two_wheeler_outlined),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Your rider',
+                                        style: theme.textTheme.labelSmall?.copyWith(
+                                          color: theme.colorScheme.onSurface
+                                              .withValues(alpha: 0.5),
+                                        )),
+                                    Text(name ?? 'Assigned',
+                                        style: theme.textTheme.bodyMedium),
+                                  ],
+                                ),
+                              ),
+                              if (phone != null)
+                                Text(phone, style: theme.textTheme.bodyMedium),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+
                 const SizedBox(height: AppSpacing.xl),
 
                 // Delivery PIN — shown when a rider has been assigned and

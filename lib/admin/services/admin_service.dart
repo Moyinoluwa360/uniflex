@@ -202,10 +202,15 @@ class AdminService {
         .order('created_at', ascending: false);
 
     await for (final rows in orderStream) {
-      // Filter to active kitchen stages client-side.
+      // Filter to active kitchen stages client-side. `type = 'food'` is
+      // required here (post-testing fixes, Section 12) — Around requests
+      // are also source='uniflex' and were leaking into the Kitchen
+      // Queue alongside food orders before this fix.
       final active = rows
           .where((m) =>
-              const ['placed', 'preparing', 'ready'].contains(m['status']))
+              m['type'] == 'food' &&
+              const ['placed', 'preparing', 'ready', 'ready_for_pickup']
+                  .contains(m['status']))
           .toList();
 
       if (active.isEmpty) {
@@ -238,11 +243,24 @@ class AdminService {
   }
 
   /// Advance (or revert) an order's status. Calls the `update_order_status`
-  /// SECURITY DEFINER RPC, which verifies the caller is an admin.
+  /// SECURITY DEFINER RPC, which verifies the caller is an admin and (as
+  /// of the post-testing fixes, Section 12) rejects jumping a delivery
+  /// order straight to out_for_delivery/completed — those only happen via
+  /// the rider workflow.
   Future<void> updateOrderStatus(String orderId, String newStatus) async {
     await _client.rpc('update_order_status', params: {
       'p_order_id': orderId,
       'p_new_status': newStatus,
+    });
+  }
+
+  /// The "Transfer to Rider" action (Section 12) — explicitly pushes a
+  /// Ready Uniflex delivery order into the rider job pool, rather than
+  /// relying on an implicit status side-effect. Calls the
+  /// `transfer_order_to_rider` SECURITY DEFINER RPC (admin-only).
+  Future<void> transferOrderToRider(String orderId) async {
+    await _client.rpc('transfer_order_to_rider', params: {
+      'p_order_id': orderId,
     });
   }
 

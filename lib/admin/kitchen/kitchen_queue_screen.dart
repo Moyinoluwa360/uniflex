@@ -86,14 +86,21 @@ class KitchenQueueScreen extends ConsumerWidget {
             );
           }
 
-          // Group by status for visual separation
+          // Group by status for visual separation. "Ready" is split by
+          // fulfillment type (post-testing fixes, Section 12) since a
+          // pickup order's next step is "hand it over" while a delivery
+          // order's next step is "transfer to a rider" — the old single
+          // "Ready" bucket had no room for either action.
           final placed = orders
               .where((o) => o.order.status == OrderStatus.placed)
               .toList();
           final preparing = orders
               .where((o) => o.order.status == OrderStatus.preparing)
               .toList();
-          final ready = orders
+          final readyForPickup = orders
+              .where((o) => o.order.status == OrderStatus.readyForPickup)
+              .toList();
+          final readyForDelivery = orders
               .where((o) => o.order.status == OrderStatus.ready)
               .toList();
 
@@ -119,16 +126,29 @@ class KitchenQueueScreen extends ConsumerWidget {
                 const SizedBox(height: AppSpacing.sm),
                 ...preparing.map((ko) => _KitchenOrderCard(kitchenOrder: ko)),
               ],
-              if (ready.isNotEmpty) ...[
+              if (readyForPickup.isNotEmpty) ...[
                 if (placed.isNotEmpty || preparing.isNotEmpty)
                   const SizedBox(height: AppSpacing.lg),
                 _SectionHeader(
-                  label: 'Ready',
-                  count: ready.length,
+                  label: 'Ready for Pickup',
+                  count: readyForPickup.length,
                   color: AppColors.emerald,
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                ...ready.map((ko) => _KitchenOrderCard(kitchenOrder: ko)),
+                ...readyForPickup.map((ko) => _KitchenOrderCard(kitchenOrder: ko)),
+              ],
+              if (readyForDelivery.isNotEmpty) ...[
+                if (placed.isNotEmpty ||
+                    preparing.isNotEmpty ||
+                    readyForPickup.isNotEmpty)
+                  const SizedBox(height: AppSpacing.lg),
+                _SectionHeader(
+                  label: 'Ready for Delivery',
+                  count: readyForDelivery.length,
+                  color: AppColors.emerald,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                ...readyForDelivery.map((ko) => _KitchenOrderCard(kitchenOrder: ko)),
               ],
               const SizedBox(height: AppSpacing.xl),
             ],
@@ -198,20 +218,42 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
   bool _isAdvancing = false;
   bool _expanded = false;
 
+  /// Advances placed→preparing, or preparing→ready(_for_pickup) — the
+  /// latter branches on delivery_type since pickup and delivery orders
+  /// diverge here (Section 12).
   Future<void> _advance() async {
     final order = widget.kitchenOrder.order;
     final nextStatus = switch (order.status) {
       OrderStatus.placed => 'preparing',
-      OrderStatus.preparing => 'ready',
+      OrderStatus.preparing =>
+        order.deliveryType == 'pickup' ? 'ready_for_pickup' : 'ready',
       _ => null,
     };
     if (nextStatus == null) return;
+    await _run(() => ref
+        .read(adminServiceProvider)
+        .updateOrderStatus(order.id, nextStatus));
+  }
 
+  /// Pickup orders only: the customer has physically collected the order.
+  Future<void> _markCompleted() async {
+    await _run(() => ref
+        .read(adminServiceProvider)
+        .updateOrderStatus(widget.kitchenOrder.order.id, 'completed'));
+  }
+
+  /// Delivery orders only: the explicit "Transfer to Rider" action
+  /// (Section 12) — pushes the order into the rider job pool.
+  Future<void> _transferToRider() async {
+    await _run(() => ref
+        .read(adminServiceProvider)
+        .transferOrderToRider(widget.kitchenOrder.order.id));
+  }
+
+  Future<void> _run(Future<void> Function() action) async {
     setState(() => _isAdvancing = true);
     try {
-      await ref
-          .read(adminServiceProvider)
-          .updateOrderStatus(order.id, nextStatus);
+      await action();
       // The kitchenOrdersProvider stream will re-emit automatically via
       // Supabase Realtime — no manual invalidation needed.
     } catch (e) {
@@ -231,12 +273,22 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
     final order = widget.kitchenOrder.order;
     final items = widget.kitchenOrder.items;
     final statusColor = _statusColor(order.status);
+    final isPickup = order.deliveryType == 'pickup';
 
-    final nextLabel = switch (order.status) {
-      OrderStatus.placed => 'Start Preparing',
-      OrderStatus.preparing => 'Mark Ready',
+    // The primary action button changes meaning by status — this is what
+    // makes "Ready" a real, actionable checkpoint instead of a dead end
+    // (Section 12).
+    final (String, VoidCallback)? action = switch (order.status) {
+      OrderStatus.placed => ('Start Preparing', _advance),
+      OrderStatus.preparing =>
+        (isPickup ? 'Mark Ready for Pickup' : 'Mark Ready', _advance),
+      OrderStatus.readyForPickup when isPickup =>
+        ('Mark Completed (Picked Up)', _markCompleted),
+      OrderStatus.ready when !isPickup && order.transferredToRiderAt == null =>
+        ('Transfer to Rider', _transferToRider),
       _ => null,
     };
+    final nextLabel = action?.$1;
 
     return Card(
       margin: const EdgeInsets.only(bottom: AppSpacing.cardGap),
@@ -433,8 +485,35 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
             ),
           ],
 
+          // ── Waiting-for-rider notice ──────────────────────────────────
+          // Shown once Transfer to Rider has been tapped — the order sits
+          // in the pool until a rider accepts it; there's nothing more
+          // for Admin to do here (Section 12).
+          if (order.status == OrderStatus.ready &&
+              !isPickup &&
+              order.transferredToRiderAt != null) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Row(
+                children: [
+                  const Icon(Icons.hourglass_top_outlined,
+                      size: 16, color: AppColors.orange),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      'Waiting for a rider to accept…',
+                      style: theme.textTheme.labelMedium
+                          ?.copyWith(color: AppColors.orange),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           // ── Advance button ───────────────────────────────────────────
-          if (nextLabel != null) ...[
+          if (nextLabel != null && action != null) ...[
             const Divider(height: 1),
             Padding(
               padding: const EdgeInsets.fromLTRB(
@@ -446,7 +525,7 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
               child: SizedBox(
                 width: double.infinity,
                 child: FilledButton(
-                  onPressed: _isAdvancing ? null : _advance,
+                  onPressed: _isAdvancing ? null : action.$2,
                   style: FilledButton.styleFrom(
                     backgroundColor: statusColor,
                   ),
@@ -473,7 +552,7 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
     return switch (status) {
       OrderStatus.placed => AppColors.orange,
       OrderStatus.preparing => Theme.of(context).colorScheme.primary,
-      OrderStatus.ready => AppColors.emerald,
+      OrderStatus.ready || OrderStatus.readyForPickup => AppColors.emerald,
       _ => Theme.of(context).colorScheme.outline,
     };
   }

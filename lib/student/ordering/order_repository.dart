@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/models/order.dart';
+import '../../shared/models/order_item.dart';
 import '../../shared/models/vendor.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
@@ -10,38 +12,109 @@ import 'cart_provider.dart';
 // Read providers
 // ---------------------------------------------------------------------------
 
-/// All orders for the signed-in student, newest first. Refresh with
-/// `ref.invalidate(studentOrdersProvider)` after placing a new order.
-final studentOrdersProvider = FutureProvider<List<Order>>((ref) async {
+/// All orders for the signed-in student, newest first, live via Supabase
+/// Realtime. Post-testing fixes, Section 12: this used to be a one-shot
+/// FutureProvider, which is the root cause behind "Kitchen marks Ready
+/// but the Student's Orders tab doesn't reliably reflect it" — nothing
+/// ever re-fetched until the student manually pulled to refresh. Now any
+/// status change to one of the student's orders re-emits automatically.
+final studentOrdersProvider = StreamProvider<List<Order>>((ref) {
   final client = ref.watch(supabaseClientProvider);
   final user = client.auth.currentUser;
-  if (user == null) return [];
-
-  final data = await client
-      .from('orders')
-      .select('*, vendors(name)')
-      .eq('student_id', user.id)
-      .order('created_at', ascending: false);
-
-  return data.map((m) => Order.fromMap(m)).toList();
+  if (user == null) return Stream.value(const []);
+  return _streamStudentOrders(client, user.id);
 });
 
-/// A single order by ID, with its line items populated. Used by the
-/// tracking screen. Swap for a StreamProvider + Supabase realtime channel
-/// in a later phase for live status updates without touching the UI.
-final orderByIdProvider =
-    FutureProvider.family<Order?, String>((ref, orderId) async {
-  final client = ref.watch(supabaseClientProvider);
-
-  final data = await client
+Stream<List<Order>> _streamStudentOrders(
+  SupabaseClient client,
+  String userId,
+) async* {
+  final stream = client
       .from('orders')
-      .select('*, vendors(name), order_items(*)')
-      .eq('id', orderId)
-      .maybeSingle();
+      .stream(primaryKey: ['id'])
+      .eq('student_id', userId)
+      .order('created_at', ascending: false);
 
-  if (data == null) return null;
+  await for (final rows in stream) {
+    yield await _attachVendorNames(client, rows);
+  }
+}
 
-  return Order.fromMap(data);
+/// `.stream()` returns raw table rows with no join support, so vendor
+/// names are batch-fetched per emission and folded in the same shape the
+/// old `select('*, vendors(name)')` produced, keeping `Order.fromMap`
+/// unchanged.
+Future<List<Order>> _attachVendorNames(
+  SupabaseClient client,
+  List<Map<String, dynamic>> rows,
+) async {
+  final vendorIds =
+      rows.map((m) => m['vendor_id']).whereType<String>().toSet().toList();
+
+  final namesById = <String, String>{};
+  if (vendorIds.isNotEmpty) {
+    final vendors = await client
+        .from('vendors')
+        .select('id, name')
+        .inFilter('id', vendorIds);
+    for (final v in vendors) {
+      namesById[v['id'] as String] = v['name'] as String;
+    }
+  }
+
+  return rows.map((m) {
+    final vendorId = m['vendor_id'] as String?;
+    final withVendor = {
+      ...m,
+      if (vendorId != null && namesById[vendorId] != null)
+        'vendors': {'name': namesById[vendorId]},
+    };
+    return Order.fromMap(withVendor);
+  }).toList();
+}
+
+/// A single order by ID, live via Supabase Realtime, with its line items
+/// populated. Used by the tracking screen — a Kitchen/rider status change
+/// now reaches this screen without the student tapping refresh.
+final orderByIdProvider =
+    StreamProvider.family<Order?, String>((ref, orderId) {
+  final client = ref.watch(supabaseClientProvider);
+  return _streamOrderById(client, orderId);
+});
+
+Stream<Order?> _streamOrderById(SupabaseClient client, String orderId) async* {
+  final stream =
+      client.from('orders').stream(primaryKey: ['id']).eq('id', orderId);
+
+  await for (final rows in stream) {
+    if (rows.isEmpty) {
+      yield null;
+      continue;
+    }
+    final row = rows.first;
+    final withVendor = (await _attachVendorNames(client, [row])).first;
+
+    final items = await client
+        .from('order_items')
+        .select()
+        .eq('order_id', orderId);
+
+    yield withVendor.copyWith(
+      items: items.map((m) => OrderItem.fromMap(m)).toList(),
+    );
+  }
+}
+
+/// The assigned rider's name/phone for an order, once one exists
+/// (post-testing fixes, Section 12 — mirrors get_customer_info, which
+/// already gives the rider the student's contact the other way around).
+/// Returns null until a rider has accepted.
+final orderRiderInfoProvider =
+    FutureProvider.family<Map<String, dynamic>?, String>((ref, orderId) async {
+  final client = ref.watch(supabaseClientProvider);
+  final result =
+      await client.rpc('get_rider_info', params: {'p_order_id': orderId});
+  return result == null ? null : Map<String, dynamic>.from(result as Map);
 });
 
 // ---------------------------------------------------------------------------

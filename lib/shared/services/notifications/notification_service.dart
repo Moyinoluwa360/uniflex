@@ -78,23 +78,35 @@ class NotificationService {
   static Future<void> _showLocalNotification(RemoteMessage message) async {
     final notification = message.notification;
     if (notification == null) return;
+    await showLocal(notification.title, notification.body);
+  }
 
-    await _localNotifications.show(
-      notification.hashCode,
-      notification.title,
-      notification.body,
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-          _androidChannel.id,
-          _androidChannel.name,
-          channelDescription: _androidChannel.description,
-          importance: Importance.high,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
+  /// Shows a local (foreground) notification banner. Used directly by
+  /// Section 12's order-status-change listener (see StudentShell) so a
+  /// status update from Supabase Realtime is surfaced immediately while
+  /// the app is open, without waiting on an FCM push round-trip.
+  static Future<void> showLocal(String? title, String? body) async {
+    if (title == null && body == null) return;
+    try {
+      await _localNotifications.show(
+        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        title,
+        body,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            _androidChannel.id,
+            _androidChannel.name,
+            channelDescription: _androidChannel.description,
+            importance: Importance.high,
+            priority: Priority.high,
+            icon: '@mipmap/ic_launcher',
+          ),
+          iOS: const DarwinNotificationDetails(),
         ),
-        iOS: const DarwinNotificationDetails(),
-      ),
-    );
+      );
+    } catch (e) {
+      debugPrint('[NotificationService] showLocal error: $e');
+    }
   }
 }
 
