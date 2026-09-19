@@ -35,7 +35,6 @@ class PaystackCheckoutPage extends StatefulWidget {
 
 class _PaystackCheckoutPageState extends State<PaystackCheckoutPage> {
   late final WebViewController _controller;
-  bool _loading = true;
   String? _error;
 
   @override
@@ -54,10 +53,8 @@ class _PaystackCheckoutPageState extends State<PaystackCheckoutPage> {
       )
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageFinished: (_) => setState(() => _loading = false),
           onWebResourceError: (err) {
             setState(() {
-              _loading = false;
               _error = 'Failed to load payment page (${err.description})';
             });
           },
@@ -170,10 +167,13 @@ class _PaystackCheckoutPageState extends State<PaystackCheckoutPage> {
           onPressed: () => Navigator.of(context).pop(null),
         ),
       ),
-      body: Stack(
-        children: [
-          if (_error != null)
-            Center(
+      // Exactly one loading state is ever visible: the WebView shows its
+      // own inline spinner (see _buildPaystackHtml) while Paystack's SDK
+      // loads, then Paystack's own popup takes over — no separate native
+      // spinner is layered on top of either (Section 4 of the
+      // post-testing fixes: this used to stack three loaders at once).
+      body: _error != null
+          ? Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
@@ -197,12 +197,7 @@ class _PaystackCheckoutPageState extends State<PaystackCheckoutPage> {
                 ),
               ),
             )
-          else
-            WebViewWidget(controller: _controller),
-          if (_loading && _error == null)
-            const Center(child: CircularProgressIndicator()),
-        ],
-      ),
+          : WebViewWidget(controller: _controller),
     );
   }
 }

@@ -10,6 +10,7 @@ import '../../widgets/wordmark/uniflex_wordmark.dart';
 import '../../services/auth/auth_providers.dart';
 import '../validators.dart';
 import 'create_account_screen.dart';
+import 'forgot_password_screen.dart';
 
 /// The one login screen every role uses — Student, Rider, and Admin
 /// alike. Which shell a person lands on after this is decided by their
@@ -124,7 +125,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   validator: (v) =>
                       (v ?? '').isEmpty ? 'Enter your password' : null,
                 ),
-                const SizedBox(height: AppSpacing.xl),
+                const SizedBox(height: AppSpacing.sm),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _isLoading
+                        ? null
+                        : () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ForgotPasswordScreen(),
+                            ),
+                          ),
+                    child: const Text('Forgot password?'),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
                 PrimaryButton(
                   label: 'Log In',
                   isLoading: _isLoading,

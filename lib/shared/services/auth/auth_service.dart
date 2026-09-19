@@ -37,4 +37,37 @@ class AuthService {
   }
 
   Future<void> signOut() => _client.auth.signOut();
+
+  // ── Forgot password (post-testing fixes, Section 3) ────────────────────
+  //
+  // OTP-based rather than link-based, to match the existing pattern in this
+  // app (Termii phone OTP for sign-up verification) and to avoid needing
+  // any deep-link/native URL-scheme setup. Supabase's recovery email must
+  // have its template edited in the Dashboard to include `{{ .Token }}` so
+  // it contains a 6-digit code, not just a link — see README.md.
+
+  /// Sends a password-reset email containing a 6-digit recovery code.
+  Future<void> sendPasswordResetOtp(String email) {
+    return _client.auth.resetPasswordForEmail(email);
+  }
+
+  /// Verifies the 6-digit code from the reset email. On success this
+  /// establishes a recovery session, after which [updatePassword] can be
+  /// called to actually set the new password.
+  Future<void> verifyPasswordResetOtp({
+    required String email,
+    required String token,
+  }) {
+    return _client.auth.verifyOTP(
+      type: OtpType.recovery,
+      email: email,
+      token: token,
+    );
+  }
+
+  /// Sets a new password on the current (recovery) session. AuthGate picks
+  /// up the now-valid session on its own — this never navigates.
+  Future<void> updatePassword(String newPassword) {
+    return _client.auth.updateUser(UserAttributes(password: newPassword));
+  }
 }
