@@ -66,16 +66,24 @@ class JobPoolScreen extends ConsumerWidget {
               ),
               data: (pool) {
                 if (pool.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.inbox_outlined,
-                          size: 56,
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: 0.3),
-                        ),
+                    return Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 88,
+                            height: 88,
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary
+                                  .withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.inbox_outlined,
+                              size: 36,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
                         const SizedBox(height: AppSpacing.md),
                         Text(
                           'No jobs available',

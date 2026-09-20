@@ -34,10 +34,11 @@ class _GiftScreenState extends ConsumerState<GiftScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Food Gifts'),
-        bottom: TabBar(
-          controller: _tabs,
-          tabs: const [
+          title: const Text('Food Gifts'),
+          bottom: TabBar(
+            controller: _tabs,
+            indicatorColor: AppColors.emerald,
+            tabs: const [
             Tab(text: 'Send Gift'),
             Tab(text: 'History'),
           ],

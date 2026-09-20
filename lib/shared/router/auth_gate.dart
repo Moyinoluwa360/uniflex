@@ -81,27 +81,46 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 class _AccountDeactivatedScreen extends ConsumerWidget {
   const _AccountDeactivatedScreen();
 
-  @override
+    @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
     return Scaffold(
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.screenGutter),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Icon(Icons.block_outlined, size: 56),
+              Center(
+                child: Container(
+                  width: 88,
+                  height: 88,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.error.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.block_outlined,
+                    size: 36,
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ),
               const SizedBox(height: AppSpacing.md),
               Text(
                 'Account deactivated',
-                style: Theme.of(context).textTheme.titleLarge,
+                style: theme.textTheme.titleLarge,
+                textAlign: TextAlign.center,
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
                 'Your account has been deactivated by an admin. '
                 'Contact Uniflex support if you think this is a mistake.',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
               ),
               const SizedBox(height: AppSpacing.lg),
               FilledButton(

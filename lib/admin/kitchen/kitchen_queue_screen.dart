@@ -60,16 +60,24 @@ class KitchenQueueScreen extends ConsumerWidget {
           onRetry: () => ref.invalidate(kitchenOrdersProvider),
         ),
         data: (orders) {
-          if (orders.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.check_circle_outline,
-                    size: 56,
-                    color: AppColors.emerald,
-                  ),
+            if (orders.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 88,
+                      height: 88,
+                      decoration: BoxDecoration(
+                        color: AppColors.emerald.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check_circle_outline,
+                        size: 36,
+                        color: AppColors.emerald,
+                      ),
+                    ),
                   const SizedBox(height: AppSpacing.md),
                   Text(
                     'Queue is clear',
