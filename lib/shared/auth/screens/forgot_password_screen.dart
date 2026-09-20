@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/auth/auth_providers.dart';
+import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
+import '../../widgets/app_bar/uniflex_app_bar.dart';
 import '../../widgets/buttons/primary_button.dart';
 import '../../widgets/inputs/app_text_field.dart';
 import '../validators.dart';
@@ -60,8 +62,14 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+    final secondaryInk = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.darkInkSecondary
+        : AppColors.mediumGrey;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Forgot Password')),
+      appBar: const UniflexAppBar(title: 'Forgot Password'),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.screenGutter),
@@ -73,22 +81,43 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                 const SizedBox(height: AppSpacing.lg),
                 Text(
                   'Reset your password',
-                  style: Theme.of(context).textTheme.headlineSmall,
+                  style: textTheme.headlineSmall,
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   'Enter the email on your account and we\'ll send you a '
                   '6-digit code to reset your password.',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                  style: textTheme.bodyMedium?.copyWith(color: secondaryInk),
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 if (_errorText != null) ...[
-                  Text(
-                    _errorText!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: colorScheme.error.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(AppRadius.control),
+                      border: Border.all(
+                        color: colorScheme.error.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          size: 20,
+                          color: colorScheme.error,
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            _errorText!,
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.error,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: AppSpacing.md),
@@ -104,6 +133,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                 const SizedBox(height: AppSpacing.xl),
                 PrimaryButton(
                   label: 'Send Code',
+                  icon: Icons.mail_outline,
                   isLoading: _isLoading,
                   onPressed: _submit,
                 ),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/auth/auth_providers.dart';
 import '../../services/otp/termii_otp_service.dart';
+import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/app_bar/uniflex_app_bar.dart';
 import '../../widgets/buttons/primary_button.dart';
@@ -110,6 +111,12 @@ class _VerifyPhoneScreenState extends ConsumerState<VerifyPhoneScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+    final secondaryInk = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.darkInkSecondary
+        : AppColors.mediumGrey;
+
     return Scaffold(
       appBar: const UniflexAppBar(title: 'Verify Phone Number'),
       body: SafeArea(
@@ -120,18 +127,43 @@ class _VerifyPhoneScreenState extends ConsumerState<VerifyPhoneScreen> {
             children: [
               Text(
                 'Enter the code we sent',
-                style: Theme.of(context).textTheme.headlineMedium,
+                style: textTheme.headlineMedium,
               ),
               const SizedBox(height: AppSpacing.xs),
               Text(
                 'We sent a verification code to ${widget.phone}.',
-                style: Theme.of(context).textTheme.bodyMedium,
+                style: textTheme.bodyMedium?.copyWith(color: secondaryInk),
               ),
               const SizedBox(height: AppSpacing.xl),
               if (_errorText != null) ...[
-                Text(
-                  _errorText!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                Container(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: colorScheme.error.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                    border: Border.all(
+                      color: colorScheme.error.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 20,
+                        color: colorScheme.error,
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          _errorText!,
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.error,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.md),
               ],
@@ -146,6 +178,7 @@ class _VerifyPhoneScreenState extends ConsumerState<VerifyPhoneScreen> {
               const SizedBox(height: AppSpacing.lg),
               PrimaryButton(
                 label: 'Verify',
+                icon: Icons.check_circle_outline,
                 isLoading: _isVerifying,
                 onPressed: _verify,
               ),

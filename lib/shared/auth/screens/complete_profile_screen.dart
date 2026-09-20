@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/auth/auth_providers.dart';
 import '../../services/profile/profile_service.dart';
+import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/buttons/primary_button.dart';
 import '../../widgets/inputs/app_text_field.dart';
@@ -133,6 +134,11 @@ class _CompleteProfileScreenState
     final dobLabel = _dateOfBirth == null
         ? 'Date of birth'
         : _formatDate(_dateOfBirth!);
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+    final secondaryInk = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.darkInkSecondary
+        : AppColors.mediumGrey;
 
     return Scaffold(
       body: SafeArea(
@@ -147,21 +153,42 @@ class _CompleteProfileScreenState
                 const SizedBox(height: AppSpacing.xl),
                 Text(
                   'Complete your\nprofile',
-                  style: Theme.of(context).textTheme.headlineMedium,
+                  style: textTheme.headlineMedium,
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   'So riders and vendors know who they are looking for.',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                  style: textTheme.bodyMedium?.copyWith(color: secondaryInk),
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 if (_errorText != null) ...[
-                  Text(
-                    _errorText!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: colorScheme.error.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(AppRadius.control),
+                      border: Border.all(
+                        color: colorScheme.error.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          size: 20,
+                          color: colorScheme.error,
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            _errorText!,
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.error,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: AppSpacing.md),
@@ -240,12 +267,12 @@ class _CompleteProfileScreenState
                   textInputAction: TextInputAction.done,
                 ),
                 const SizedBox(height: AppSpacing.xl),
-                Text('Transaction PIN', style: Theme.of(context).textTheme.titleSmall),
+                Text('Transaction PIN', style: textTheme.titleSmall),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   'You\'ll enter this 4-digit PIN to confirm every order.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  style: textTheme.bodySmall?.copyWith(
+                        color: secondaryInk,
                       ),
                 ),
                 const SizedBox(height: AppSpacing.sm),
@@ -287,6 +314,7 @@ class _CompleteProfileScreenState
                 const SizedBox(height: AppSpacing.xl),
                 PrimaryButton(
                   label: 'Finish setup',
+                  icon: Icons.check_circle_outline,
                   isLoading: _isLoading,
                   onPressed: _submit,
                 ),
