@@ -218,6 +218,7 @@ class MenuManagementScreen extends ConsumerWidget {
               const SizedBox(height: AppSpacing.lg),
               PrimaryButton(
                 label: 'Save',
+                  icon: Icons.check,
                 onPressed: () async {
                   if (!formKey.currentState!.validate()) return;
                   await ref.read(adminServiceProvider).upsertVendor(

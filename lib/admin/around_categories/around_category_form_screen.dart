@@ -211,6 +211,7 @@ class _AroundCategoryFormScreenState
               const SizedBox(height: AppSpacing.xl),
               PrimaryButton(
                 label: isEditing ? 'Save Changes' : 'Add Category',
+                  icon: Icons.check,
                 isLoading: _isSaving,
                 onPressed: _save,
               ),

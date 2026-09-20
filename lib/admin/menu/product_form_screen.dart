@@ -280,6 +280,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
 
               PrimaryButton(
                 label: isEditing ? 'Save Changes' : 'Add Item',
+                  icon: Icons.check,
                 isLoading: _isSaving,
                 onPressed: _save,
               ),

@@ -270,6 +270,7 @@ class _PackAllocationScreenState extends State<PackAllocationScreen> {
             label: allAllocated
                 ? 'Done — ${_packs.length} pack${_packs.length == 1 ? '' : 's'}'
                 : 'Pack everything to continue',
+            icon: Icons.check,
             onPressed: allAllocated ? _done : null,
           ),
         ),

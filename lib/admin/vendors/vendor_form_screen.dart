@@ -181,6 +181,7 @@ class _VendorFormScreenState extends ConsumerState<VendorFormScreen> {
 
               PrimaryButton(
                 label: isEditing ? 'Save Changes' : 'Add Vendor',
+                  icon: Icons.check,
                 isLoading: _isSaving,
                 onPressed: _save,
               ),

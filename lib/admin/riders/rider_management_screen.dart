@@ -234,6 +234,7 @@ class RiderManagementScreen extends ConsumerWidget {
                     const SizedBox(height: AppSpacing.lg),
                     PrimaryButton(
                       label: 'Create Rider Account',
+                        icon: Icons.person_add_outlined,
                       isLoading: isSaving,
                       onPressed: submit,
                     ),

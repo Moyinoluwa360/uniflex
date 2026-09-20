@@ -92,6 +92,7 @@ class RiderProfileScreen extends ConsumerWidget {
               // ── Logout ───────────────────────────────────────────────
               PrimaryButton(
                 label: 'Log Out',
+                  icon: Icons.logout,
                 onPressed: () => ref.read(authServiceProvider).signOut(),
               ),
 
