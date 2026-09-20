@@ -7,6 +7,7 @@ import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../../shared/widgets/pin/pin_entry_sheet.dart';
@@ -246,7 +247,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final hasSufficientBalance = balance >= total;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Checkout')),
+      appBar: const UniflexAppBar(title: 'Checkout'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
         child: Form(
@@ -581,6 +582,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             label: packDecisionPending
                 ? 'Set up packs to continue'
                 : 'Confirm Order  ₦${total.toStringAsFixed(0)}',
+            icon: Icons.lock_outline,
             isLoading: orderState.isLoading,
             onPressed: (hasSufficientBalance && !packDecisionPending)
                 ? () => _confirmOrder(packableItems)

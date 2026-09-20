@@ -4,6 +4,7 @@ import '../../shared/models/cart_item.dart';
 import '../../shared/models/vendor.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 
 /// One pack the student has built: how many of each pack-requiring
@@ -108,8 +109,8 @@ class _PackAllocationScreenState extends State<PackAllocationScreen> {
     final allAllocated = _totalRemaining == 0;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Build Pack ${_packs.length + 1}'),
+      appBar: UniflexAppBar(
+        title: 'Build Pack ${_packs.length + 1}',
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),

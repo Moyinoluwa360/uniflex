@@ -27,18 +27,27 @@ class OrderConfirmationScreen extends StatelessWidget {
             children: [
               const Spacer(),
 
-              // Success icon
+              // Success icon with soft brand glow (board: radial emerald halo)
               Container(
-                width: 96,
-                height: 96,
-                decoration: const BoxDecoration(
-                  color: AppColors.emerald,
+                width: 128,
+                height: 128,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
+                  color: AppColors.emerald.withValues(alpha: 0.12),
                 ),
-                child: const Icon(
-                  Icons.check,
-                  color: AppColors.pureWhite,
-                  size: 52,
+                child: Container(
+                  width: 96,
+                  height: 96,
+                  decoration: const BoxDecoration(
+                    color: AppColors.emerald,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check,
+                    color: AppColors.pureWhite,
+                    size: 52,
+                  ),
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),
