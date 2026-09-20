@@ -29,6 +29,7 @@ class OrdersScreen extends ConsumerWidget {
         appBar: AppBar(
           title: const Text('Orders'),
           bottom: TabBar(
+            indicatorColor: AppColors.emerald,
             labelStyle: Theme.of(context).textTheme.labelMedium,
             unselectedLabelStyle: Theme.of(context).textTheme.labelMedium,
             tabs: const [
@@ -62,25 +63,38 @@ class _CartTab extends ConsumerWidget {
 
     if (cart.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.shopping_cart_outlined,
-              size: 56,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.25),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Text('Your cart is empty', style: theme.textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              'Add items from a vendor on the Home tab.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.shopping_cart_outlined,
+                  size: 36,
+                  color: theme.colorScheme.primary,
+                ),
               ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+              const SizedBox(height: AppSpacing.md),
+              Text('Your cart is empty',
+                  style: theme.textTheme.titleMedium),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Add items from a vendor on the Home tab.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color:
+                      theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -159,6 +173,7 @@ class _CartTab extends ConsumerWidget {
                 const SizedBox(height: AppSpacing.sm),
                 PrimaryButton(
                   label: 'Proceed to Checkout',
+                  icon: Icons.arrow_forward,
                   onPressed: cart.vendor == null
                       ? null
                       : () => Navigator.of(context).push(
@@ -255,25 +270,38 @@ class _OrderList extends ConsumerWidget {
 
         if (filtered.isEmpty) {
           return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.receipt_long_outlined,
-                  size: 56,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.25),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Text(emptyMessage, style: theme.textTheme.titleMedium),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  emptySubtitle,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 88,
+                    height: 88,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary
+                          .withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.receipt_long_outlined,
+                      size: 36,
+                      color: theme.colorScheme.primary,
+                    ),
                   ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
+                  const SizedBox(height: AppSpacing.md),
+                  Text(emptyMessage, style: theme.textTheme.titleMedium),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    emptySubtitle,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface
+                          .withValues(alpha: 0.55),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
           );
         }

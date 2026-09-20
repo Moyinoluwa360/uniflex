@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/around_category.dart';
 import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../../shared/widgets/pin/pin_entry_sheet.dart';
@@ -146,7 +147,7 @@ class _AroundScreenState extends ConsumerState<AroundScreen> {
     final fee = widget.category.flatFee;
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.category.title)),
+      appBar: UniflexAppBar(title: widget.category.title),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
         child: Form(
@@ -265,6 +266,7 @@ class _AroundScreenState extends ConsumerState<AroundScreen> {
 
               PrimaryButton(
                 label: 'Confirm Request  ₦${fee.toStringAsFixed(0)}',
+                icon: Icons.lock_outline,
                 isLoading: orderState.isLoading,
                 onPressed: _confirm,
               ),

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/order.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../ordering/order_repository.dart';
 
@@ -25,8 +26,8 @@ class OrderTrackingScreen extends ConsumerWidget {
     final liveAsync = ref.watch(orderByIdProvider(order.id));
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Track Order ${order.shortId}'),
+      appBar: UniflexAppBar(
+        title: 'Track Order ${order.shortId}',
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
