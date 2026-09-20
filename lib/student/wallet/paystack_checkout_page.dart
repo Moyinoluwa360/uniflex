@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
+
 /// Full-screen page that renders the Paystack Popup JS checkout inside a
 /// native WebView. The caller pushes this as a modal route and awaits the
 /// result — a non-null [String] is the Paystack reference on success,
@@ -159,8 +161,8 @@ class _PaystackCheckoutPageState extends State<PaystackCheckoutPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Fund Wallet'),
+      appBar: UniflexAppBar(
+        title: 'Fund Wallet',
         leading: IconButton(
           icon: const Icon(Icons.close),
           tooltip: 'Cancel',

@@ -154,11 +154,11 @@ class MembershipCardScreen extends ConsumerWidget {
             _TierRow(tier: 'Bronze', spend: '₦0+', theme: theme,
                 color: AppColors.emerald, current: tier == 'Bronze'),
             _TierRow(tier: 'Silver', spend: '₦5,000+', theme: theme,
-                color: const Color(0xFF6B7280), current: tier == 'Silver'),
+                color: AppColors.tierSilver, current: tier == 'Silver'),
             _TierRow(tier: 'Gold', spend: '₦20,000+', theme: theme,
-                color: const Color(0xFFB45309), current: tier == 'Gold'),
+                color: AppColors.tierGold, current: tier == 'Gold'),
             _TierRow(tier: 'Platinum', spend: '₦50,000+', theme: theme,
-                color: const Color(0xFF6D28D9), current: tier == 'Platinum'),
+                color: AppColors.tierPlatinum, current: tier == 'Platinum'),
 
             const SizedBox(height: AppSpacing.xl),
           ],
@@ -168,9 +168,9 @@ class MembershipCardScreen extends ConsumerWidget {
   }
 
   Color _tierColor(String t) => switch (t) {
-        'Silver' => const Color(0xFF6B7280),
-        'Gold' => const Color(0xFFB45309),
-        'Platinum' => const Color(0xFF6D28D9),
+        'Silver' => AppColors.tierSilver,
+        'Gold' => AppColors.tierGold,
+        'Platinum' => AppColors.tierPlatinum,
         _ => AppColors.emerald,
       };
 

@@ -59,6 +59,11 @@ abstract final class AppColors {
   /// Mid stop of the splash brand gradient (#0E9E74 on the board).
   static const Color splashGradientMid = Color(0xFF0E9E74);
 
+  // ---- Membership tier accents (Design Board 24) -----------------------
+  static const Color tierSilver = Color(0xFF6B7280);
+  static const Color tierGold = Color(0xFFB45309);
+  static const Color tierPlatinum = Color(0xFF6D28D9);
+
   // ---- Semantic -----------------------------------------------------
   static const Color success = emerald;
   static const Color error = Color(0xFFDC2626);

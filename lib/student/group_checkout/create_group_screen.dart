@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/vendor.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../services/student_providers.dart';
 import 'group_checkout_screen.dart';
 
@@ -46,7 +47,7 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Group Order')),
+      appBar: const UniflexAppBar(title: 'Group Order'),
       body: Padding(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
         child: _groupId == null

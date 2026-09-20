@@ -34,7 +34,7 @@ class ReferralScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(AppSpacing.lg),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [AppColors.emerald, Color(0xFF059669)],
+                  colors: [AppColors.emerald, AppColors.splashGradientMid],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),

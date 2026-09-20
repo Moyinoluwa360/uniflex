@@ -8,6 +8,7 @@ import '../../shared/services/saving_plan/saving_plan_providers.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 
 /// Saving Plan screen — lets the student set a spending budget for a
@@ -105,7 +106,7 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
     final txAsync = ref.watch(walletTransactionsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Saving Plan')),
+      appBar: const UniflexAppBar(title: 'Saving Plan'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
         child: planAsync.when(
@@ -198,6 +199,7 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
 
                 PrimaryButton(
                   label: plan != null ? 'Update Plan' : 'Set Plan',
+                  icon: Icons.savings_outlined,
                   isLoading: notifierState.isLoading,
                   onPressed: _savePlan,
                 ),

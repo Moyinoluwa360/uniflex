@@ -6,6 +6,7 @@ import '../../shared/models/vendor.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../ordering/cart_provider.dart';
 import '../ordering/order_confirmation_screen.dart';
 import '../services/student_providers.dart';
@@ -64,7 +65,7 @@ class _JoinGroupScreenState extends ConsumerState<JoinGroupScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Join Group Order')),
+      appBar: const UniflexAppBar(title: 'Join Group Order'),
       body: Padding(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
         child: Column(
@@ -201,7 +202,7 @@ class _GroupCheckoutScreenState
         ref.watch(groupMembersProvider(widget.groupId));
 
     return Scaffold(
-      appBar: AppBar(title: Text('Group: ${widget.vendor.name}')),
+      appBar: UniflexAppBar(title: 'Group: ${widget.vendor.name}'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
         child: Column(

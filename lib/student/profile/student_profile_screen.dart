@@ -303,9 +303,9 @@ class StudentProfileScreen extends ConsumerWidget {
   }
 
   Color _tierColor(String tier) => switch (tier) {
-        'Silver' => const Color(0xFF6B7280),
-        'Gold' => const Color(0xFFB45309),
-        'Platinum' => const Color(0xFF6D28D9),
+        'Silver' => AppColors.tierSilver,
+        'Gold' => AppColors.tierGold,
+        'Platinum' => AppColors.tierPlatinum,
         _ => AppColors.emerald,
       };
 
