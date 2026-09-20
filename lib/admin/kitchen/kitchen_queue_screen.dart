@@ -60,24 +60,24 @@ class KitchenQueueScreen extends ConsumerWidget {
           onRetry: () => ref.invalidate(kitchenOrdersProvider),
         ),
         data: (orders) {
-            if (orders.isEmpty) {
-              return Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 88,
-                      height: 88,
-                      decoration: BoxDecoration(
-                        color: AppColors.emerald.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.check_circle_outline,
-                        size: 36,
-                        color: AppColors.emerald,
-                      ),
+          if (orders.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 88,
+                    height: 88,
+                    decoration: BoxDecoration(
+                      color: AppColors.emerald.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
                     ),
+                    child: const Icon(
+                      Icons.check_circle_outline,
+                      size: 36,
+                      color: AppColors.emerald,
+                    ),
+                  ),
                   const SizedBox(height: AppSpacing.md),
                   Text(
                     'Queue is clear',
@@ -109,9 +109,8 @@ class KitchenQueueScreen extends ConsumerWidget {
           final readyForPickup = orders
               .where((o) => o.order.status == OrderStatus.readyForPickup)
               .toList();
-          final readyForDelivery = orders
-              .where((o) => o.order.status == OrderStatus.ready)
-              .toList();
+          final readyForDelivery =
+              orders.where((o) => o.order.status == OrderStatus.ready).toList();
 
           return ListView(
             padding: const EdgeInsets.all(AppSpacing.screenGutter),
@@ -144,7 +143,8 @@ class KitchenQueueScreen extends ConsumerWidget {
                   color: AppColors.emerald,
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                ...readyForPickup.map((ko) => _KitchenOrderCard(kitchenOrder: ko)),
+                ...readyForPickup
+                    .map((ko) => _KitchenOrderCard(kitchenOrder: ko)),
               ],
               if (readyForDelivery.isNotEmpty) ...[
                 if (placed.isNotEmpty ||
@@ -157,7 +157,8 @@ class KitchenQueueScreen extends ConsumerWidget {
                   color: AppColors.emerald,
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                ...readyForDelivery.map((ko) => _KitchenOrderCard(kitchenOrder: ko)),
+                ...readyForDelivery
+                    .map((ko) => _KitchenOrderCard(kitchenOrder: ko)),
               ],
               const SizedBox(height: AppSpacing.xl),
             ],
@@ -239,9 +240,8 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
       _ => null,
     };
     if (nextStatus == null) return;
-    await _run(() => ref
-        .read(adminServiceProvider)
-        .updateOrderStatus(order.id, nextStatus));
+    await _run(() =>
+        ref.read(adminServiceProvider).updateOrderStatus(order.id, nextStatus));
   }
 
   /// Pickup orders only: the customer has physically collected the order.
@@ -289,10 +289,14 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
     // (Section 12).
     final (String, VoidCallback)? action = switch (order.status) {
       OrderStatus.placed => ('Start Preparing', _advance),
-      OrderStatus.preparing =>
-        (isPickup ? 'Mark Ready for Pickup' : 'Mark Ready', _advance),
-      OrderStatus.readyForPickup when isPickup =>
-        ('Mark Completed (Picked Up)', _markCompleted),
+      OrderStatus.preparing => (
+          isPickup ? 'Mark Ready for Pickup' : 'Mark Ready',
+          _advance
+        ),
+      OrderStatus.readyForPickup when isPickup => (
+          'Mark Completed (Picked Up)',
+          _markCompleted
+        ),
       OrderStatus.ready when !isPickup && order.transferredToRiderAt == null =>
         ('Transfer to Rider', _transferToRider),
       _ => null,
@@ -484,8 +488,8 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
                     child: Text(
                       order.deliveryLocation!,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.7),
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.7),
                       ),
                     ),
                   ),

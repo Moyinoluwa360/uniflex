@@ -81,7 +81,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 class _AccountDeactivatedScreen extends ConsumerWidget {
   const _AccountDeactivatedScreen();
 
-    @override
+  @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     return Scaffold(
