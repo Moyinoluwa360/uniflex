@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/buttons/primary_button.dart';
 import '../../widgets/buttons/secondary_button.dart';
@@ -71,6 +72,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+    final secondaryInk = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.darkInkSecondary
+        : AppColors.mediumGrey;
+
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -80,20 +87,47 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: AppSpacing.xxl),
-                const Center(child: UniflexWordmark(fontSize: 40)),
+                const SizedBox(height: AppSpacing.lg),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: UniflexWordmark(fontSize: 28),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                Text('Welcome back', style: textTheme.headlineMedium),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'Campus food, delivery, and errands.',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium,
+                  'Log in to order food, book deliveries and send errands.',
+                  style: textTheme.bodyMedium?.copyWith(color: secondaryInk),
                 ),
-                const SizedBox(height: AppSpacing.xxl),
+                const SizedBox(height: AppSpacing.xl),
                 if (_errorText != null) ...[
-                  Text(
-                    _errorText!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: colorScheme.error.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(AppRadius.control),
+                      border: Border.all(
+                        color: colorScheme.error.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          size: 20,
+                          color: colorScheme.error,
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            _errorText!,
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.error,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: AppSpacing.md),
@@ -143,9 +177,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 PrimaryButton(
                   label: 'Log In',
                   isLoading: _isLoading,
+                  icon: Icons.arrow_forward,
                   onPressed: _submit,
                 ),
-                const SizedBox(height: AppSpacing.md),
+                const SizedBox(height: AppSpacing.lg),
+                Row(
+                  children: [
+                    const Expanded(child: Divider()),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                      ),
+                      child: Text(
+                        'New here?',
+                        style: textTheme.labelSmall?.copyWith(
+                          color: secondaryInk,
+                        ),
+                      ),
+                    ),
+                    const Expanded(child: Divider()),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.lg),
                 SecondaryButton(
                   label: 'Create Account',
                   onPressed: _isLoading
