@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/order.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../services/admin_providers.dart';
 import '../services/admin_service.dart';
@@ -23,8 +24,8 @@ class KitchenQueueScreen extends ConsumerWidget {
     final ordersAsync = ref.watch(kitchenOrdersProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Kitchen Queue'),
+      appBar: UniflexAppBar(
+        title: 'Kitchen Queue',
         actions: [
           // Live indicator
           Padding(

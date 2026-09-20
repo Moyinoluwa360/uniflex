@@ -5,6 +5,7 @@ import '../../shared/models/product.dart';
 import '../../shared/models/vendor.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../services/admin_providers.dart';
@@ -32,8 +33,8 @@ class MenuManagementScreen extends ConsumerWidget {
     final vendorsAsync = ref.watch(allVendorsProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Menu Management'),
+      appBar: UniflexAppBar(
+        title: 'Menu Management',
         actions: [
           IconButton(
             icon: const Icon(Icons.inventory_2_outlined),

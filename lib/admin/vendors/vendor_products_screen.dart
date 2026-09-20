@@ -5,6 +5,7 @@ import '../../shared/models/product.dart';
 import '../../shared/models/vendor.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../menu/product_form_screen.dart';
 import '../services/admin_providers.dart';
 
@@ -22,7 +23,7 @@ class VendorProductsScreen extends ConsumerWidget {
         ref.watch(adminVendorProductsProvider(vendor.id));
 
     return Scaffold(
-      appBar: AppBar(title: Text('${vendor.name} — Menu')),
+      appBar: UniflexAppBar(title: '${vendor.name} — Menu'),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openForm(context, ref, null),
         icon: const Icon(Icons.add),

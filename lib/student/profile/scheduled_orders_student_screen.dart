@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
 import '../../shared/models/order.dart';
 import '../tracking/order_tracking_screen.dart';
@@ -33,7 +34,7 @@ class ScheduledOrdersStudentScreen extends ConsumerWidget {
     final ordersAsync = ref.watch(_scheduledOrdersProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Scheduled Orders')),
+      appBar: const UniflexAppBar(title: 'Scheduled Orders'),
       body: ordersAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Could not load: $e')),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../services/student_providers.dart';
 
 /// Badges / achievements screen. Shows earned badges prominently and
@@ -30,7 +31,7 @@ class BadgesScreen extends ConsumerWidget {
     final badgesAsync = ref.watch(userAchievementsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('My Badges')),
+      appBar: const UniflexAppBar(title: 'My Badges'),
       body: badgesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Could not load: $e')),

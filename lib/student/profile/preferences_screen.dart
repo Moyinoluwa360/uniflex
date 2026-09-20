@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/theme/theme_mode_provider.dart';
 
 /// Preferences screen — exposes the app-wide theme toggle.
@@ -14,7 +15,7 @@ class PreferencesScreen extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Preferences')),
+      appBar: const UniflexAppBar(title: 'Preferences'),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
         children: [

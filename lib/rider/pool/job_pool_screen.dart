@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../delivery/active_delivery_screen.dart';
 import '../services/rider_providers.dart';
@@ -23,8 +24,8 @@ class JobPoolScreen extends ConsumerWidget {
     final hasActive = activeAsync.valueOrNull != null;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Available Jobs'),
+      appBar: UniflexAppBar(
+        title: 'Available Jobs',
         actions: [
           // Live indicator
           Padding(
@@ -206,7 +207,7 @@ class _PoolOrderCardState extends ConsumerState<_PoolOrderCard> {
     final order = po.order;
 
     final badgeColor = switch (po.orderTypeLabel) {
-      'Around' => const Color(0xFF7C3AED),
+      'Around' => AppColors.accentViolet,
       'Partner Food' => AppColors.info,
       _ => theme.colorScheme.primary,
     };

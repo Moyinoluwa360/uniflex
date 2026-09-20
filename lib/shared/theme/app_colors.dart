@@ -64,6 +64,9 @@ abstract final class AppColors {
   static const Color tierGold = Color(0xFFB45309);
   static const Color tierPlatinum = Color(0xFF6D28D9);
 
+  /// Violet accent used for Around-type and completed-state chips/badges.
+  static const Color accentViolet = Color(0xFF7C3AED);
+
   // ---- Semantic -----------------------------------------------------
   static const Color success = emerald;
   static const Color error = Color(0xFFDC2626);

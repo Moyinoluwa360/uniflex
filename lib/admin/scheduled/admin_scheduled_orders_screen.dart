@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/order.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../services/admin_providers.dart';
 
@@ -19,8 +20,8 @@ class AdminScheduledOrdersScreen extends ConsumerWidget {
     final ordersAsync = ref.watch(scheduledOrdersProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Scheduled Orders'),
+      appBar: UniflexAppBar(
+        title: 'Scheduled Orders',
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: AppSpacing.md),

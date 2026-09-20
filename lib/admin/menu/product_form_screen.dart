@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../shared/models/product.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../services/admin_providers.dart';
@@ -136,8 +137,8 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     final isEditing = widget.product != null;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(isEditing ? 'Edit Item' : 'New Item'),
+      appBar: UniflexAppBar(
+        title: isEditing ? 'Edit Item' : 'New Item',
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),

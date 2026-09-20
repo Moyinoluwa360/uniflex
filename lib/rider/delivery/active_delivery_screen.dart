@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../shared/models/order.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../services/rider_providers.dart';
 import '../services/rider_service.dart';
@@ -210,8 +211,8 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
         ref.watch(activeDeliveryDetailProvider(widget.orderId));
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(order != null ? 'Delivery ${order.shortId}' : 'Active Delivery'),
+      appBar: UniflexAppBar(
+        title: order != null ? 'Delivery ${order.shortId}' : 'Active Delivery',
       ),
       body: orderAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),

@@ -138,7 +138,7 @@ class _StatsContent extends StatelessWidget {
               label: "Completed",
               value: '$completedToday',
               icon: Icons.check_circle_outline,
-              color: const Color(0xFF7C3AED),
+              color: AppColors.accentViolet,
             ),
           ],
         ),
@@ -212,7 +212,7 @@ class _StatusBreakdown extends StatelessWidget {
       ('Scheduled (Placed)', byStatus['placed'] as int? ?? 0, AppColors.orange),
       ('Preparing', byStatus['preparing'] as int? ?? 0, theme.colorScheme.primary),
       ('Ready', byStatus['ready'] as int? ?? 0, AppColors.emerald),
-      ('Completed today', byStatus['completed'] as int? ?? 0, const Color(0xFF7C3AED)),
+      ('Completed today', byStatus['completed'] as int? ?? 0, AppColors.accentViolet),
     ];
 
     return Container(

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/vendor.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../services/admin_providers.dart';
 import 'vendor_form_screen.dart';
 import 'vendor_products_screen.dart';
@@ -23,7 +24,7 @@ class VendorManagementScreen extends ConsumerWidget {
     final vendorsAsync = ref.watch(allVendorsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Vendors')),
+      appBar: const UniflexAppBar(title: 'Vendors'),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openForm(context, ref, null),
         icon: const Icon(Icons.add),

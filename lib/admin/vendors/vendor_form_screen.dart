@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/vendor.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../services/admin_providers.dart';
@@ -90,7 +91,7 @@ class _VendorFormScreenState extends ConsumerState<VendorFormScreen> {
     final isEditing = widget.vendor != null;
 
     return Scaffold(
-      appBar: AppBar(title: Text(isEditing ? 'Edit Vendor' : 'New Vendor')),
+      appBar: UniflexAppBar(title: isEditing ? 'Edit Vendor' : 'New Vendor'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
         child: Form(

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
@@ -21,7 +22,7 @@ class RiderManagementScreen extends ConsumerWidget {
     final ridersAsync = ref.watch(adminRidersProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Riders')),
+      appBar: const UniflexAppBar(title: 'Riders'),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openAddRiderSheet(context, ref),
         icon: const Icon(Icons.add),

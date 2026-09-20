@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/around_category.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../services/admin_providers.dart';
@@ -102,7 +103,7 @@ class _AroundCategoryFormScreenState
     final isEditing = widget.category != null;
 
     return Scaffold(
-      appBar: AppBar(title: Text(isEditing ? 'Edit Category' : 'New Category')),
+      appBar: UniflexAppBar(title: isEditing ? 'Edit Category' : 'New Category'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
         child: Form(

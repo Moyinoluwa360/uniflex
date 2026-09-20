@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/profile.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../services/student_providers.dart';
 
 /// Membership card — shows current tier, progress to next, perks list,
@@ -34,7 +35,7 @@ class MembershipCardScreen extends ConsumerWidget {
     final spendToNext = _spendToNext(spending);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Membership')),
+      appBar: const UniflexAppBar(title: 'Membership'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
         child: Column(

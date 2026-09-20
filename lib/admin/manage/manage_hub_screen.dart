@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../around_categories/around_categories_screen.dart';
 import '../riders/rider_management_screen.dart';
 import '../vendors/vendor_management_screen.dart';
@@ -16,7 +17,7 @@ class ManageHubScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Manage')),
+      appBar: const UniflexAppBar(title: 'Manage'),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
         children: const [

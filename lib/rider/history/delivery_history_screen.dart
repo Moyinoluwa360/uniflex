@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../delivery/delivery_record.dart';
 import '../services/rider_providers.dart';
 
@@ -15,8 +16,8 @@ class DeliveryHistoryScreen extends ConsumerWidget {
     final historyAsync = ref.watch(deliveryHistoryProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Delivery History'),
+      appBar: UniflexAppBar(
+        title: 'Delivery History',
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -101,7 +102,7 @@ class _HistoryCard extends StatelessWidget {
     final theme = Theme.of(context);
     final typeLabel = record.orderType == 'around' ? 'Around' : 'Food';
     final typeColor = record.orderType == 'around'
-        ? const Color(0xFF7C3AED)
+        ? AppColors.accentViolet
         : AppColors.emerald;
 
     return Card(

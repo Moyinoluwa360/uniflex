@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../shared/models/profile.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../services/student_providers.dart';
 
 /// Referral screen — shows the student's code, share button, and the
@@ -22,7 +23,7 @@ class ReferralScreen extends ConsumerWidget {
     final code = profile.referralCode ?? '—';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Refer a Friend')),
+      appBar: const UniflexAppBar(title: 'Refer a Friend'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
         child: Column(

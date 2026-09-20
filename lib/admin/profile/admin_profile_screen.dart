@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/auth/logout_button.dart';
 
 class AdminProfileScreen extends ConsumerWidget {
@@ -20,7 +21,7 @@ class AdminProfileScreen extends ConsumerWidget {
     };
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
+      appBar: const UniflexAppBar(title: 'Profile'),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
         children: [

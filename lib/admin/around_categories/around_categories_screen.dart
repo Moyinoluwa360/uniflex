@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/around_category.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../services/admin_providers.dart';
 import 'around_category_form_screen.dart';
@@ -19,7 +20,7 @@ class AroundCategoriesScreen extends ConsumerWidget {
     final categoriesAsync = ref.watch(adminAroundCategoriesProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Around Categories')),
+      appBar: const UniflexAppBar(title: 'Around Categories'),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openForm(context, ref, null),
         icon: const Icon(Icons.add),
