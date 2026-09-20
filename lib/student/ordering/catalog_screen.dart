@@ -6,7 +6,9 @@ import '../../shared/models/product.dart';
 import '../../shared/models/vendor.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
+import '../../shared/widgets/media/app_image.dart';
 import 'cart_provider.dart';
 import 'cart_screen.dart';
 import 'product_repository.dart';
@@ -31,8 +33,8 @@ class CatalogScreen extends ConsumerWidget {
     final cartState = ref.watch(cartProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(vendor.name),
+      appBar: UniflexAppBar(
+        title: vendor.name,
         actions: [
           if (vendor.badgeLabel != null)
             Padding(
@@ -62,7 +64,45 @@ class CatalogScreen extends ConsumerWidget {
         ),
         data: (products) {
           if (products.isEmpty) {
-            return const Center(child: Text('No items available right now.'));
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary
+                            .withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.search_off_outlined,
+                        size: 32,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    Text(
+                      'No results on this menu',
+                      style: theme.textTheme.titleSmall,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      'Try another vendor or check back later.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurface
+                            .withValues(alpha: 0.6),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            );
           }
 
           // Group by category, preserving the order they come back from the DB.
@@ -158,7 +198,19 @@ class _ProductTile extends ConsumerWidget {
         vertical: AppSpacing.sm,
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          SizedBox(
+            width: 64,
+            height: 64,
+            child: AppImage(
+              url: product.imageUrl,
+              keywords: 'food,meal,${product.category}',
+              seed: product.id.hashCode,
+              borderRadius: BorderRadius.circular(AppRadius.control - 2),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

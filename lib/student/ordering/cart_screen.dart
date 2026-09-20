@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/vendor.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/media/app_image.dart';
 import 'cart_provider.dart';
 import 'checkout_screen.dart';
 
@@ -23,34 +25,47 @@ class CartScreen extends ConsumerWidget {
 
     if (cart.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Your Cart')),
+        appBar: const UniflexAppBar(title: 'Your Cart'),
         body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.shopping_cart_outlined,
-                size: 64,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              Text('Your cart is empty', style: theme.textTheme.titleMedium),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'Add items from the menu to get started.',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.xl),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 88,
+                  height: 88,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.shopping_cart_outlined,
+                    size: 36,
+                    color: theme.colorScheme.primary,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: AppSpacing.md),
+                Text('Your cart is empty',
+                    style: theme.textTheme.titleMedium),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'Add items from the menu to get started.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Your Cart'),
+      appBar: UniflexAppBar(
+        title: 'Your Cart',
         actions: [
           TextButton(
             onPressed: () {
@@ -84,7 +99,20 @@ class CartScreen extends ConsumerWidget {
               vertical: AppSpacing.sm,
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                SizedBox(
+                  width: 52,
+                  height: 52,
+                  child: AppImage(
+                    url: item.product.imageUrl,
+                    keywords: 'food,meal',
+                    seed: item.product.id.hashCode,
+                    borderRadius:
+                        BorderRadius.circular(AppRadius.control - 2),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
                 // Item info
                 Expanded(
                   child: Column(
@@ -180,6 +208,7 @@ class CartScreen extends ConsumerWidget {
               const SizedBox(height: AppSpacing.sm),
               PrimaryButton(
                 label: 'Proceed to Checkout',
+                icon: Icons.arrow_forward,
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => CheckoutScreen(vendor: vendor),
