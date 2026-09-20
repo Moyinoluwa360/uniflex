@@ -172,7 +172,7 @@ class _HomeHeader extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: isDark
               ? [AppColors.darkEmerald, AppColors.darkCanvas]
-              : const [AppColors.emerald, Color(0xFF059669)],
+              : const [AppColors.emerald, AppColors.splashGradientMid],
         ),
         borderRadius: const BorderRadius.vertical(
           bottom: Radius.circular(AppRadius.sheet),
