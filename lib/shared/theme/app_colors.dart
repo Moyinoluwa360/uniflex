@@ -52,6 +52,13 @@ abstract final class AppColors {
   /// glow, and the active tier state elsewhere.
   static const Color darkEmerald = Color(0xFF0A4433);
 
+  // ---- Splash gradient stops (Design Board 01) -------------------------
+  /// Top stop of the splash brand gradient (#12C48C on the board).
+  static const Color splashGradientTop = Color(0xFF12C48C);
+
+  /// Mid stop of the splash brand gradient (#0E9E74 on the board).
+  static const Color splashGradientMid = Color(0xFF0E9E74);
+
   // ---- Semantic -----------------------------------------------------
   static const Color success = emerald;
   static const Color error = Color(0xFFDC2626);
