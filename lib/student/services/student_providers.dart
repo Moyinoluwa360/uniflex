@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/models/achievement.dart';
+import '../../shared/models/advertisement.dart';
 import '../../shared/models/gift.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
 import 'student_service.dart';
@@ -37,4 +38,17 @@ final groupMembersProvider =
     StreamProvider.family<List<Map<String, dynamic>>, String>(
         (ref, groupId) {
   return ref.watch(studentServiceProvider).streamGroupMembers(groupId);
+});
+
+/// Phase 10: the referral code Admin allocated to this student, or null if
+/// they have not been given one. Students no longer generate their own.
+final myReferralCodeProvider =
+    FutureProvider<Map<String, dynamic>?>((ref) async {
+  return ref.watch(studentServiceProvider).getMyReferralCode();
+});
+
+/// Phase 10: live home-page advertisement banners, admin-managed.
+final liveAdvertisementsProvider =
+    FutureProvider<List<Advertisement>>((ref) async {
+  return ref.watch(studentServiceProvider).getLiveAdvertisements();
 });

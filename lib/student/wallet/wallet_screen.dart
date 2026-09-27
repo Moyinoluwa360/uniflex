@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -59,16 +61,41 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     }
   }
 
+  /// A collision-resistant, unguessable top-up reference.
+  ///
+  /// This used to be `UFX-<epoch millis>`, which anyone could enumerate. The
+  /// verify Edge Function now also proves the payment belongs to the caller,
+  /// but a random reference removes the enumeration surface entirely.
+  String _newReference() {
+    final rng = Random.secure();
+    final suffix = List.generate(
+      16,
+      (_) => rng.nextInt(16).toRadixString(16),
+    ).join();
+    return 'UFX-$suffix';
+  }
+
   Future<void> _openFundWallet() async {
     final profile = await ref.read(currentProfileProvider.future);
+    final userId = ref.read(authServiceProvider).currentSession?.user.id;
     final email = profile?.email ?? '';
     if (!mounted) return;
+
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Session expired — please sign in again.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     final amount = await _showAmountSheet();
     if (amount == null || !mounted) return;
 
     final publicKey = EnvConfig.paystackPublicKey;
-    final reference = 'UFX-${DateTime.now().millisecondsSinceEpoch}';
+    final reference = _newReference();
 
     // Push the Paystack WebView checkout
     final paystackRef = await Navigator.of(context).push<String?>(
@@ -78,6 +105,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
           email: email,
           amountNaira: amount,
           reference: reference,
+          userId: userId,
         ),
         fullscreenDialog: true,
       ),
@@ -105,12 +133,60 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
           backgroundColor: AppColors.emerald,
         ),
       );
-    } on WalletException catch (e) {
+    } catch (e) {
+      // The money has already left the student's bank at this point, so a
+      // failure here must be recoverable rather than silent. Previously only
+      // WalletException was caught, so a transport/Edge Function error threw
+      // past this and the student saw nothing at all.
+      final message = e is WalletException
+          ? e.message
+          : 'We could not confirm your payment. If you were debited, pull to '
+              'refresh in a moment — your balance updates once it clears.';
+      if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(
-          content: Text(e.message),
+          content: Text(message),
           behavior: SnackBarBehavior.floating,
           backgroundColor: AppColors.error,
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(
+            label: 'Retry',
+            textColor: AppColors.pureWhite,
+            onPressed: () => _retryVerification(paystackRef),
+          ),
+        ),
+      );
+    }
+  }
+
+  /// Re-runs verification for a reference whose first attempt failed. Safe to
+  /// call repeatedly — the server treats an already-credited reference as a
+  /// success and returns the current balance.
+  Future<void> _retryVerification(String reference) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final balance =
+          await ref.read(walletServiceProvider).verifyPaystackPayment(reference);
+      ref.invalidate(walletBalanceProvider);
+      ref.invalidate(walletInfoProvider);
+      ref.invalidate(walletTransactionsProvider);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Confirmed. Balance: ₦${balance.toStringAsFixed(2)}'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.emerald,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Still could not confirm. Please contact support with your '
+            'payment reference.',
+          ),
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }

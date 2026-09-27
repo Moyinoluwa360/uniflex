@@ -183,12 +183,8 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
 
     try {
       final client = ref.read(supabaseClientProvider);
-      final deliveryFee = switch (deliveryType) {
-        'campus_delivery' => 200.0,
-        'hostel_delivery' => 300.0,
-        _ => 0.0,
-      };
-      final total = cart.subtotal + deliveryFee + packFee;
+      final total =
+          cart.subtotal + vendor.deliveryFeeFor(deliveryType) + packFee;
 
       // Build the JSONB line-items array expected by the RPC.
       final lineItems = cart.items
@@ -221,6 +217,15 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
           'p_packs': packs,
         },
       ) as Map<String, dynamic>;
+
+      // PIN problems come back as a payload rather than an exception, so
+      // the server can commit the failed-attempt counter that drives the
+      // lockout — a raise would roll it back. See _check_transaction_pin().
+      final rpcError = result['error'] as String?;
+      if (rpcError != null) {
+        state = OrderPlacementState(error: _mapError(rpcError));
+        return null;
+      }
 
       final orderId = result['order_id'] as String;
       final planOverBudget = result['plan_over_budget'] as bool? ?? false;
@@ -289,6 +294,12 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
         },
       ) as Map<String, dynamic>;
 
+      final rpcError = result['error'] as String?;
+      if (rpcError != null) {
+        state = OrderPlacementState(error: _mapError(rpcError));
+        return null;
+      }
+
       final orderId = result['order_id'] as String;
       final planOverBudget = result['plan_over_budget'] as bool? ?? false;
 
@@ -317,16 +328,45 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
     }
   }
 
-  /// Translates Postgres exception messages into user-facing error strings.
-  /// The special value 'insufficient_balance' is detected by the UI to
-  /// show a "Fund Wallet" shortcut rather than a generic error.
+  /// Translates server error codes into user-facing error strings. The
+  /// sentinel values 'insufficient_balance' / 'invalid_pin' are detected by
+  /// the UI to show tailored feedback rather than a generic message.
+  ///
+  /// Anything unrecognised falls back to a generic line: raw Postgres
+  /// exception text used to be shown to students verbatim, which leaked
+  /// internal schema detail and read as gibberish to them.
   String _mapError(String raw) {
     if (raw.contains('INSUFFICIENT_BALANCE')) return 'insufficient_balance';
     if (raw.contains('INVALID_PIN')) return 'invalid_pin';
+    if (raw.contains('PIN_LOCKED')) {
+      return 'Too many incorrect PIN attempts. Try again in 15 minutes.';
+    }
+    if (raw.contains('PIN_NOT_SET')) {
+      return 'Set up your transaction PIN before placing an order.';
+    }
+    if (raw.contains('TOTAL_MISMATCH')) {
+      return 'Prices changed while you were checking out. '
+          'Please review your cart and try again.';
+    }
+    if (raw.contains('PRODUCT_UNAVAILABLE')) {
+      return 'One of the items in your cart is no longer available.';
+    }
+    if (raw.contains('PRODUCT_NOT_FOUND') ||
+        raw.contains('PRODUCT_VENDOR_MISMATCH')) {
+      return 'One of the items in your cart is no longer on the menu.';
+    }
+    if (raw.contains('CATEGORY_INACTIVE') ||
+        raw.contains('CATEGORY_NOT_FOUND')) {
+      return 'That service is not available right now.';
+    }
+    if (raw.contains('SCHEDULE_IN_PAST')) {
+      return 'Pick a scheduled time in the future.';
+    }
+    if (raw.contains('EMPTY_ORDER')) return 'Your cart is empty.';
     if (raw.contains('WALLET_NOT_FOUND')) {
       return 'Wallet not found — please contact support.';
     }
-    return raw;
+    return 'Order failed. Please try again.';
   }
 
   void reset() => state = const OrderPlacementState();

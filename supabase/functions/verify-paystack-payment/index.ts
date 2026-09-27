@@ -104,6 +104,8 @@ Deno.serve(async (req: Request) => {
       amount: number;   // in kobo
       currency: string;
       reference: string;
+      customer?: { email?: string };
+      metadata?: { user_id?: string } | string | null;
     };
   };
 
@@ -144,8 +146,47 @@ Deno.serve(async (req: Request) => {
     );
   }
 
+  // ── 3b. Confirm the payment actually belongs to the caller ───────────
+  //
+  // Without this, the function credited whoever asked. Combined with the
+  // old guessable reference format (UFX-<epoch millis>), any student could
+  // claim another student's top-up by brute-forcing references — first
+  // caller wins, since the only other guard was reference uniqueness.
+  //
+  // Two independent proofs of ownership are accepted: the user_id the
+  // client attaches as Paystack metadata, or the payer's email (Supabase
+  // auth emails are unique, so an email match is a valid binding and it
+  // also covers payments started before metadata was sent).
+  const metadata = typeof paystackData.data.metadata === "object" &&
+      paystackData.data.metadata !== null
+    ? paystackData.data.metadata
+    : null;
+  const metaUserId = metadata?.user_id;
+  const payerEmail = paystackData.data.customer?.email?.toLowerCase() ?? "";
+  const callerEmail = (user.email ?? "").toLowerCase();
+
+  const ownsByMetadata = typeof metaUserId === "string" && metaUserId === user.id;
+  const ownsByEmail = payerEmail !== "" && payerEmail === callerEmail;
+
+  if (!ownsByMetadata && !ownsByEmail) {
+    console.warn(
+      `Rejected top-up claim: reference ${reference} does not belong to user ${user.id}`,
+    );
+    return new Response(
+      JSON.stringify({ error: "This payment does not belong to your account." }),
+      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
   // Paystack stores amounts in kobo — convert to naira
   const amountNaira = paystackData.data.amount / 100;
+
+  if (!Number.isFinite(amountNaira) || amountNaira <= 0) {
+    return new Response(
+      JSON.stringify({ error: "Unexpected payment amount" }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
 
   // ── 4. Credit the wallet via the SECURITY DEFINER RPC ───────────────
   const { data: rpcResult, error: rpcError } = await adminClient.rpc(
@@ -159,11 +200,23 @@ Deno.serve(async (req: Request) => {
 
   if (rpcError) {
     if (rpcError.message.includes("DUPLICATE_REFERENCE")) {
-      // Idempotent: this reference was already credited — return success
-      // so the client doesn't retry indefinitely.
+      // Idempotent: this reference was already credited. Return 200 with
+      // the current balance, not 409 — the client treats a non-2xx as a
+      // thrown FunctionException, so the old 409 surfaced a scary error on
+      // what is actually the success path (a retried verification).
+      const { data: wallet } = await adminClient
+        .from("wallets")
+        .select("balance")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
       return new Response(
-        JSON.stringify({ duplicate: true, message: "Already processed" }),
-        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        JSON.stringify({
+          success: true,
+          duplicate: true,
+          balance: Number(wallet?.balance ?? 0),
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
     console.error("credit_wallet RPC error:", rpcError);

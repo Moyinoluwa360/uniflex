@@ -38,6 +38,19 @@ serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
+    // This endpoint credits wallets, so it must prove the caller is the
+    // scheduler and not a passer-by. It previously performed NO auth check
+    // at all despite the docstring claiming the service-role key was
+    // required — anyone who knew the URL could trigger payouts.
+    const authHeader = req.headers.get('Authorization') ?? ''
+    const presented = authHeader.replace(/^Bearer\s+/i, '').trim()
+    if (presented !== serviceKey) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
     const supabase = createClient(supabaseUrl, serviceKey)
 
     const { error } = await supabase.rpc('process_birthday_rewards')

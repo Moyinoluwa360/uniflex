@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
+import '../advertisements/advertisements_screen.dart';
 import '../around_categories/around_categories_screen.dart';
+import '../referrals/referral_codes_screen.dart';
 import '../riders/rider_management_screen.dart';
 import '../vendors/vendor_management_screen.dart';
 
@@ -40,6 +42,20 @@ class ManageHubScreen extends StatelessWidget {
             title: 'Around Categories',
             subtitle: 'The service categories students can request',
             screen: AroundCategoriesScreen(),
+          ),
+          SizedBox(height: AppSpacing.cardGap),
+          _ManageEntry(
+            icon: Icons.confirmation_number_outlined,
+            title: 'Referral Codes',
+            subtitle: 'Mint codes, allocate them, and track signups',
+            screen: ReferralCodesScreen(),
+          ),
+          SizedBox(height: AppSpacing.cardGap),
+          _ManageEntry(
+            icon: Icons.campaign_outlined,
+            title: 'Advertisements',
+            subtitle: 'Banners on the student home page',
+            screen: AdvertisementsScreen(),
           ),
         ],
       ),

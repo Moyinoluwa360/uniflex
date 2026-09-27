@@ -3550,3 +3550,23 @@ update public.products set requires_pack = false
 -- Note: the old protein/extra product_options rows are left in place
 -- (harmless, unread by the new catalog UI) rather than dropped — see
 -- CHANGELOG.md "Post-testing fixes & changes" for why.
+
+
+-- =====================================================================
+-- PHASE 9 — Security & logic hardening (audit of 2026-09-27)
+-- =====================================================================
+-- Phase 9 is NOT inlined here. It lives in its own file:
+--
+--     supabase/phase9_security_hardening.sql
+--
+-- Run that file immediately after this one. A database with this file but
+-- not Phase 9 is exploitable — among other things order totals are taken
+-- from the client, any signed-in student can trigger unlimited birthday
+-- wallet credits, students can write their own membership tier / reward
+-- points / is_active, and a cancelled order never refunds anyone.
+--
+-- Earlier phases folded their fix files back into this one. Phase 9 is
+-- kept separate on purpose: it rewrites a dozen functions that also exist
+-- above, so duplicating it here would leave two definitions of each to
+-- keep in sync, and whichever ran last would silently win.
+-- =====================================================================

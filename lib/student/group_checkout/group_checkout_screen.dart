@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/models/order.dart';
 import '../../shared/models/vendor.dart';
+import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
+import '../../shared/widgets/pin/pin_entry_sheet.dart';
 import '../ordering/cart_provider.dart';
 import '../ordering/order_confirmation_screen.dart';
 import '../services/student_providers.dart';
@@ -129,6 +131,18 @@ class _GroupCheckoutScreenState
     extends ConsumerState<GroupCheckoutScreen> {
   bool _isCheckingOut = false;
 
+  /// Prompts for the transaction PIN, offering to set one first if this
+  /// account has none. Returns null if the student backs out.
+  Future<String?> _collectPin() async {
+    final hasPin = await ref.read(profileServiceProvider).hasTransactionPin();
+    if (!mounted) return null;
+    if (!hasPin) {
+      final didSet = await showSetPinSheet(context, ref);
+      if (!mounted || !didSet) return null;
+    }
+    return showEnterPinSheet(context);
+  }
+
   Future<void> _checkout() async {
     final cart = ref.read(cartProvider);
     if (cart.isEmpty) {
@@ -137,6 +151,11 @@ class _GroupCheckoutScreenState
       );
       return;
     }
+
+    // Group checkout spends the wallet, so it goes through the same
+    // transaction-PIN gate as an ordinary order.
+    final pin = await _collectPin();
+    if (pin == null || !mounted) return;
 
     setState(() => _isCheckingOut = true);
     try {
@@ -158,6 +177,7 @@ class _GroupCheckoutScreenState
         groupId: widget.groupId,
         lineItems: lineItems,
         myTotal: cart.subtotal,
+        pin: pin,
       );
 
       ref.read(cartProvider.notifier).clear();

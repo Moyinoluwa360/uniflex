@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/profile.dart';
-import '../otp/termii_otp_service.dart';
+import '../otp/phone_otp_service.dart';
 import '../profile/profile_service.dart';
 import '../supabase/supabase_providers.dart';
 import 'auth_service.dart';
@@ -15,10 +15,8 @@ final profileServiceProvider = Provider<ProfileService>((ref) {
   return ProfileService(ref.watch(supabaseClientProvider));
 });
 
-final termiiOtpServiceProvider = Provider<TermiiOtpService>((ref) {
-  final service = TermiiOtpService();
-  ref.onDispose(service.dispose);
-  return service;
+final phoneOtpServiceProvider = Provider<PhoneOtpService>((ref) {
+  return PhoneOtpService(ref.watch(supabaseClientProvider));
 });
 
 /// Fires on sign-in, sign-out, and token refresh. [currentProfileProvider]

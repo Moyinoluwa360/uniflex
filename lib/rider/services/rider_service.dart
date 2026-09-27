@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/models/order.dart';
+import '../../shared/services/notifications/notification_inbox_service.dart';
 import '../delivery/delivery_record.dart';
 import '../pool/pool_order.dart';
 
@@ -27,9 +28,13 @@ class ActiveDeliveryDetail {
 /// that checks `is_rider()` server-side (see Phase 5 block in
 /// supabase/schema.sql). No client-side role check is needed here.
 class RiderService {
-  const RiderService(this._client);
+  const RiderService(this._client, this._notifications);
 
   final SupabaseClient _client;
+
+  /// Used to keep the customer posted as the delivery progresses, and to
+  /// send them a one-off message from the active-delivery screen.
+  final NotificationInboxService _notifications;
 
   // ── Online/offline ──────────────────────────────────────────────────
 
@@ -222,6 +227,9 @@ class RiderService {
 
   Future<void> acceptOrder(String orderId) async {
     await _client.rpc('accept_order', params: {'p_order_id': orderId});
+    // accept_order moves the order to out_for_delivery, so this is the
+    // "your rider is on the way" push. Non-throwing — see notifyOrderStatus.
+    await _notifications.notifyOrderStatus(orderId);
   }
 
   Future<void> confirmPickup(String orderId) async {
@@ -233,6 +241,17 @@ class RiderService {
       'p_order_id': orderId,
       'p_pin': pin.trim().toUpperCase(),
     });
+    await _notifications.notifyOrderStatus(orderId);
+  }
+
+  /// Sends the customer a free-text message about an order this rider is
+  /// currently assigned to. Throws [NotifyException] on failure, because
+  /// unlike the automatic pushes this is an explicit action.
+  Future<void> messageCustomer({
+    required String orderId,
+    required String message,
+  }) {
+    return _notifications.messageCustomer(orderId: orderId, message: message);
   }
 
   // ── Delivery history ───────────────────────────────────────────────

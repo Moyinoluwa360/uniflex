@@ -3,13 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/around_category.dart';
 import '../../shared/models/order.dart';
 import '../../shared/models/product.dart';
+import '../../shared/models/advertisement.dart';
 import '../../shared/models/vendor.dart';
+import '../../shared/services/notifications/notification_inbox_service.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
 import 'admin_service.dart';
 
 /// Single shared instance of [AdminService].
 final adminServiceProvider = Provider<AdminService>((ref) {
-  return AdminService(ref.watch(supabaseClientProvider));
+  return AdminService(
+    ref.watch(supabaseClientProvider),
+    ref.watch(notificationInboxServiceProvider),
+  );
 });
 
 /// All vendors (active + inactive), for the admin management screens.
@@ -59,4 +64,23 @@ final adminRidersProvider = FutureProvider<List<RiderAccount>>((ref) async {
 final adminAroundCategoriesProvider =
     FutureProvider<List<AroundCategoryData>>((ref) async {
   return ref.watch(adminServiceProvider).fetchAllAroundCategories();
+});
+
+/// Phase 10: every referral code Admin has minted, with usage counts.
+/// Refresh with `ref.invalidate(adminReferralCodesProvider)` after a change.
+final adminReferralCodesProvider =
+    FutureProvider<List<ReferralCodeRow>>((ref) async {
+  return ref.watch(adminServiceProvider).fetchReferralCodes();
+});
+
+/// The signups attributed to one referral code. Family key is the code id.
+final adminReferralCodeUsesProvider =
+    FutureProvider.family<List<ReferralCodeUse>, String>((ref, codeId) async {
+  return ref.watch(adminServiceProvider).fetchReferralCodeUses(codeId);
+});
+
+/// Phase 10: every advertisement, including paused/scheduled/expired ones.
+final adminAdvertisementsProvider =
+    FutureProvider<List<Advertisement>>((ref) async {
+  return ref.watch(adminServiceProvider).fetchAllAdvertisements();
 });

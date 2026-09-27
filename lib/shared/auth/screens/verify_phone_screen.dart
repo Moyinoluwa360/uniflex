@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/auth/auth_providers.dart';
-import '../../services/otp/termii_otp_service.dart';
+import '../../services/otp/phone_otp_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/app_bar/uniflex_app_bar.dart';
@@ -11,9 +11,10 @@ import '../../widgets/inputs/app_text_field.dart';
 import 'complete_profile_screen.dart';
 
 /// Step 1b — the OTP half of Step One. The account isn't considered
-/// created until the code entered here is confirmed by Termii; on
-/// success this records `phone`/`phone_verified_at` on the profiles stub
-/// row and hands off to [CompleteProfileScreen] (Step Two).
+/// created until the code entered here is confirmed by Termii; the
+/// `phone-otp` Edge Function records `phone`/`phone_verified_at` on the
+/// profiles stub row once it does, and this screen then hands off to
+/// [CompleteProfileScreen] (Step Two).
 class VerifyPhoneScreen extends ConsumerStatefulWidget {
   const VerifyPhoneScreen({
     super.key,
@@ -55,30 +56,26 @@ class _VerifyPhoneScreenState extends ConsumerState<VerifyPhoneScreen> {
     });
 
     try {
-      final verified = await ref
-          .read(termiiOtpServiceProvider)
-          .verifyOtp(pinId: _pinId, pin: code);
+      // The Edge Function verifies with Termii and, on success, records
+      // phone/phone_verified_at itself using the service role. The client
+      // deliberately no longer writes those columns — see the note in
+      // phone_otp_service.dart.
+      final verified = await ref.read(phoneOtpServiceProvider).verifyOtp(
+            pinId: _pinId,
+            pin: code,
+            phoneNumber: widget.phone,
+          );
 
       if (!verified) {
         setState(() => _errorText = 'That code is incorrect. Try again.');
         return;
       }
 
-      final userId = ref.read(authServiceProvider).currentSession?.user.id;
-      if (userId == null) {
-        setState(() => _errorText = 'Session expired — sign up again.');
-        return;
-      }
-
-      await ref
-          .read(profileServiceProvider)
-          .markPhoneVerified(userId: userId, phone: widget.phone);
-
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const CompleteProfileScreen()),
       );
-    } on TermiiException catch (e) {
+    } on OtpException catch (e) {
       setState(() => _errorText = e.message);
     } catch (_) {
       setState(() => _errorText = 'Something went wrong. Try again.');
@@ -94,7 +91,7 @@ class _VerifyPhoneScreenState extends ConsumerState<VerifyPhoneScreen> {
     });
     try {
       final result = await ref
-          .read(termiiOtpServiceProvider)
+          .read(phoneOtpServiceProvider)
           .sendOtp(widget.phone);
       setState(() => _pinId = result.pinId);
       if (mounted) {
@@ -102,7 +99,7 @@ class _VerifyPhoneScreenState extends ConsumerState<VerifyPhoneScreen> {
           context,
         ).showSnackBar(const SnackBar(content: Text('Code resent.')));
       }
-    } on TermiiException catch (e) {
+    } on OtpException catch (e) {
       setState(() => _errorText = e.message);
     } finally {
       if (mounted) setState(() => _isResending = false);

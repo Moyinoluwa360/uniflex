@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/auth/auth_providers.dart';
-import '../../services/otp/termii_otp_service.dart';
+import '../../services/otp/phone_otp_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/buttons/primary_button.dart';
@@ -89,7 +89,7 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
           .createStubProfile(userId: userId, email: email);
 
       final otpResult = await ref
-          .read(termiiOtpServiceProvider)
+          .read(phoneOtpServiceProvider)
           .sendOtp(e164Phone);
 
       if (!mounted) return;
@@ -101,7 +101,7 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
       );
     } on AuthException catch (e) {
       setState(() => _errorText = e.message);
-    } on TermiiException catch (e) {
+    } on OtpException catch (e) {
       setState(
         () => _errorText =
             'Account created, but the verification code could not be '

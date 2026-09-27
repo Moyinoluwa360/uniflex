@@ -2,11 +2,107 @@ import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/models/advertisement.dart';
 import '../../shared/models/around_category.dart';
 import '../../shared/models/order.dart';
 import '../../shared/models/order_item.dart';
 import '../../shared/models/product.dart';
 import '../../shared/models/vendor.dart';
+import '../../shared/services/notifications/notification_inbox_service.dart';
+
+/// A referral code as Admin sees it, with how many signups have used it.
+class ReferralCodeRow {
+  const ReferralCodeRow({
+    required this.id,
+    required this.code,
+    required this.isActive,
+    required this.useCount,
+    required this.createdAt,
+    this.ownerId,
+    this.ownerName,
+    this.ownerLabel,
+    this.note,
+  });
+
+  factory ReferralCodeRow.fromMap(Map<String, dynamic> map) {
+    return ReferralCodeRow(
+      id: map['id'] as String,
+      code: map['code'] as String,
+      isActive: map['is_active'] as bool? ?? true,
+      useCount: (map['use_count'] as num?)?.toInt() ?? 0,
+      createdAt: DateTime.parse(map['created_at'] as String).toLocal(),
+      ownerId: map['owner_id'] as String?,
+      ownerName: map['owner_name'] as String?,
+      ownerLabel: map['owner_label'] as String?,
+      note: map['note'] as String?,
+    );
+  }
+
+  final String id;
+  final String code;
+  final bool isActive;
+  final int useCount;
+  final DateTime createdAt;
+
+  /// Set when the code is held by an app user — that user earns the referral
+  /// bonus. Null for a code given to someone with no account.
+  final String? ownerId;
+  final String? ownerName;
+  final String? ownerLabel;
+  final String? note;
+
+  /// Who this code was allocated to, however that was recorded.
+  String get allocatedTo => ownerName ?? ownerLabel ?? 'Unallocated';
+
+  /// True when nobody earns the bonus from this code's signups.
+  bool get earnsNobodyBonus => ownerId == null;
+}
+
+/// A student as returned by `admin_search_students()`, for the allocate
+/// picker on the referral-code form.
+class StudentPick {
+  const StudentPick({
+    required this.id,
+    required this.displayName,
+    this.matricNumber,
+    this.email,
+  });
+
+  factory StudentPick.fromMap(Map<String, dynamic> map) {
+    return StudentPick(
+      id: map['id'] as String,
+      displayName: map['display_name'] as String? ?? '—',
+      matricNumber: map['matric_number'] as String?,
+      email: map['email'] as String?,
+    );
+  }
+
+  final String id;
+  final String displayName;
+  final String? matricNumber;
+  final String? email;
+}
+
+/// One signup attributed to a referral code.
+class ReferralCodeUse {
+  const ReferralCodeUse({
+    required this.referredName,
+    required this.usedAt,
+    this.matricNumber,
+  });
+
+  factory ReferralCodeUse.fromMap(Map<String, dynamic> map) {
+    return ReferralCodeUse(
+      referredName: map['referred_name'] as String? ?? '—',
+      usedAt: DateTime.parse(map['used_at'] as String).toLocal(),
+      matricNumber: map['matric_number'] as String?,
+    );
+  }
+
+  final String referredName;
+  final DateTime usedAt;
+  final String? matricNumber;
+}
 
 /// One row from `admin_list_riders()` — a rider account as Admin sees it
 /// in the Rider Management screen (post-testing fixes, Section 7).
@@ -70,9 +166,13 @@ class KitchenOrder {
 /// checks `is_admin()` itself. No client-side role check is needed in
 /// this service — a non-admin JWT would be rejected by the server.
 class AdminService {
-  const AdminService(this._client);
+  const AdminService(this._client, this._notifications);
 
   final SupabaseClient _client;
+
+  /// Used to tell the customer about status changes. Injected rather than
+  /// constructed here so the "who may notify whom" rule stays in one place.
+  final NotificationInboxService _notifications;
 
   // ── Vendors ─────────────────────────────────────────────────────────
 
@@ -206,12 +306,26 @@ class AdminService {
       // required here (post-testing fixes, Section 12) — Around requests
       // are also source='uniflex' and were leaking into the Kitchen
       // Queue alongside food orders before this fix.
-      final active = rows
-          .where((m) =>
-              m['type'] == 'food' &&
-              const ['placed', 'preparing', 'ready', 'ready_for_pickup']
-                  .contains(m['status']))
-          .toList();
+      //
+      // Scheduled orders are excluded until their time is due (audit #17):
+      // they were showing up here as ordinary 'placed' orders the moment
+      // they were paid for, so the kitchen would cook next Friday's order
+      // today. Until due they belong only to the Scheduled screen — see
+      // streamScheduledOrders().
+      final now = DateTime.now();
+      final active = rows.where((m) {
+        if (m['type'] != 'food') return false;
+        if (!const ['placed', 'preparing', 'ready', 'ready_for_pickup']
+            .contains(m['status'])) {
+          return false;
+        }
+        final scheduledFor = m['scheduled_for'] as String?;
+        if (scheduledFor != null) {
+          final due = DateTime.tryParse(scheduledFor)?.toLocal();
+          if (due != null && due.isAfter(now)) return false;
+        }
+        return true;
+      }).toList();
 
       if (active.isEmpty) {
         yield [];
@@ -252,6 +366,10 @@ class AdminService {
       'p_order_id': orderId,
       'p_new_status': newStatus,
     });
+    // Tell the customer. Deliberately after the RPC and non-throwing: the
+    // status change has already committed, so a failed push must not make
+    // the kitchen think the change did not stick.
+    await _notifications.notifyOrderStatus(orderId);
   }
 
   /// The "Transfer to Rider" action (Section 12) — explicitly pushes a
@@ -367,6 +485,158 @@ class AdminService {
   /// if any past request used it — deactivate instead in that case.
   Future<void> deleteAroundCategory(String id) async {
     await _client.from('around_categories').delete().eq('id', id);
+  }
+
+  // ── Referral codes (Phase 10) ─────────────────────────────────────────
+
+  /// Every code Admin has minted, newest first, with usage counts.
+  Future<List<ReferralCodeRow>> fetchReferralCodes() async {
+    final rows = await _client.rpc('admin_list_referral_codes');
+    return (rows as List)
+        .map((m) => ReferralCodeRow.fromMap(m as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Mints a new code. [ownerId] is the student who will earn the referral
+  /// bonus; pass [ownerLabel] instead when the holder has no account.
+  Future<void> createReferralCode({
+    required String code,
+    String? ownerId,
+    String? ownerLabel,
+    String? note,
+  }) async {
+    try {
+      await _client.rpc('admin_create_referral_code', params: {
+        'p_code': code,
+        'p_owner_id': ownerId,
+        'p_owner_label': ownerLabel,
+        'p_note': note,
+      });
+    } on PostgrestException catch (e) {
+      throw AdminException(_mapReferralError(e.message));
+    }
+  }
+
+  Future<void> updateReferralCode({
+    required String codeId,
+    String? ownerId,
+    String? ownerLabel,
+    String? note,
+    bool? isActive,
+  }) async {
+    try {
+      await _client.rpc('admin_update_referral_code', params: {
+        'p_code_id': codeId,
+        'p_owner_id': ownerId,
+        'p_owner_label': ownerLabel,
+        'p_note': note,
+        'p_is_active': isActive,
+      });
+    } on PostgrestException catch (e) {
+      throw AdminException(_mapReferralError(e.message));
+    }
+  }
+
+  Future<void> deleteReferralCode(String codeId) async {
+    try {
+      await _client
+          .rpc('admin_delete_referral_code', params: {'p_code_id': codeId});
+    } on PostgrestException catch (e) {
+      throw AdminException(_mapReferralError(e.message));
+    }
+  }
+
+  Future<List<ReferralCodeUse>> fetchReferralCodeUses(String codeId) async {
+    final rows = await _client
+        .rpc('admin_referral_code_uses', params: {'p_code_id': codeId});
+    return (rows as List)
+        .map((m) => ReferralCodeUse.fromMap(m as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<StudentPick>> searchStudents(String query) async {
+    final rows =
+        await _client.rpc('admin_search_students', params: {'p_query': query});
+    return (rows as List)
+        .map((m) => StudentPick.fromMap(m as Map<String, dynamic>))
+        .toList();
+  }
+
+  String _mapReferralError(String raw) {
+    if (raw.contains('CODE_TAKEN')) {
+      return 'That code is already in use. Pick another.';
+    }
+    if (raw.contains('CODE_FORMAT')) {
+      return 'Codes must be 4–16 characters, letters and numbers only.';
+    }
+    if (raw.contains('CODE_IN_USE')) {
+      return 'People have already signed up with this code, so it cannot be '
+          'deleted. Pause it instead.';
+    }
+    if (raw.contains('OWNER_NOT_FOUND')) return 'That student no longer exists.';
+    if (raw.contains('CODE_NOT_FOUND')) return 'That code no longer exists.';
+    return raw;
+  }
+
+  // ── Advertisements (Phase 10) ─────────────────────────────────────────
+
+  /// Every ad, including paused, scheduled, and expired ones (the read
+  /// policy gives admin the full table; students see only live ads).
+  Future<List<Advertisement>> fetchAllAdvertisements() async {
+    final rows = await _client
+        .from('advertisements')
+        .select()
+        .order('sort_order')
+        .order('created_at', ascending: false);
+    return rows.map((m) => Advertisement.fromMap(m)).toList();
+  }
+
+  Future<void> upsertAdvertisement({
+    String? id,
+    required String title,
+    required String subtitle,
+    required bool isDark,
+    required bool isActive,
+    required int sortOrder,
+    String? imageUrl,
+    AdLinkType linkType = AdLinkType.none,
+    String? linkValue,
+    DateTime? startsAt,
+    DateTime? endsAt,
+  }) async {
+    final map = <String, dynamic>{
+      'title': title,
+      'subtitle': subtitle,
+      'is_dark': isDark,
+      'is_active': isActive,
+      'sort_order': sortOrder,
+      'image_url': imageUrl,
+      'link_type': linkType.name,
+      'link_value': linkType == AdLinkType.none ? null : linkValue,
+      'starts_at': startsAt?.toUtc().toIso8601String(),
+      'ends_at': endsAt?.toUtc().toIso8601String(),
+    };
+    if (id != null) {
+      await _client.from('advertisements').update(map).eq('id', id);
+    } else {
+      await _client.from('advertisements').insert(map);
+    }
+  }
+
+  Future<void> deleteAdvertisement(String id) async {
+    await _client.from('advertisements').delete().eq('id', id);
+  }
+
+  /// Uploads an ad image into the existing product-images bucket, under its
+  /// own prefix so ad art and menu photos stay separable.
+  Future<String> uploadAdImage(Uint8List bytes, String fileName) async {
+    final path = 'ads/$fileName';
+    await _client.storage.from('product-images').uploadBinary(
+          path,
+          bytes,
+          fileOptions: const FileOptions(upsert: true),
+        );
+    return _client.storage.from('product-images').getPublicUrl(path);
   }
 
   // ── Dashboard ─────────────────────────────────────────────────────────

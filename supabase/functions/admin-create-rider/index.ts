@@ -83,6 +83,12 @@ Deno.serve(async (req: Request) => {
       400,
     );
   }
+  // A phone number is required: the student's tracking screen offers to call
+  // their assigned rider, and a rider seeded without one leaves that with
+  // nothing to dial.
+  if (!phone || phone.trim().length < 7) {
+    return jsonResponse({ error: "A valid phone number is required" }, 400);
+  }
   if (password.length < 8) {
     return jsonResponse({ error: "Password must be at least 8 characters" }, 400);
   }
@@ -110,7 +116,7 @@ Deno.serve(async (req: Request) => {
     role: "rider",
     email,
     full_name,
-    phone: phone || null,
+    phone: phone.trim(),
     onboarding_complete: true,
     is_active: true,
   });

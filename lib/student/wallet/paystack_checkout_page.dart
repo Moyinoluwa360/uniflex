@@ -19,10 +19,16 @@ class PaystackCheckoutPage extends StatefulWidget {
     required this.email,
     required this.amountNaira,
     required this.reference,
+    required this.userId,
   });
 
   final String publicKey;
   final String email;
+
+  /// Sent to Paystack as `metadata.user_id` so the verify Edge Function can
+  /// prove the payment belongs to the account claiming it. Without this the
+  /// function credited whoever presented a valid reference.
+  final String userId;
 
   /// Amount in Naira (₦). Converted to kobo (× 100) when passed to Paystack.
   final double amountNaira;
@@ -66,6 +72,7 @@ class _PaystackCheckoutPageState extends State<PaystackCheckoutPage> {
   }
 
   void _onPaystackMessage(JavaScriptMessage message) {
+    if (!mounted) return;
     try {
       final data = json.decode(message.message) as Map<String, dynamic>;
       final status = data['status'] as String?;
@@ -90,6 +97,7 @@ class _PaystackCheckoutPageState extends State<PaystackCheckoutPage> {
     final safeEmail = _escapeJs(widget.email);
     final amountKobo = (widget.amountNaira * 100).round();
     final safeRef = _escapeJs(widget.reference);
+    final safeUserId = _escapeJs(widget.userId);
 
     return '''
 <!DOCTYPE html>
@@ -136,6 +144,7 @@ class _PaystackCheckoutPageState extends State<PaystackCheckoutPage> {
         ref: '$safeRef',
         currency: 'NGN',
         label: 'Uniflex Wallet Top-up',
+        metadata: { user_id: '$safeUserId' },
         onClose: function () {
           PaystackChannel.postMessage(JSON.stringify({ status: 'cancelled' }));
         },

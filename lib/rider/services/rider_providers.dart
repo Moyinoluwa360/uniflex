@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/models/order.dart';
 import '../../shared/services/auth/auth_providers.dart';
+import '../../shared/services/notifications/notification_inbox_service.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
 import '../delivery/delivery_record.dart';
 import '../pool/pool_order.dart';
@@ -9,7 +10,10 @@ import 'rider_service.dart';
 
 /// Single shared instance of [RiderService].
 final riderServiceProvider = Provider<RiderService>((ref) {
-  return RiderService(ref.watch(supabaseClientProvider));
+  return RiderService(
+    ref.watch(supabaseClientProvider),
+    ref.watch(notificationInboxServiceProvider),
+  );
 });
 
 /// Live stream of pool-eligible unassigned orders. Re-emits via Supabase

@@ -217,10 +217,16 @@ class RiderManagementScreen extends ConsumerWidget {
                           : null,
                     ),
                     const SizedBox(height: AppSpacing.md),
+                    // Required: the student's tracking screen offers to call
+                    // their assigned rider, so a rider with no number leaves
+                    // that with nothing to dial.
                     AppTextField(
                       controller: phoneCtrl,
-                      label: 'Phone (optional)',
+                      label: 'Phone',
                       keyboardType: TextInputType.phone,
+                      validator: (v) => (v == null || v.trim().length < 7)
+                          ? 'Enter the rider\'s phone number'
+                          : null,
                     ),
                     const SizedBox(height: AppSpacing.md),
                     AppTextField(

@@ -67,8 +67,6 @@ class _SendGiftTabState extends ConsumerState<_SendGiftTab> {
   final _formKey = GlobalKey<FormState>();
   final _matricController = TextEditingController();
   final _messageController = TextEditingController();
-  bool _isSending = false;
-
   @override
   void dispose() {
     _matricController.dispose();
@@ -174,17 +172,9 @@ class _SendGiftTabState extends ConsumerState<_SendGiftTab> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                icon: _isSending
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.pureWhite),
-                      )
-                    : const Icon(Icons.search),
-                label: Text(_isSending ? 'Looking up…' : 'Find Recipient'),
-                onPressed: _isSending ? null : _lookup,
+                icon: const Icon(Icons.search),
+                label: const Text('Find Recipient'),
+                onPressed: _lookup,
               ),
             ),
           ],
@@ -193,28 +183,24 @@ class _SendGiftTabState extends ConsumerState<_SendGiftTab> {
     );
   }
 
+  // Sending a gift needs a vendor/item picker that builds a cart on the
+  // recipient's behalf, and that screen does not exist yet — the backend
+  // half (the send_gift RPC) is ready and waiting for it.
+  //
+  // This used to tell the student to "select 'Send as Gift' at checkout",
+  // which was never built, so the instruction sent them looking for a
+  // control that does not exist. Say plainly that it is not ready instead.
   Future<void> _lookup() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _isSending = true);
-    try {
-      // Navigate to vendor selection with context carrying the matric + msg
-      // For now: show a placeholder snack explaining the flow is vendor-first.
-      // Full integration requires a vendor picker that pre-populates the cart
-      // for the recipient — wired up in the "Send Gift" cart flow extension.
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Gift flow: choose a vendor from the Home tab, '
-              'add items to cart, then select "Send as Gift" at checkout.',
-            ),
-            duration: Duration(seconds: 5),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isSending = false);
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Sending gifts is not available yet — we are still building the '
+          'item picker for it. Gifts you receive will show in History.',
+        ),
+        duration: Duration(seconds: 4),
+      ),
+    );
   }
 }
 

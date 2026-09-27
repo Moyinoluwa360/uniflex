@@ -108,6 +108,22 @@ serve(async (req: Request) => {
   }
 
   try {
+    // This endpoint pushes to an arbitrary FCM device token, so it is a
+    // service-role-only primitive: callers go through `notify-user`, which
+    // checks that the caller may contact that customer and resolves the
+    // token itself. Previously there was NO auth check here at all, so
+    // anyone holding a device token could push to it.
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    const presented = (req.headers.get('Authorization') ?? '')
+      .replace(/^Bearer\s+/i, '')
+      .trim()
+    if (!serviceKey || presented !== serviceKey) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     const { token, title, body, data } = await req.json()
 
     if (!token || !title || !body) {

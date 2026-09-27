@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/models/order.dart';
+import '../../shared/services/notifications/notification_inbox_service.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
+import '../../shared/widgets/notify/message_customer_sheet.dart';
 import '../services/admin_providers.dart';
 import '../services/admin_service.dart';
 
@@ -257,6 +259,29 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
     await _run(() => ref
         .read(adminServiceProvider)
         .transferOrderToRider(widget.kitchenOrder.order.id));
+  }
+
+  /// Sends the customer a one-off message about this order. Status changes
+  /// already push automatically — this is for the things a status cannot
+  /// say, like "we're out of jollof, is fried rice okay?".
+  Future<void> _messageCustomer() async {
+    final order = widget.kitchenOrder.order;
+    final sent = await showMessageCustomerSheet(
+      context,
+      onSend: (message) => ref
+          .read(notificationInboxServiceProvider)
+          .messageCustomer(orderId: order.id, message: message),
+      quickReplies: const [
+        'Your order will take a little longer than usual — sorry!',
+        'One of your items is finished. Would you like a swap?',
+        'Your order is ready at the counter.',
+      ],
+    );
+    if (sent && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Message sent')),
+      );
+    }
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -525,37 +550,48 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
             ),
           ],
 
-          // ── Advance button ───────────────────────────────────────────
-          if (nextLabel != null && action != null) ...[
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md,
-                AppSpacing.sm,
-                AppSpacing.md,
-                AppSpacing.md,
-              ),
-              child: SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _isAdvancing ? null : action.$2,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: statusColor,
-                  ),
-                  child: _isAdvancing
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.pureWhite,
-                          ),
-                        )
-                      : Text(nextLabel),
-                ),
-              ),
+          // ── Actions ──────────────────────────────────────────────────
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.sm,
+              AppSpacing.md,
+              AppSpacing.md,
             ),
-          ],
+            child: Row(
+              children: [
+                // Status changes already notify the customer automatically;
+                // this is for anything that needs saying in words.
+                OutlinedButton.icon(
+                  onPressed: _isAdvancing ? null : _messageCustomer,
+                  icon: const Icon(Icons.chat_bubble_outline, size: 16),
+                  label: const Text('Message'),
+                ),
+                if (nextLabel != null && action != null) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: _isAdvancing ? null : action.$2,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: statusColor,
+                      ),
+                      child: _isAdvancing
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.pureWhite,
+                              ),
+                            )
+                          : Text(nextLabel),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ],
       ),
     );

@@ -13,6 +13,8 @@ class Vendor {
     this.location,
     this.contact,
     this.packPrice = 200,
+    this.campusDeliveryFee = 200,
+    this.hostelDeliveryFee = 300,
   });
 
   factory Vendor.fromMap(Map<String, dynamic> map) {
@@ -27,6 +29,10 @@ class Vendor {
       location: map['location'] as String?,
       contact: map['contact'] as String?,
       packPrice: (map['pack_price'] as num?)?.toDouble() ?? 200,
+      campusDeliveryFee:
+          (map['campus_delivery_fee'] as num?)?.toDouble() ?? 200,
+      hostelDeliveryFee:
+          (map['hostel_delivery_fee'] as num?)?.toDouble() ?? 300,
     );
   }
 
@@ -50,6 +56,22 @@ class Vendor {
   /// vendor's pack-requiring items. Set per vendor — Uniflex and each
   /// partner vendor can each have their own.
   final double packPrice;
+
+  /// Delivery fees (₦) for this vendor. These used to be hardcoded in the
+  /// checkout screen, which meant admin could not change them and the
+  /// server had no way to validate an order total against them.
+  final double campusDeliveryFee;
+  final double hostelDeliveryFee;
+
+  /// Fee for a given `delivery_type`, mirroring `_delivery_fee()` in
+  /// supabase/phase9_security_hardening.sql. The server recomputes this
+  /// independently and rejects a mismatched total, so the two must agree.
+  double deliveryFeeFor(String deliveryType) => switch (deliveryType) {
+        'campus_delivery' => campusDeliveryFee,
+        'hostel_delivery' => hostelDeliveryFee,
+        'delivery' => campusDeliveryFee,
+        _ => 0,
+      };
 
   /// True for the primary Uniflex vendor — used to render its home card
   /// differently from partner vendor cards.

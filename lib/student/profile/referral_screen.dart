@@ -20,7 +20,15 @@ class ReferralScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final leaderboardAsync = ref.watch(referralLeaderboardProvider);
-    final code = profile.referralCode ?? '—';
+
+    // Codes are minted by Admin and allocated to a person (Phase 10), so a
+    // student only has one if they were given one. `profile.referralCode` is
+    // the legacy per-student code, kept working for accounts created before
+    // the change.
+    final allocated = ref.watch(myReferralCodeProvider).valueOrNull;
+    final code = (allocated?['code'] as String?) ?? profile.referralCode;
+    final codeIsActive = (allocated?['is_active'] as bool?) ?? true;
+    final useCount = (allocated?['use_count'] as num?)?.toInt();
 
     return Scaffold(
       appBar: const UniflexAppBar(title: 'Refer a Friend'),
@@ -68,56 +76,86 @@ class ReferralScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.lg),
 
             // ── Code block ─────────────────────────────────────────────
-            Text('Your referral code', style: theme.textTheme.titleSmall),
-            const SizedBox(height: AppSpacing.sm),
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(AppRadius.card),
-                border: Border.all(color: theme.dividerColor),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      code,
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 4,
-                        color: theme.colorScheme.primary,
+            if (code == null)
+              _NoCodeYet(theme: theme)
+            else ...[
+              Text('Your referral code', style: theme.textTheme.titleSmall),
+              const SizedBox(height: AppSpacing.sm),
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(AppRadius.card),
+                  border: Border.all(color: theme.dividerColor),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        code,
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 4,
+                          color: theme.colorScheme.primary,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.copy_outlined),
-                    tooltip: 'Copy',
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: code));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Code copied')),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: AppSpacing.md),
-
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                icon: const Icon(Icons.share_outlined),
-                label: const Text('Share my code'),
-                onPressed: () => Share.share(
-                  'Use my Uniflex referral code $code when you sign up '
-                  'and we both earn ₦500! Download Uniflex for campus food ordering.',
-                  subject: 'Join me on Uniflex',
+                    IconButton(
+                      icon: const Icon(Icons.copy_outlined),
+                      tooltip: 'Copy',
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: code));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Code copied')),
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ),
-            ),
+
+              if (useCount != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  useCount == 0
+                      ? 'Nobody has used your code yet.'
+                      : '$useCount ${useCount == 1 ? 'person has' : 'people have'} '
+                          'signed up with your code.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+
+              if (!codeIsActive) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'This code has been paused by Uniflex, so new signups '
+                  'cannot use it right now.',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: AppColors.error),
+                ),
+              ],
+
+              const SizedBox(height: AppSpacing.md),
+
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.share_outlined),
+                  label: const Text('Share my code'),
+                  onPressed: codeIsActive
+                      ? () => Share.share(
+                            'Use my Uniflex referral code $code when you sign up '
+                            'and we both earn ₦500! Download Uniflex for campus '
+                            'food ordering.',
+                            subject: 'Join me on Uniflex',
+                          )
+                      : null,
+                ),
+              ),
+            ],
 
             const SizedBox(height: AppSpacing.xl),
 
@@ -214,6 +252,55 @@ class _LeaderboardRow extends StatelessWidget {
             '$count referrals',
             style: theme.textTheme.labelMedium?.copyWith(
               color: AppColors.emerald,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown when the student has not been allocated a referral code. Codes are
+/// minted by Admin now, so "you don't have one" is a normal state rather
+/// than an error — say who to ask instead of showing an empty box.
+class _NoCodeYet extends StatelessWidget {
+  const _NoCodeYet({required this.theme});
+
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.info.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.info.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline, color: AppColors.info, size: 18),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'You do not have a referral code yet',
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(color: AppColors.info),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Referral codes are issued by Uniflex. Reach out to the '
+                  'Uniflex team to be given one — once you have it, every '
+                  'friend who signs up with it and orders earns you ₦500.',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: AppColors.info),
+                ),
+              ],
             ),
           ),
         ],

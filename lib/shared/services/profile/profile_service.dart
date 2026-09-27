@@ -35,20 +35,6 @@ class ProfileService {
     await _client.from('profiles').insert({'id': userId, 'email': email});
   }
 
-  /// Records that Termii verified this phone number, ahead of Step Two.
-  Future<void> markPhoneVerified({
-    required String userId,
-    required String phone,
-  }) async {
-    await _client
-        .from('profiles')
-        .update({
-          'phone': phone,
-          'phone_verified_at': DateTime.now().toUtc().toIso8601String(),
-        })
-        .eq('id', userId);
-  }
-
   Future<Profile?> fetchProfile(String userId) async {
     final row = await _client
         .from('profiles')
@@ -122,12 +108,22 @@ class ProfileService {
     return result as bool;
   }
 
-  /// Sets (or replaces) the signed-in student's transaction PIN. [pin] must
-  /// be exactly 4 digits — validated again server-side.
-  Future<void> setTransactionPin(String pin) async {
+  /// Sets the signed-in student's transaction PIN. [pin] must be exactly 4
+  /// digits — validated again server-side.
+  ///
+  /// [currentPin] is required when a PIN already exists: changing one used
+  /// to need no proof of the old one, so a stolen session could silently
+  /// replace the PIN and then spend the wallet.
+  Future<void> setTransactionPin(String pin, {String? currentPin}) async {
     try {
-      await _client.rpc('set_transaction_pin', params: {'p_pin': pin});
+      await _client.rpc('set_transaction_pin', params: {
+        'p_pin': pin,
+        'p_current_pin': currentPin,
+      });
     } on PostgrestException catch (e) {
+      if (e.message.contains('INVALID_CURRENT_PIN')) {
+        throw ProfileException('That is not your current PIN.');
+      }
       throw ProfileException(e.message);
     }
   }

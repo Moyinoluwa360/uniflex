@@ -10,6 +10,7 @@ import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
+import '../../shared/widgets/navigation/app_bottom_nav_shell.dart';
 import '../../shared/widgets/pin/pin_entry_sheet.dart';
 import 'cart_provider.dart';
 import 'order_confirmation_screen.dart';
@@ -29,6 +30,9 @@ import 'pack_allocation_screen.dart';
 /// Step 8 (payment): gates on the transaction PIN (Section 6), then
 /// checks the wallet balance and calls [place_food_order_with_payment]
 /// RPC which atomically deducts the wallet and creates the order.
+/// Index of the Wallet tab in [StudentShell]'s nav bar.
+const _studentWalletTabIndex = 2;
+
 class CheckoutScreen extends ConsumerStatefulWidget {
   const CheckoutScreen({super.key, required this.vendor});
 
@@ -49,14 +53,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   // "Will you be using packs?" prompt; empty list means "No".
   List<PackAllocation>? _packs;
 
-  static const _campusDeliveryFee = 200.0;
-  static const _hostelDeliveryFee = 300.0;
+  double get _campusDeliveryFee => widget.vendor.campusDeliveryFee;
+  double get _hostelDeliveryFee => widget.vendor.hostelDeliveryFee;
 
-  double get _deliveryFee => switch (_deliveryType) {
-        'campus_delivery' => _campusDeliveryFee,
-        'hostel_delivery' => _hostelDeliveryFee,
-        _ => 0.0,
-      };
+  double get _deliveryFee => widget.vendor.deliveryFeeFor(_deliveryType);
 
   bool get _needsLocation =>
       _deliveryType == 'campus_delivery' ||
@@ -87,10 +87,25 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       initialTime: TimeOfDay.fromDateTime(now.add(const Duration(hours: 1))),
     );
     if (time == null || !mounted) return;
-    setState(() {
-      _scheduledFor =
-          DateTime(date.year, date.month, date.day, time.hour, time.minute);
-    });
+
+    final picked =
+        DateTime(date.year, date.month, date.day, time.hour, time.minute);
+
+    // The date picker allows today and the time picker has no lower bound,
+    // so "today at 09:00" at 3pm was accepted and placed an order scheduled
+    // for the past. The server rejects it too (SCHEDULE_IN_PAST) — catch it
+    // here so the student finds out before reaching Confirm.
+    if (!picked.isAfter(now)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pick a time in the future.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _scheduledFor = picked);
   }
 
   /// Runs the transaction-PIN gate before any wallet funds move: prompts
@@ -538,8 +553,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                               WidgetSpan(
                                 child: GestureDetector(
                                   onTap: () {
-                                    // Navigate to the Wallet tab (index 2)
-                                    // by popping back to the shell.
+                                    // Ask the shell for the Wallet tab, then
+                                    // pop back to it. Popping alone used to
+                                    // leave whichever tab was already open,
+                                    // so this link went nowhere.
+                                    ref
+                                        .read(shellTabRequestProvider.notifier)
+                                        .state = _studentWalletTabIndex;
                                     Navigator.of(context).popUntil(
                                         (route) => route.isFirst);
                                   },

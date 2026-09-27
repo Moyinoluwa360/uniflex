@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../shared/models/advertisement.dart';
 import '../../shared/models/around_category.dart';
 import '../../shared/models/vendor.dart';
 import '../../shared/services/auth/auth_providers.dart';
+import '../../shared/services/notifications/notification_inbox_service.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
@@ -12,10 +15,12 @@ import '../../shared/widgets/media/app_image.dart';
 import '../../shared/widgets/navigation/app_bottom_nav_shell.dart';
 import '../around/around_category_providers.dart';
 import '../around/around_screen.dart';
+import '../notifications/notifications_screen.dart';
 import '../ordering/cart_provider.dart';
 import '../ordering/cart_screen.dart';
 import '../ordering/catalog_screen.dart';
 import '../ordering/product_repository.dart';
+import '../services/student_providers.dart';
 
 /// Index of the Wallet tab in [StudentShell] — used by the header's
 /// "Top up" affordance to jump straight to it.
@@ -140,6 +145,33 @@ class _HomeCartButton extends ConsumerWidget {
   }
 }
 
+/// The header's bell, badged with the unread count and opening the inbox.
+class _NotificationBell extends ConsumerWidget {
+  const _NotificationBell();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unread = ref.watch(unreadNotificationCountProvider);
+
+    final bell = _GlassCircle(
+      child: const Icon(Icons.notifications_none_rounded,
+          color: AppColors.pureWhite, size: 22),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+      ),
+    );
+
+    if (unread == 0) return bell;
+
+    return Badge(
+      label: Text('${unread > 9 ? '9+' : unread}'),
+      backgroundColor: AppColors.orange,
+      textColor: AppColors.pureWhite,
+      child: bell,
+    );
+  }
+}
+
 // ── Header ──────────────────────────────────────────────────────────────────
 
 class _HomeHeader extends StatelessWidget {
@@ -207,13 +239,7 @@ class _HomeHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              _GlassCircle(
-                child: const Icon(Icons.notifications_none_rounded,
-                    color: white, size: 22),
-                onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('No new notifications')),
-                ),
-              ),
+              const _NotificationBell(),
               const SizedBox(width: AppSpacing.sm),
               // Avatar — emerald in dark mode, white in light. Tapping
               // routes to the Profile tab.
@@ -541,34 +567,17 @@ class _ToggleTab extends StatelessWidget {
 
 // ── Promo banner carousel ────────────────────────────────────────────────────
 
-class _PromoBannerCarousel extends StatefulWidget {
+class _PromoBannerCarousel extends ConsumerStatefulWidget {
   const _PromoBannerCarousel();
 
   @override
-  State<_PromoBannerCarousel> createState() => _PromoBannerCarouselState();
+  ConsumerState<_PromoBannerCarousel> createState() =>
+      _PromoBannerCarouselState();
 }
 
-class _PromoBannerCarouselState extends State<_PromoBannerCarousel> {
+class _PromoBannerCarouselState extends ConsumerState<_PromoBannerCarousel> {
   final _controller = PageController(viewportFraction: 0.86);
   int _page = 0;
-
-  static const _banners = [
-    (
-      title: 'Free delivery over ₦5,000',
-      subtitle: 'All Uniflex Kitchen orders · ends Sunday',
-      dark: false,
-    ),
-    (
-      title: 'Flex Fridays',
-      subtitle: '15% back to your wallet every Friday',
-      dark: true,
-    ),
-    (
-      title: 'Refer a friend, earn ₦500',
-      subtitle: 'Share your code — you both get wallet credit',
-      dark: false,
-    ),
-  ];
 
   @override
   void dispose() {
@@ -576,9 +585,46 @@ class _PromoBannerCarouselState extends State<_PromoBannerCarousel> {
     super.dispose();
   }
 
+  /// Acts on an ad's configured tap target. Unknown or malformed targets do
+  /// nothing rather than throwing — an ad is content, so a bad link should
+  /// never break the home screen.
+  Future<void> _openAd(Advertisement ad) async {
+    switch (ad.linkType) {
+      case AdLinkType.none:
+        return;
+      case AdLinkType.wallet:
+        ref.read(shellTabRequestProvider.notifier).state = _kWalletTabIndex;
+      case AdLinkType.vendor:
+        final vendorId = ad.linkValue;
+        if (vendorId == null) return;
+        final vendors = await ref.read(vendorsProvider.future);
+        final vendor = vendors.where((v) => v.id == vendorId).firstOrNull;
+        if (vendor == null || !mounted) return;
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => CatalogScreen(vendor: vendor)),
+        );
+      case AdLinkType.url:
+        final raw = ad.linkValue;
+        if (raw == null) return;
+        final uri = Uri.tryParse(raw);
+        if (uri == null || !uri.hasScheme) return;
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final adsAsync = ref.watch(liveAdvertisementsProvider);
+    final ads = adsAsync.valueOrNull ?? const <Advertisement>[];
+
+    // No ads scheduled is a normal state, not an error — take up no space.
+    if (ads.isEmpty) return const SizedBox.shrink();
+
+    // Guard against the page index dangling past the end when an ad expires
+    // or admin removes one while the screen is open.
+    final page = _page.clamp(0, ads.length - 1);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -590,21 +636,25 @@ class _PromoBannerCarouselState extends State<_PromoBannerCarousel> {
             // Align the strip flush to the left gutter rather than
             // centring each page in the viewport.
             padEnds: false,
-            itemCount: _banners.length,
+            itemCount: ads.length,
             onPageChanged: (p) => setState(() => _page = p),
             itemBuilder: (context, i) {
-              final b = _banners[i];
+              final ad = ads[i];
               return Padding(
                 padding: EdgeInsets.only(
                   left: i == 0 ? AppSpacing.screenGutter : AppSpacing.sm,
-                  right: i == _banners.length - 1
+                  right: i == ads.length - 1
                       ? AppSpacing.screenGutter
                       : AppSpacing.sm,
                 ),
                 child: _PromoCard(
-                  title: b.title,
-                  subtitle: b.subtitle,
-                  dark: b.dark,
+                  title: ad.title,
+                  subtitle: ad.subtitle,
+                  dark: ad.isDark,
+                  imageUrl: ad.imageUrl,
+                  onTap: ad.linkType == AdLinkType.none
+                      ? null
+                      : () => _openAd(ad),
                 ),
               );
             },
@@ -616,14 +666,14 @@ class _PromoBannerCarouselState extends State<_PromoBannerCarousel> {
           padding: const EdgeInsets.only(left: AppSpacing.screenGutter),
           child: Row(
             children: List.generate(
-              _banners.length,
+              ads.length,
               (i) => AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                width: _page == i ? 16 : 6,
+                width: page == i ? 16 : 6,
                 height: 6,
                 margin: const EdgeInsets.only(right: 6),
                 decoration: BoxDecoration(
-                  color: _page == i
+                  color: page == i
                       ? theme.colorScheme.primary
                       : theme.colorScheme.outline,
                   borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -645,43 +695,73 @@ class _PromoCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.dark,
+    this.imageUrl,
+    this.onTap,
   });
 
   final String title;
   final String subtitle;
   final bool dark;
 
+  /// Optional artwork behind the text. When set it replaces the decorative
+  /// circles and gets a scrim so the copy stays readable over any photo.
+  final String? imageUrl;
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final base = dark ? AppColors.matteBlack : AppColors.orange;
     final shape = AppColors.pureWhite.withValues(alpha: dark ? 0.05 : 0.09);
+    final hasImage = imageUrl != null && imageUrl!.isNotEmpty;
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppRadius.card),
-      child: Container(
+      child: Material(
         color: base,
-        child: Stack(
+        child: InkWell(
+          onTap: onTap,
+          child: Stack(
           fit: StackFit.expand,
           children: [
-            // Subtle interior shapes — soft concentric circles off the right.
-            Positioned(
-              right: -34,
-              top: -30,
-              child: Container(
-                width: 150,
-                height: 150,
-                decoration: BoxDecoration(shape: BoxShape.circle, color: shape),
+            if (hasImage) ...[
+              AppImage(url: imageUrl, fit: BoxFit.cover),
+              // Left-weighted scrim: keeps the title legible without
+              // flattening the whole photo.
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      AppColors.matteBlack.withValues(alpha: 0.72),
+                      AppColors.matteBlack.withValues(alpha: 0.15),
+                    ],
+                  ),
+                ),
               ),
-            ),
-            Positioned(
-              right: 26,
-              bottom: -52,
-              child: Container(
-                width: 96,
-                height: 96,
-                decoration: BoxDecoration(shape: BoxShape.circle, color: shape),
+            ] else ...[
+              // Subtle interior shapes — soft concentric circles off the right.
+              Positioned(
+                right: -34,
+                top: -30,
+                child: Container(
+                  width: 150,
+                  height: 150,
+                  decoration:
+                      BoxDecoration(shape: BoxShape.circle, color: shape),
+                ),
               ),
-            ),
+              Positioned(
+                right: 26,
+                bottom: -52,
+                child: Container(
+                  width: 96,
+                  height: 96,
+                  decoration:
+                      BoxDecoration(shape: BoxShape.circle, color: shape),
+                ),
+              ),
+            ],
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.md,
@@ -711,6 +791,7 @@ class _PromoCard extends StatelessWidget {
               ),
             ),
           ],
+          ),
         ),
       ),
     );

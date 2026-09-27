@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../shared/models/order.dart';
 import '../../shared/theme/app_colors.dart';
@@ -192,8 +193,28 @@ class OrderTrackingScreen extends ConsumerWidget {
                                   ],
                                 ),
                               ),
+                              // Tap to dial — the rider already has a call
+                              // button for the student, so make it mutual.
                               if (phone != null)
-                                Text(phone, style: theme.textTheme.bodyMedium),
+                                OutlinedButton.icon(
+                                  icon: const Icon(Icons.phone_outlined,
+                                      size: 16),
+                                  label: Text(phone),
+                                  onPressed: () async {
+                                    final uri = Uri.parse('tel:$phone');
+                                    if (await canLaunchUrl(uri)) {
+                                      await launchUrl(uri);
+                                    }
+                                  },
+                                )
+                              else
+                                Text(
+                                  'No number on file',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.5),
+                                  ),
+                                ),
                             ],
                           ),
                         ),

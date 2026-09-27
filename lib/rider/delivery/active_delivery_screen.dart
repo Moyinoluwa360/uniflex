@@ -8,6 +8,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
+import '../../shared/widgets/notify/message_customer_sheet.dart';
 import '../services/rider_providers.dart';
 import '../services/rider_service.dart';
 
@@ -190,6 +191,30 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
     }
   }
 
+  /// Messages the customer about this delivery. Useful for the things a
+  /// status change cannot say — "I'm at the wrong gate", "traffic at the
+  /// junction" — and it reaches them even with no phone number on file.
+  Future<void> _messageCustomer(String orderId, String? customerName) async {
+    final sent = await showMessageCustomerSheet(
+      context,
+      customerName: customerName,
+      onSend: (message) => ref
+          .read(riderServiceProvider)
+          .messageCustomer(orderId: orderId, message: message),
+      quickReplies: const [
+        'I am outside now.',
+        'I am at the gate — please come down.',
+        'Running a few minutes late, sorry.',
+        'I cannot find the address. Can you call me?',
+      ],
+    );
+    if (sent && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Message sent')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -344,27 +369,48 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
           ),
 
           // ── Customer contact ─────────────────────────────────────────
-          if (detail?.customerPhone != null) ...[
-            const SizedBox(height: AppSpacing.md),
-            _SectionCard(
-              title: 'Customer',
-              icon: Icons.person_outline,
-              iconColor: theme.colorScheme.secondary,
-              children: [
-                if (detail?.customerName != null)
-                  Text(
-                    detail!.customerName!,
-                    style: theme.textTheme.labelLarge,
-                  ),
-                const SizedBox(height: AppSpacing.sm),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.phone_outlined, size: 16),
-                  label: Text(detail!.customerPhone!),
-                  onPressed: () => _callCustomer(detail.customerPhone!),
+          const SizedBox(height: AppSpacing.md),
+          _SectionCard(
+            title: 'Customer',
+            icon: Icons.person_outline,
+            iconColor: theme.colorScheme.secondary,
+            children: [
+              if (detail?.customerName != null)
+                Text(
+                  detail!.customerName!,
+                  style: theme.textTheme.labelLarge,
                 ),
-              ],
-            ),
-          ],
+              const SizedBox(height: AppSpacing.sm),
+              Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
+                children: [
+                  if (detail?.customerPhone != null)
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.phone_outlined, size: 16),
+                      label: Text(detail!.customerPhone!),
+                      onPressed: () => _callCustomer(detail.customerPhone!),
+                    )
+                  else
+                    Text(
+                      'No phone number on file.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  // Works whether or not a phone number exists — the student
+                  // gets a push plus an entry in their notifications.
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.chat_bubble_outline, size: 16),
+                    label: const Text('Message'),
+                    onPressed: () =>
+                        _messageCustomer(liveOrder.id, detail?.customerName),
+                  ),
+                ],
+              ),
+            ],
+          ),
 
           const SizedBox(height: AppSpacing.xl),
 

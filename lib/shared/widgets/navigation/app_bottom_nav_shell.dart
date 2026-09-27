@@ -1,4 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+/// A pending "switch to this tab" request from a screen that is *pushed on
+/// top of* the shell rather than living inside it.
+///
+/// [AppNavShellScope] only reaches descendants of the shell's body, so a
+/// route pushed onto the root navigator (Checkout, for example) cannot see
+/// it — `AppNavShellScope.of(context)` returns null there. Such a screen
+/// sets this instead, then pops back to the shell, which picks the request
+/// up and switches tabs. The shell clears it once consumed, so it never
+/// leaks across sign-outs or role changes.
+final shellTabRequestProvider = StateProvider<int?>((ref) => null);
 
 /// One tab of an [AppBottomNavShell]: the icon/label pair for the nav bar
 /// plus the screen it shows.
@@ -42,16 +54,16 @@ class AppNavShellScope extends InheritedWidget {
 /// AdminShell) from the same widget rather than each hand-rolling
 /// navigation chrome. This widget holds no cross-role state — each shell
 /// instance owns its own selected-tab state independently.
-class AppBottomNavShell extends StatefulWidget {
+class AppBottomNavShell extends ConsumerStatefulWidget {
   const AppBottomNavShell({super.key, required this.tabs});
 
   final List<AppNavTab> tabs;
 
   @override
-  State<AppBottomNavShell> createState() => _AppBottomNavShellState();
+  ConsumerState<AppBottomNavShell> createState() => _AppBottomNavShellState();
 }
 
-class _AppBottomNavShellState extends State<AppBottomNavShell> {
+class _AppBottomNavShellState extends ConsumerState<AppBottomNavShell> {
   int _index = 0;
 
   void _go(int index) {
@@ -62,6 +74,16 @@ class _AppBottomNavShellState extends State<AppBottomNavShell> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int?>(shellTabRequestProvider, (_, next) {
+      if (next == null) return;
+      _go(next);
+      // Clear outside the listener so we are not mutating provider state
+      // during a build triggered by that same state.
+      Future.microtask(
+        () => ref.read(shellTabRequestProvider.notifier).state = null,
+      );
+    });
+
     return Scaffold(
       body: SafeArea(
         child: AppNavShellScope(
