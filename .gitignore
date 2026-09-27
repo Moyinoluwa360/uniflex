@@ -50,8 +50,25 @@ app.*.map.json
 
 # Environment variables — real secrets live only in a local .env,
 # never in .env.example (which stays tracked as the placeholder template)
+#
+# IMPORTANT: .env is bundled into the app binary (see pubspec.yaml assets),
+# so it may only ever hold values that are safe to ship to a device:
+# the Supabase URL + anon key, the Paystack PUBLIC key, Firebase client
+# config, and the Maps key. Server-side secrets (service role key, Termii,
+# Paystack secret key) belong in .env.tooling or Supabase Edge Function
+# secrets — never here.
 .env
+.env.tooling
+.env.backup-preaudit
 .env.*.local
 
 # Local Windows helper files
 yes.txt
+
+# Supabase CLI scratch — per-machine link state (project ref, pooler URL,
+# tool versions) that the CLI rewrites on every command. Not secret, but it
+# churns constantly and differs per developer.
+supabase/.temp/
+
+# Coverage output
+coverage/
