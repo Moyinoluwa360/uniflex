@@ -165,11 +165,30 @@ class StudentService {
 
   // ── Group order members stream ───────────────────────────────────────
 
-  Stream<List<Map<String, dynamic>>> streamGroupMembers(String groupId) {
-    return _client
+  Stream<List<Map<String, dynamic>>> streamGroupMembers(String groupId) async* {
+    // Immediate fetch.
+    final initial = await _client
         .from('group_order_members')
-        .stream(primaryKey: ['id'])
-        .eq('group_order_id', groupId)
-        .map((rows) => rows.cast<Map<String, dynamic>>());
+        .select()
+        .eq('group_order_id', groupId);
+    yield initial.cast<Map<String, dynamic>>();
+
+    // Then Realtime for live updates.
+    try {
+      final stream = _client
+          .from('group_order_members')
+          .stream(primaryKey: ['id'])
+          .eq('group_order_id', groupId);
+
+      await for (final _ in stream) {
+        final rows = await _client
+            .from('group_order_members')
+            .select()
+            .eq('group_order_id', groupId);
+        yield rows.cast<Map<String, dynamic>>();
+      }
+    } catch (_) {
+      // Realtime failed; initial data is already showing.
+    }
   }
 }

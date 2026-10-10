@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/models/order.dart';
@@ -56,12 +57,14 @@ class RiderService {
   /// includes pre-fetched vendor / around-request info so the pool card
   /// can render without additional round trips.
   Stream<List<PoolOrder>> streamJobPool() async* {
-    final orderStream = _client
-        .from('orders')
-        .stream(primaryKey: ['id'])
-        .order('created_at', ascending: false);
+    // Helper: fetch pool-eligible orders via a one-shot REST query, then
+    // enrich with vendor / around-request info.
+    Future<List<PoolOrder>> fetchPool() async {
+      final rows = await _client
+          .from('orders')
+          .select()
+          .order('created_at', ascending: false);
 
-    await for (final rows in orderStream) {
       // Client-side filter: unassigned pool-eligible orders only.
       final pool = rows.where((m) {
         final riderId = m['rider_id'];
@@ -70,14 +73,7 @@ class RiderService {
         final source = m['source'] as String;
         final type = m['type'] as String;
         final deliveryType = m['delivery_type'] as String?;
-        // Campus/Hostel deliveries are rider-fulfilled just like plain
-        // 'delivery' — the student food-order path only ever sends the
-        // campus_delivery/hostel_delivery variants (never bare 'delivery').
         const deliveryTypes = ['delivery', 'campus_delivery', 'hostel_delivery'];
-        // Post-testing fixes, Section 12: a Uniflex delivery order is
-        // only pool-eligible once Admin/Kitchen explicitly taps "Transfer
-        // to Rider" — status = 'ready' alone is no longer enough. Mirrors
-        // the "orders: rider read pool" RLS policy in schema.sql.
         final transferredToRiderAt = m['transferred_to_rider_at'];
         return (source == 'uniflex' && status == 'ready' && transferredToRiderAt != null
                 && deliveryTypes.contains(deliveryType))
@@ -85,10 +81,7 @@ class RiderService {
             || (type == 'around' && status == 'placed');
       }).toList();
 
-      if (pool.isEmpty) {
-        yield [];
-        continue;
-      }
+      if (pool.isEmpty) return [];
 
       // Batch-fetch vendor info for food orders.
       final vendorIds = pool
@@ -125,7 +118,7 @@ class RiderService {
         }
       }
 
-      yield pool.map((m) {
+      return pool.map((m) {
         final order = Order.fromMap(m);
         String pickupName;
         String? pickupAddress;
@@ -155,23 +148,57 @@ class RiderService {
         );
       }).toList();
     }
+
+    // Emit initial data immediately so the pool is never blank.
+    yield await fetchPool();
+
+    // Then subscribe to Realtime for live updates.
+    try {
+      final orderStream = _client
+          .from('orders')
+          .stream(primaryKey: ['id'])
+          .order('created_at', ascending: false);
+
+      await for (final _ in orderStream) {
+        try {
+          yield await fetchPool();
+        } catch (e) {
+          debugPrint('[RiderPool] Realtime fetch error: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('[RiderPool] Realtime stream error: $e');
+    }
   }
 
   // ── Active delivery stream ─────────────────────────────────────────
 
-  /// Streams the rider's current active delivery (status='out_for_delivery'),
-  /// if one exists. Re-emits when the order status or delivery_stage changes.
-  Stream<Order?> streamActiveDelivery(String riderId) async* {
-    final stream = _client
-        .from('orders')
-        .stream(primaryKey: ['id'])
-        .eq('rider_id', riderId);
+  /// Streams the rider's active deliveries (status='out_for_delivery').
+  /// Returns a list to support multiple concurrent deliveries.
+  Stream<List<Order>> streamActiveDeliveries(String riderId) async* {
+    Future<List<Order>> fetchActive() async {
+      final rows = await _client
+          .from('orders')
+          .select()
+          .eq('rider_id', riderId)
+          .eq('status', 'out_for_delivery')
+          .order('created_at', ascending: false);
+      return rows.map((m) => Order.fromMap(m)).toList();
+    }
 
-    await for (final rows in stream) {
-      final active = rows
-          .where((m) => m['status'] == 'out_for_delivery')
-          .toList();
-      yield active.isEmpty ? null : Order.fromMap(active.first);
+    yield await fetchActive();
+
+    try {
+      final stream = _client
+          .from('orders')
+          .stream(primaryKey: ['id'])
+          .eq('rider_id', riderId);
+
+      await for (final _ in stream) {
+        yield await fetchActive();
+      }
+    } catch (e) {
+      debugPrint('[RiderDelivery] Realtime stream error: $e');
     }
   }
 

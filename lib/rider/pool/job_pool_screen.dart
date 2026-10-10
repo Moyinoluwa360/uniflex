@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/models/order.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
@@ -18,10 +19,8 @@ class JobPoolScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final poolAsync = ref.watch(jobPoolProvider);
-    final activeAsync = ref.watch(activeDeliveryProvider);
-
-    // If rider has an active delivery, redirect to it instead.
-    final hasActive = activeAsync.valueOrNull != null;
+    final activeOrders =
+        ref.watch(activeDeliveriesProvider).valueOrNull ?? [];
 
     return Scaffold(
       appBar: UniflexAppBar(
@@ -53,109 +52,117 @@ class JobPoolScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: hasActive
-          ? _ActiveDeliveryPrompt(
-              orderId: activeAsync.valueOrNull!.id,
-            )
-          : poolAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => RetrySection(
-                message: 'Could not load jobs. Check your connection.',
-                onRetry: () => ref.invalidate(jobPoolProvider),
-              ),
-              data: (pool) {
-                if (pool.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 88,
-                          height: 88,
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary
-                                .withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.inbox_outlined,
-                            size: 36,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.md),
-                        Text(
-                          'No jobs available',
-                          style: theme.textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        Text(
-                          'New orders will appear here automatically.',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.55),
-                          ),
-                        ),
-                      ],
+      body: poolAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => RetrySection(
+          message: 'Could not load jobs. Check your connection.',
+          onRetry: () => ref.invalidate(jobPoolProvider),
+        ),
+        data: (pool) {
+          if (pool.isEmpty && activeOrders.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 88,
+                    height: 88,
+                    decoration: BoxDecoration(
+                      color:
+                          theme.colorScheme.primary.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
                     ),
-                  );
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.screenGutter,
-                    AppSpacing.md,
-                    AppSpacing.screenGutter,
-                    AppSpacing.xl,
+                    child: Icon(
+                      Icons.inbox_outlined,
+                      size: 36,
+                      color: theme.colorScheme.primary,
+                    ),
                   ),
-                  itemCount: pool.length,
-                  itemBuilder: (ctx, i) => _PoolOrderCard(poolOrder: pool[i]),
-                );
-              },
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    'No jobs available',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'New orders will appear here automatically.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface
+                          .withValues(alpha: 0.55),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final hasActiveBanner = activeOrders.isNotEmpty;
+
+          return ListView.builder(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.screenGutter,
+              AppSpacing.md,
+              AppSpacing.screenGutter,
+              AppSpacing.xl,
             ),
+            itemCount: pool.length + (hasActiveBanner ? 1 : 0),
+            itemBuilder: (ctx, i) {
+              if (hasActiveBanner && i == 0) {
+                return _ActiveDeliveriesBanner(orders: activeOrders);
+              }
+              final poolIndex = hasActiveBanner ? i - 1 : i;
+              return _PoolOrderCard(poolOrder: pool[poolIndex]);
+            },
+          );
+        },
+      ),
     );
   }
 }
 
-/// Shown when the rider already has an active delivery — prevents
-/// accepting a second one.
-class _ActiveDeliveryPrompt extends StatelessWidget {
-  const _ActiveDeliveryPrompt({required this.orderId});
-  final String orderId;
+/// Compact banner shown at the top of the pool when the rider has active
+/// deliveries. Tapping it opens the delivery screen.
+class _ActiveDeliveriesBanner extends StatelessWidget {
+  const _ActiveDeliveriesBanner({required this.orders});
+  final List<Order> orders;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.screenGutter),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.delivery_dining,
-                size: 56, color: AppColors.orange),
-            const SizedBox(height: AppSpacing.md),
-            Text('You have an active delivery',
-                style: theme.textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              'Complete it before accepting a new job.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            FilledButton.icon(
-              icon: const Icon(Icons.arrow_forward),
-              label: const Text('Go to Active Delivery'),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ActiveDeliveryScreen(orderId: orderId),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: GestureDetector(
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ActiveDeliveryScreen(orderId: orders.first.id),
+          ),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: AppColors.orange.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(color: AppColors.orange.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.delivery_dining,
+                  color: AppColors.orange, size: 24),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  orders.length == 1
+                      ? 'You have an active delivery'
+                      : 'You have ${orders.length} active deliveries',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: AppColors.orange,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-            ),
-          ],
+              const Icon(Icons.chevron_right, color: AppColors.orange),
+            ],
+          ),
         ),
       ),
     );

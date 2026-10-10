@@ -16,7 +16,7 @@ import '../services/rider_service.dart';
 ///   1. `accepted`  — rider navigates to pickup → taps "Confirm Pickup"
 ///   2. `picked_up` — rider navigates to customer → enters PIN to complete
 ///
-/// Watches [activeDeliveryProvider] for live stage updates so a background
+/// Watches [activeDeliveriesProvider] for live stage updates so a background
 /// refresh (e.g. from another device) is reflected instantly.
 class ActiveDeliveryScreen extends ConsumerStatefulWidget {
   const ActiveDeliveryScreen({super.key, required this.orderId});
@@ -36,7 +36,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
     setState(() => _isConfirmingPickup = true);
     try {
       await ref.read(riderServiceProvider).confirmPickup(widget.orderId);
-      // activeDeliveryProvider will re-emit with updated delivery_stage.
+      // activeDeliveriesProvider will re-emit with updated delivery_stage.
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -218,13 +218,13 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final orderAsync = ref.watch(activeDeliveryProvider);
-    final order = orderAsync.valueOrNull;
+    final allDeliveries = ref.watch(activeDeliveriesProvider);
+    final orders = allDeliveries.valueOrNull ?? [];
+    final order =
+        orders.where((o) => o.id == widget.orderId).firstOrNull;
 
-    // If the active delivery was completed and the stream emits null,
-    // this screen would already have been popped in _showPinEntry.
-    // Guard against orphaned navigation:
-    if (orderAsync.hasValue && order == null) {
+    // If this delivery was completed and is no longer in the list, pop.
+    if (allDeliveries.hasValue && order == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && Navigator.of(context).canPop()) {
           Navigator.of(context).pop();
@@ -239,25 +239,25 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
       appBar: UniflexAppBar(
         title: order != null ? 'Delivery ${order.shortId}' : 'Active Delivery',
       ),
-      body: orderAsync.when(
+      body: allDeliveries.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => RetrySection(
           message: 'Could not load this delivery.',
-          onRetry: () => ref.invalidate(activeDeliveryProvider),
+          onRetry: () => ref.invalidate(activeDeliveriesProvider),
         ),
-        data: (Order? liveOrder) {
-          if (liveOrder == null) {
+        data: (_) {
+          if (order == null) {
             return const Center(child: Text('No active delivery.'));
           }
 
-          final isPicked = liveOrder.deliveryStage == 'picked_up';
+          final isPicked = order.deliveryStage == 'picked_up';
 
           return detailAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) =>
-                _buildBody(context, theme, liveOrder, null, isPicked),
+                _buildBody(context, theme, order, null, isPicked),
             data: (detail) =>
-                _buildBody(context, theme, liveOrder, detail, isPicked),
+                _buildBody(context, theme, order, detail, isPicked),
           );
         },
       ),

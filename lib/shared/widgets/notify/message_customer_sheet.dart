@@ -88,7 +88,7 @@ class _MessageCustomerSheetState extends State<_MessageCustomerSheet> {
     final theme = Theme.of(context);
     final who = widget.customerName;
 
-    return Padding(
+    return SingleChildScrollView(
       padding: EdgeInsets.only(
         left: AppSpacing.screenGutter,
         right: AppSpacing.screenGutter,

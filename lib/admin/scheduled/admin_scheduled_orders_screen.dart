@@ -85,9 +85,13 @@ class AdminScheduledOrdersScreen extends ConsumerWidget {
             itemCount: orders.length,
             itemBuilder: (ctx, i) => _ScheduledOrderCard(
               order: orders[i],
-              onAdvance: () => ref
-                  .read(adminServiceProvider)
-                  .updateOrderStatus(orders[i].id, 'preparing'),
+              onAdvance: () async {
+                await ref
+                    .read(adminServiceProvider)
+                    .updateOrderStatus(orders[i].id, 'preparing');
+                ref.invalidate(scheduledOrdersProvider);
+                ref.invalidate(kitchenOrdersProvider);
+              },
             ),
           );
         },

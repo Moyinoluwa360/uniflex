@@ -29,14 +29,29 @@ Stream<List<Order>> _streamStudentOrders(
   SupabaseClient client,
   String userId,
 ) async* {
-  final stream = client
-      .from('orders')
-      .stream(primaryKey: ['id'])
-      .eq('student_id', userId)
-      .order('created_at', ascending: false);
+  Future<List<Order>> fetchOrders() async {
+    final rows = await client
+        .from('orders')
+        .select()
+        .eq('student_id', userId)
+        .order('created_at', ascending: false);
+    return _attachVendorNames(client, rows);
+  }
 
-  await for (final rows in stream) {
-    yield await _attachVendorNames(client, rows);
+  yield await fetchOrders();
+
+  try {
+    final stream = client
+        .from('orders')
+        .stream(primaryKey: ['id'])
+        .eq('student_id', userId)
+        .order('created_at', ascending: false);
+
+    await for (final _ in stream) {
+      yield await fetchOrders();
+    }
+  } catch (_) {
+    // Realtime failed; initial data is already showing.
   }
 }
 
@@ -83,25 +98,34 @@ final orderByIdProvider =
 });
 
 Stream<Order?> _streamOrderById(SupabaseClient client, String orderId) async* {
-  final stream =
-      client.from('orders').stream(primaryKey: ['id']).eq('id', orderId);
-
-  await for (final rows in stream) {
-    if (rows.isEmpty) {
-      yield null;
-      continue;
-    }
-    final row = rows.first;
-    final withVendor = (await _attachVendorNames(client, [row])).first;
-
+  Future<Order?> fetchOrder() async {
+    final rows = await client
+        .from('orders')
+        .select()
+        .eq('id', orderId)
+        .limit(1);
+    if (rows.isEmpty) return null;
+    final withVendor = (await _attachVendorNames(client, [rows.first])).first;
     final items = await client
         .from('order_items')
         .select()
         .eq('order_id', orderId);
-
-    yield withVendor.copyWith(
+    return withVendor.copyWith(
       items: items.map((m) => OrderItem.fromMap(m)).toList(),
     );
+  }
+
+  yield await fetchOrder();
+
+  try {
+    final stream =
+        client.from('orders').stream(primaryKey: ['id']).eq('id', orderId);
+
+    await for (final _ in stream) {
+      yield await fetchOrder();
+    }
+  } catch (_) {
+    // Realtime failed; initial data is already showing.
   }
 }
 

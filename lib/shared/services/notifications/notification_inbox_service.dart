@@ -34,18 +34,32 @@ class NotificationInboxService {
     return rows.map((m) => AppNotification.fromMap(m)).toList();
   }
 
-  /// Live inbox for the signed-in user. Realtime is enabled on the table, so
-  /// a push that arrives while the app is open updates the list and the bell
-  /// badge without a manual refresh.
-  Stream<List<AppNotification>> watch() {
+  /// Live inbox for the signed-in user. Emits initial data immediately via
+  /// REST, then subscribes to Realtime for live updates.
+  Stream<List<AppNotification>> watch() async* {
     final userId = _client.auth.currentUser?.id;
-    if (userId == null) return Stream.value(const []);
-    return _client
-        .from('notifications')
-        .stream(primaryKey: ['id'])
-        .eq('user_id', userId)
-        .order('created_at', ascending: false)
-        .map((rows) => rows.map((m) => AppNotification.fromMap(m)).toList());
+    if (userId == null) {
+      yield const [];
+      return;
+    }
+
+    // Immediate fetch so the inbox is never blank on load.
+    yield await fetch();
+
+    // Then subscribe to Realtime for live updates.
+    try {
+      final stream = _client
+          .from('notifications')
+          .stream(primaryKey: ['id'])
+          .eq('user_id', userId)
+          .order('created_at', ascending: false);
+
+      await for (final _ in stream) {
+        yield await fetch();
+      }
+    } catch (_) {
+      // Realtime failed; initial data is already showing.
+    }
   }
 
   Future<void> markRead(String id) =>

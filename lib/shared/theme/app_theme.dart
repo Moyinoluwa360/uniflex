@@ -118,7 +118,7 @@ abstract final class AppTheme {
           foregroundColor: AppColors.pureWhite,
           disabledBackgroundColor: colorScheme.outline,
           textStyle: textTheme.labelLarge,
-          minimumSize: const Size.fromHeight(AppSpacing.controlHeight),
+          minimumSize: const Size(0, AppSpacing.controlHeight),
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -132,7 +132,7 @@ abstract final class AppTheme {
           foregroundColor: colorScheme.onSurface,
           side: BorderSide(color: dividerColor),
           textStyle: textTheme.labelLarge,
-          minimumSize: const Size.fromHeight(AppSpacing.controlHeight),
+          minimumSize: const Size(0, AppSpacing.controlHeight),
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadius.pill),

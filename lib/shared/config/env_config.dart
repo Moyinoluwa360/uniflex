@@ -25,7 +25,6 @@ abstract final class EnvConfig {
   static String get supabaseAnonKey => dotenv.env['SUPABASE_ANON_KEY'] ?? '';
   static String get paystackPublicKey =>
       dotenv.env['PAYSTACK_PUBLIC_KEY'] ?? '';
-  static String get termiiApiKey => dotenv.env['TERMII_API_KEY'] ?? '';
   static String get firebaseApiKey => dotenv.env['FIREBASE_API_KEY'] ?? '';
   static String get firebaseProjectId =>
       dotenv.env['FIREBASE_PROJECT_ID'] ?? '';

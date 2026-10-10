@@ -40,7 +40,7 @@ class _RiderDashboardScreenState extends ConsumerState<RiderDashboardScreen> {
     final theme = Theme.of(context);
     final profile = ref.watch(currentProfileProvider).valueOrNull;
     final statsAsync = ref.watch(riderStatsProvider);
-    final activeAsync = ref.watch(activeDeliveryProvider);
+    final activeAsync = ref.watch(activeDeliveriesProvider);
 
     final isOnline = statsAsync.valueOrNull?['is_online'] as bool? ?? false;
     final todayCount = statsAsync.valueOrNull?['today_completed'] as int? ?? 0;
@@ -105,18 +105,23 @@ class _RiderDashboardScreenState extends ConsumerState<RiderDashboardScreen> {
                   activeAsync.when(
                     loading: () => const SizedBox.shrink(),
                     error: (_, __) => const SizedBox.shrink(),
-                    data: (activeOrder) {
-                      if (activeOrder == null) return const SizedBox.shrink();
+                    data: (activeOrders) {
+                      if (activeOrders.isEmpty) return const SizedBox.shrink();
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Active Delivery',
+                            activeOrders.length == 1
+                                ? 'Active Delivery'
+                                : 'Active Deliveries (${activeOrders.length})',
                             style: theme.textTheme.titleSmall,
                           ),
                           const SizedBox(height: AppSpacing.sm),
-                          _ActiveDeliveryBanner(order: activeOrder),
-                          const SizedBox(height: AppSpacing.lg),
+                          ...activeOrders.map((o) => Padding(
+                            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                            child: _ActiveDeliveryBanner(order: o),
+                          )),
+                          const SizedBox(height: AppSpacing.md),
                         ],
                       );
                     },

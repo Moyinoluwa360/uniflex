@@ -23,12 +23,12 @@ final jobPoolProvider = StreamProvider<List<PoolOrder>>((ref) {
   return ref.watch(riderServiceProvider).streamJobPool();
 });
 
-/// Streams the rider's currently active delivery (out_for_delivery).
-/// Emits null when the rider has no active order.
-final activeDeliveryProvider = StreamProvider<Order?>((ref) {
+/// Streams the rider's active deliveries (out_for_delivery).
+/// Emits an empty list when the rider has no active orders.
+final activeDeliveriesProvider = StreamProvider<List<Order>>((ref) {
   final profile = ref.watch(currentProfileProvider).valueOrNull;
-  if (profile == null) return Stream.value(null);
-  return ref.watch(riderServiceProvider).streamActiveDelivery(profile.id);
+  if (profile == null) return Stream.value(const []);
+  return ref.watch(riderServiceProvider).streamActiveDeliveries(profile.id);
 });
 
 /// Today + total delivery stats, plus online status. Refresh with
@@ -43,13 +43,13 @@ final deliveryHistoryProvider =
   return ref.watch(riderServiceProvider).fetchDeliveryHistory();
 });
 
-/// Enriched detail for the currently active delivery order: pickup name/
+/// Enriched detail for a specific active delivery order: pickup name/
 /// address and customer contact. Keyed by order-id so the
 /// ActiveDeliveryScreen can watch it with `.family`.
 final activeDeliveryDetailProvider =
     FutureProvider.family<ActiveDeliveryDetail?, String>((ref, orderId) async {
-  final orderAsync = ref.watch(activeDeliveryProvider);
-  final order = orderAsync.valueOrNull;
-  if (order == null || order.id != orderId) return null;
+  final orders = ref.watch(activeDeliveriesProvider).valueOrNull ?? [];
+  final order = orders.where((o) => o.id == orderId).firstOrNull;
+  if (order == null) return null;
   return ref.read(riderServiceProvider).fetchActiveDeliveryDetail(order);
 });

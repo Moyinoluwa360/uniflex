@@ -288,8 +288,9 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
     setState(() => _isAdvancing = true);
     try {
       await action();
-      // The kitchenOrdersProvider stream will re-emit automatically via
-      // Supabase Realtime — no manual invalidation needed.
+      // Force an immediate refresh — Realtime may lag or miss events.
+      ref.invalidate(kitchenOrdersProvider);
+      ref.invalidate(scheduledOrdersProvider);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

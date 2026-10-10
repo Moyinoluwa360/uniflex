@@ -1,5 +1,4 @@
-import 'dart:typed_data';
-
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/models/advertisement.dart';
@@ -291,27 +290,20 @@ class AdminService {
   /// A live stream of active Uniflex kitchen orders (status: placed,
   /// preparing, ready), newest first. Each emission includes the line
   /// items fetched in a single batch query so the kitchen can see what to
-  /// prepare. The stream re-emits whenever any `orders` row changes via
-  /// Supabase Realtime (requires the table to be in the
-  /// `supabase_realtime` publication — see schema.sql Phase 4 block).
+  /// prepare.
+  ///
+  /// Emits an initial fetch immediately, then subscribes to Supabase
+  /// Realtime for live updates. If Realtime hangs or fails the initial
+  /// data still shows.
   Stream<List<KitchenOrder>> streamKitchenOrders() async* {
-    final orderStream = _client
-        .from('orders')
-        .stream(primaryKey: ['id'])
-        .eq('source', 'uniflex')
-        .order('created_at', ascending: false);
+    // Helper: fetch active kitchen orders via a one-shot REST query.
+    Future<List<KitchenOrder>> fetchKitchenOrders() async {
+      final rows = await _client
+          .from('orders')
+          .select()
+          .eq('source', 'uniflex')
+          .order('created_at', ascending: false);
 
-    await for (final rows in orderStream) {
-      // Filter to active kitchen stages client-side. `type = 'food'` is
-      // required here (post-testing fixes, Section 12) — Around requests
-      // are also source='uniflex' and were leaking into the Kitchen
-      // Queue alongside food orders before this fix.
-      //
-      // Scheduled orders are excluded until their time is due (audit #17):
-      // they were showing up here as ordinary 'placed' orders the moment
-      // they were paid for, so the kitchen would cook next Friday's order
-      // today. Until due they belong only to the Scheduled screen — see
-      // streamScheduledOrders().
       final now = DateTime.now();
       final active = rows.where((m) {
         if (m['type'] != 'food') return false;
@@ -327,14 +319,9 @@ class AdminService {
         return true;
       }).toList();
 
-      if (active.isEmpty) {
-        yield [];
-        continue;
-      }
+      if (active.isEmpty) return [];
 
       final ids = active.map((m) => m['id'] as String).toList();
-
-      // Batch-fetch items for all active orders in one round trip.
       final itemsData = await _client
           .from('order_items')
           .select()
@@ -346,13 +333,44 @@ class AdminService {
         itemsByOrder.putIfAbsent(item.orderId, () => []).add(item);
       }
 
-      yield active.map((m) {
+      return active.map((m) {
         final order = Order.fromMap(m);
         return KitchenOrder(
           order: order,
           items: itemsByOrder[order.id] ?? [],
         );
       }).toList();
+    }
+
+    // Emit initial data immediately so the screen is never blank.
+    try {
+      final initial = await fetchKitchenOrders();
+      debugPrint('[KitchenQueue] Initial fetch: ${initial.length} orders');
+      yield initial;
+    } catch (e, st) {
+      debugPrint('[KitchenQueue] Initial fetch FAILED: $e\n$st');
+      yield [];
+    }
+
+    // Then subscribe to Realtime changes and re-fetch on every change.
+    try {
+      final orderStream = _client
+          .from('orders')
+          .stream(primaryKey: ['id'])
+          .eq('source', 'uniflex')
+          .order('created_at', ascending: false);
+
+      await for (final _ in orderStream) {
+        try {
+          final updated = await fetchKitchenOrders();
+          debugPrint('[KitchenQueue] Realtime update: ${updated.length} orders');
+          yield updated;
+        } catch (e) {
+          debugPrint('[KitchenQueue] Realtime fetch error: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('[KitchenQueue] Realtime stream error: $e');
     }
   }
 
@@ -653,20 +671,41 @@ class AdminService {
 
   /// Live stream of upcoming scheduled orders (scheduled_for IS NOT NULL,
   /// status in placed/preparing), ordered by scheduled_for ascending.
-  /// Uses Supabase Realtime on the orders table.
   Stream<List<Order>> streamScheduledOrders() async* {
-    final stream = _client
-        .from('orders')
-        .stream(primaryKey: ['id'])
-        .order('scheduled_for', ascending: true);
+    Future<List<Order>> fetchScheduled() async {
+      final rows = await _client
+          .from('orders')
+          .select()
+          .not('scheduled_for', 'is', null)
+          .inFilter('status', ['placed', 'preparing'])
+          .order('scheduled_for', ascending: true);
+      return rows.map((m) => Order.fromMap(m)).toList();
+    }
 
-    await for (final rows in stream) {
-      yield rows
-          .where((m) =>
-              m['scheduled_for'] != null &&
-              const ['placed', 'preparing'].contains(m['status']))
-          .map((m) => Order.fromMap(m))
-          .toList();
+    // Emit initial data immediately.
+    try {
+      yield await fetchScheduled();
+    } catch (e) {
+      debugPrint('[ScheduledOrders] Initial fetch FAILED: $e');
+      yield [];
+    }
+
+    // Then subscribe to Realtime for live updates.
+    try {
+      final stream = _client
+          .from('orders')
+          .stream(primaryKey: ['id'])
+          .order('scheduled_for', ascending: true);
+
+      await for (final _ in stream) {
+        try {
+          yield await fetchScheduled();
+        } catch (e) {
+          debugPrint('[ScheduledOrders] Realtime fetch error: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('[ScheduledOrders] Realtime stream error: $e');
     }
   }
 }
