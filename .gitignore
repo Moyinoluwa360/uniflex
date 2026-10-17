@@ -9,6 +9,10 @@
 .history
 .svn/
 migrate_working_dir/
+README.md
+QA_MANUAL_TEST_CHECKLIST.md
+CHANGELOG.md
+ARCHITECTURE.md
 
 # IntelliJ related
 *.iml
