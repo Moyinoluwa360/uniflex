@@ -43,16 +43,22 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   bool _isSaving = false;
 
   static const _categories = [
-    'Protein Meals',
-    'Sides',
-    'Snacks',
+    'Meals',
     'Drinks',
-    'Main',
-    'Grills',
-    'Smoothies',
-    'Juices',
-    'Other',
+    'Others',
   ];
+
+  /// Maps legacy categories (from the old 9-category system) into the
+  /// new 3-category scheme. Unknown categories map to 'Others'.
+  static String? _normalizeCategory(String? raw) {
+    if (raw == null) return null;
+    if (_categories.contains(raw)) return raw;
+    return switch (raw) {
+      'Protein Meals' || 'Main' || 'Sides' || 'Snacks' || 'Grills' => 'Meals',
+      'Drinks' || 'Smoothies' || 'Juices' => 'Drinks',
+      _ => 'Others',
+    };
+  }
 
   @override
   void initState() {
@@ -62,7 +68,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     _descCtrl = TextEditingController(text: p?.description ?? '');
     _priceCtrl = TextEditingController(
         text: p != null ? p.basePrice.toStringAsFixed(0) : '');
-    _category = p?.category ?? _categories.first;
+    _category = _normalizeCategory(p?.category) ?? _categories.first;
     _isAvailable = p?.isAvailable ?? true;
     _requiresPack = p?.requiresPack ?? false;
     _imageUrl = p?.imageUrl;

@@ -2,6 +2,100 @@
 
 All notable changes to this project are documented here, phase by phase.
 
+## Round 2 post-testing fixes (2026-10-12)
+
+Second on-device QA pass. Twelve items addressed; no automated tests
+written (as with Round 1, a dedicated testing pass follows).
+
+### Added
+
+- **#2 — Admin Analytics screen**: new `admin/analytics/admin_analytics_screen.dart`
+  with six sections — user counts (students/riders), orders by period
+  (today/week/month with revenue), completion rate (completed vs cancelled
+  with progress bar), orders by status breakdown, top-selling items (ranked
+  list), rider performance (deliveries per rider). Backed by a new
+  `getAnalytics()` method on `AdminService` and `adminAnalyticsProvider`.
+
+- **#7 — Cart persistence**: cart state now survives app restarts. Added
+  `shared_preferences` dependency; `CartState`, `CartItem`, `Product`, and
+  `Vendor` gained `toJson`/`toMap` serialization; `CartNotifier` persists
+  to SharedPreferences on every mutation and restores on startup.
+
+### Changed
+
+- **#1 — Overflow audit**: audited every screen for RenderFlex overflow
+  patterns. The codebase was already well-structured (SingleChildScrollView /
+  ListView / CustomScrollView used correctly throughout). Fixed one real
+  issue: `admin_profile_screen.dart`'s `_InfoRow` had an unwrapped `Column`
+  in a `Row` — long email addresses would overflow. Wrapped in `Expanded`.
+
+- **#3 — Admin nav restructured to 4 tabs**: super_admin bottom nav
+  reduced from 6 tabs (Dashboard, Orders, Scheduled, Menu, Manage, Profile)
+  to 4: **Dashboard, Orders, Manage, Analytics**. Menu, Scheduled Orders,
+  and Profile & Settings moved into ManageHubScreen entries. Kitchen staff
+  reduced to 1 tab (Orders only).
+
+- **#4 — Menu categories simplified to 3**: all legacy categories
+  (Protein Meals, Main, Sides, Snacks, Grills, Smoothies, Juices, etc.)
+  now normalize into exactly 3 fixed display categories: **Meals, Drinks,
+  Others**. Applied consistently across `CatalogScreen` (student),
+  `MenuManagementScreen` (admin), and `ProductFormScreen` (admin form
+  dropdown). A `_normalizeCategory()` function maps any legacy DB value
+  into one of the three.
+
+- **#5 — Dispatched order visibility fixed**: orders with
+  `out_for_delivery` status disappeared from the admin kitchen queue.
+  **Root cause**: `streamKitchenOrders()` in `admin_service.dart` filtered
+  for only `['placed', 'preparing', 'ready', 'ready_for_pickup']` —
+  `out_for_delivery` was missing. Fixed by adding it to the filter and
+  adding a visible "Out for Delivery" section to the queue UI.
+
+- **#6 — Pre-order time picker simplified**: replaced the two-step
+  `showDatePicker` + `showTimePicker` (calendar + clock dial) with a
+  same-day time slot system — 30-min increment chips from the next rounded
+  half-hour until 22:00, presented in a scrollable bottom sheet.
+
+- **#9 — Saving Plan tracking fixed**: after placing an order, the plan
+  summary card showed stale Budget/Spent/Remaining values.
+  **Root cause**: `OrderNotifier` invalidated wallet providers after order
+  placement but never invalidated `activeSavingPlanProvider`. The Postgres
+  RPC correctly updated `spent` in the DB, but the frontend kept showing
+  the stale cached value. Fixed by adding
+  `ref.invalidate(activeSavingPlanProvider)` after both `placeFoodOrder`
+  and `placeAroundRequest`.
+
+- **#10 — Track button enlarged**: changed from a small `OutlinedButton.icon`
+  with shrinkWrap styling to a larger `FilledButton.icon` with emerald
+  background, white text, `minimumSize: Size(120, 44)`, label changed from
+  "Track" to "Track Order".
+
+- **#11 — Admin rider delivery status visibility**: the kitchen queue now
+  shows rider delivery stage for dispatched orders — "Rider assigned —
+  heading to pickup" (accepted), "Rider has picked up — delivering now"
+  (picked_up), or "Out for delivery" (default). Also shows "Waiting for a
+  rider to accept…" for ready-for-delivery orders that have been
+  transferred but not yet picked up.
+
+- **#12 — Admin order status tab cleanup**: `_statusColor()` in the
+  kitchen queue card now handles `outForDelivery` with orange (was falling
+  through to the default gray `outline` color, mismatching the section
+  header).
+
+### Confirmed (no change needed)
+
+- **#8 — PIN setup in onboarding**: confirmed that `complete_profile_screen.dart`
+  already has PIN and Confirm PIN fields (lines 270–313) and calls
+  `setTransactionPin()` as best-effort after the onboarding RPC. No fix
+  needed.
+
+### Known issues
+
+- **Matric number**: flagged during testing but deliberately not fixed in
+  this pass. The matric number field/validation needs further discussion
+  before changes are made.
+
+---
+
 ## Post-testing fixes & changes (2026-09-19)
 
 First on-device Android QA pass across all three shells. Thirteen issues

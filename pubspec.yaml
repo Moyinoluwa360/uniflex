@@ -56,6 +56,9 @@ dependencies:
   # Referral code / link sharing via the native share sheet.
   share_plus: ^10.0.0
 
+  # Cart persistence across app restarts (Phase 7 post-testing fix)
+  shared_preferences: ^2.3.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

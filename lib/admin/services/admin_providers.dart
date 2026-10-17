@@ -84,3 +84,10 @@ final adminAdvertisementsProvider =
     FutureProvider<List<Advertisement>>((ref) async {
   return ref.watch(adminServiceProvider).fetchAllAdvertisements();
 });
+
+/// Analytics data for the Admin Analytics screen — aggregates orders,
+/// revenue, user counts, top items, and rider performance.
+final adminAnalyticsProvider =
+    FutureProvider<Map<String, dynamic>>((ref) async {
+  return ref.watch(adminServiceProvider).getAnalytics();
+});

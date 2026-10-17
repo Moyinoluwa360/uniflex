@@ -76,4 +76,19 @@ class Vendor {
   /// True for the primary Uniflex vendor — used to render its home card
   /// differently from partner vendor cards.
   bool get isUniflex => isFeatured && badgeLabel == 'Major';
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'name': name,
+        'description': description,
+        'is_featured': isFeatured,
+        'is_active': isActive,
+        'badge_label': badgeLabel,
+        'image_url': imageUrl,
+        'location': location,
+        'contact': contact,
+        'pack_price': packPrice,
+        'campus_delivery_fee': campusDeliveryFee,
+        'hostel_delivery_fee': hostelDeliveryFee,
+      };
 }

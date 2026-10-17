@@ -307,8 +307,13 @@ class AdminService {
       final now = DateTime.now();
       final active = rows.where((m) {
         if (m['type'] != 'food') return false;
-        if (!const ['placed', 'preparing', 'ready', 'ready_for_pickup']
-            .contains(m['status'])) {
+        if (!const [
+          'placed',
+          'preparing',
+          'ready',
+          'ready_for_pickup',
+          'out_for_delivery',
+        ].contains(m['status'])) {
           return false;
         }
         final scheduledFor = m['scheduled_for'] as String?;
@@ -665,6 +670,133 @@ class AdminService {
   Future<Map<String, dynamic>> getDashboardStats() async {
     final result = await _client.rpc('get_dashboard_stats');
     return Map<String, dynamic>.from(result as Map);
+  }
+
+  // ── Analytics ──────────────────────────────────────────────────────────
+
+  /// Aggregate analytics data for the admin Analytics screen.
+  /// Returns a map with: totalStudents, totalRiders, ordersToday,
+  /// ordersThisWeek, ordersThisMonth, revenueToday, revenueThisWeek,
+  /// revenueThisMonth, completedCount, cancelledCount, topItems,
+  /// riderPerformance, and byStatus breakdown.
+  Future<Map<String, dynamic>> getAnalytics() async {
+    final now = DateTime.now().toUtc();
+    final startOfDay = DateTime.utc(now.year, now.month, now.day);
+    final startOfWeek = startOfDay.subtract(
+        Duration(days: startOfDay.weekday - 1)); // ISO Monday
+    final startOfMonth = DateTime.utc(now.year, now.month, 1);
+
+    // User counts
+    final studentRows = await _client
+        .from('profiles')
+        .select('id')
+        .eq('role', 'student');
+    final riderRows = await _client
+        .from('profiles')
+        .select('id')
+        .eq('role', 'rider');
+
+    // Orders for this month (superset of week/today)
+    final monthOrders = await _client
+        .from('orders')
+        .select('id, status, total_amount, created_at, rider_id')
+        .gte('created_at', startOfMonth.toIso8601String());
+
+    // Aggregate
+    int ordersToday = 0, ordersWeek = 0;
+    double revToday = 0, revWeek = 0, revMonth = 0;
+    int completed = 0, cancelled = 0;
+    final statusCounts = <String, int>{};
+    final itemFreq = <String, int>{};
+    final riderDeliveries = <String, int>{};
+
+    for (final row in monthOrders) {
+      final createdAt = DateTime.parse(row['created_at'] as String);
+      final amount = (row['total_amount'] as num).toDouble();
+      final status = row['status'] as String;
+      final riderId = row['rider_id'] as String?;
+
+      revMonth += amount;
+      if (createdAt.isAfter(startOfWeek)) {
+        ordersWeek++;
+        revWeek += amount;
+      }
+      if (createdAt.isAfter(startOfDay)) {
+        ordersToday++;
+        revToday += amount;
+      }
+      statusCounts[status] = (statusCounts[status] ?? 0) + 1;
+      if (status == 'completed') {
+        completed++;
+        if (riderId != null) {
+          riderDeliveries[riderId] = (riderDeliveries[riderId] ?? 0) + 1;
+        }
+      }
+      if (status == 'cancelled') cancelled++;
+    }
+
+    // Top-selling items (this month's completed order items)
+    final completedIds = monthOrders
+        .where((r) => r['status'] == 'completed')
+        .map((r) => r['id'] as String)
+        .toList();
+
+    if (completedIds.isNotEmpty) {
+      final itemRows = await _client
+          .from('order_items')
+          .select('product_name, quantity')
+          .inFilter('order_id', completedIds.take(200).toList());
+      for (final ir in itemRows) {
+        final name = ir['product_name'] as String;
+        final qty = ir['quantity'] as int? ?? 1;
+        itemFreq[name] = (itemFreq[name] ?? 0) + qty;
+      }
+    }
+
+    // Sort top items
+    final topItems = itemFreq.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    // Rider performance — resolve names
+    final riderPerf = <Map<String, dynamic>>[];
+    if (riderDeliveries.isNotEmpty) {
+      final riderIds = riderDeliveries.keys.toList();
+      final riderProfiles = await _client
+          .from('profiles')
+          .select('id, full_name')
+          .inFilter('id', riderIds);
+      final nameMap = {
+        for (final r in riderProfiles)
+          r['id'] as String: r['full_name'] as String? ?? 'Unknown'
+      };
+      for (final entry in riderDeliveries.entries) {
+        riderPerf.add({
+          'name': nameMap[entry.key] ?? 'Unknown',
+          'deliveries': entry.value,
+        });
+      }
+      riderPerf.sort(
+          (a, b) => (b['deliveries'] as int).compareTo(a['deliveries'] as int));
+    }
+
+    return {
+      'totalStudents': studentRows.length,
+      'totalRiders': riderRows.length,
+      'ordersToday': ordersToday,
+      'ordersThisWeek': ordersWeek,
+      'ordersThisMonth': monthOrders.length,
+      'revenueToday': revToday,
+      'revenueThisWeek': revWeek,
+      'revenueThisMonth': revMonth,
+      'completedCount': completed,
+      'cancelledCount': cancelled,
+      'byStatus': statusCounts,
+      'topItems': topItems.take(10).map((e) => {
+            'name': e.key,
+            'quantity': e.value,
+          }).toList(),
+      'riderPerformance': riderPerf,
+    };
   }
 
   // ── Phase 6: Scheduled Orders ─────────────────────────────────────────

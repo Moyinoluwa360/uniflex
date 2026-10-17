@@ -13,6 +13,17 @@ import 'cart_provider.dart';
 import 'cart_screen.dart';
 import 'product_repository.dart';
 
+/// Maps any product category (including legacy 9-category names) into one
+/// of the three fixed display categories.
+String _normalizeCategory(String raw) {
+  return switch (raw) {
+    'Meals' || 'Drinks' || 'Others' => raw,
+    'Protein Meals' || 'Main' || 'Sides' || 'Snacks' || 'Grills' => 'Meals',
+    'Smoothies' || 'Juices' => 'Drinks',
+    _ => 'Others',
+  };
+}
+
 /// Vendor menu — post-testing fixes, Section 11: every product is its own
 /// independently orderable item with its own quantity stepper, added to
 /// the cart directly from this list. This replaces the old
@@ -105,16 +116,18 @@ class CatalogScreen extends ConsumerWidget {
             );
           }
 
-          // Group by category, preserving the order they come back from the DB.
-          final categories = <String>[];
+          // Group into the 3 fixed categories: Meals, Drinks, Others.
+          // Legacy categories from the old 9-category system are mapped
+          // into one of these three.
+          const displayOrder = ['Meals', 'Drinks', 'Others'];
           final byCategory = <String, List<Product>>{};
           for (final p in products) {
-            if (!byCategory.containsKey(p.category)) {
-              categories.add(p.category);
-              byCategory[p.category] = [];
-            }
-            byCategory[p.category]!.add(p);
+            final cat = _normalizeCategory(p.category);
+            byCategory.putIfAbsent(cat, () => []).add(p);
           }
+          final categories = displayOrder
+              .where((c) => byCategory.containsKey(c))
+              .toList();
 
           return ListView.builder(
             padding: const EdgeInsets.only(

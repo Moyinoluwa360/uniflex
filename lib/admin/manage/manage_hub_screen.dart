@@ -4,15 +4,17 @@ import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../advertisements/advertisements_screen.dart';
 import '../around_categories/around_categories_screen.dart';
+import '../menu/menu_management_screen.dart';
+import '../profile/admin_profile_screen.dart';
 import '../referrals/referral_codes_screen.dart';
 import '../riders/rider_management_screen.dart';
+import '../scheduled/admin_scheduled_orders_screen.dart';
 import '../vendors/vendor_management_screen.dart';
 
-/// Post-testing fixes, Section 8 — a single "Manage" bottom-nav entry
-/// that opens this hub, which then branches into each management area.
-/// New admin capabilities (Rider management in Section 7, Around
-/// categories in Section 9) land as entries here instead of each getting
-/// its own bottom-nav tab, so the nav bar doesn't grow every phase.
+/// The "Manage" bottom-nav tab — a single hub that branches into every
+/// admin management area. Menu, Vendors, Riders, Around Categories,
+/// Referral Codes, Advertisements, Scheduled Orders, and Profile all
+/// live here instead of cluttering the bottom nav bar.
 class ManageHubScreen extends StatelessWidget {
   const ManageHubScreen({super.key});
 
@@ -23,6 +25,13 @@ class ManageHubScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
         children: const [
+          _ManageEntry(
+            icon: Icons.menu_book_outlined,
+            title: 'Menu',
+            subtitle: 'Uniflex catalog items and categories',
+            screen: MenuManagementScreen(),
+          ),
+          SizedBox(height: AppSpacing.cardGap),
           _ManageEntry(
             icon: Icons.storefront_outlined,
             title: 'Manage Vendors',
@@ -45,6 +54,13 @@ class ManageHubScreen extends StatelessWidget {
           ),
           SizedBox(height: AppSpacing.cardGap),
           _ManageEntry(
+            icon: Icons.schedule_outlined,
+            title: 'Scheduled Orders',
+            subtitle: 'Pre-orders with countdown timers',
+            screen: AdminScheduledOrdersScreen(),
+          ),
+          SizedBox(height: AppSpacing.cardGap),
+          _ManageEntry(
             icon: Icons.confirmation_number_outlined,
             title: 'Referral Codes',
             subtitle: 'Mint codes, allocate them, and track signups',
@@ -56,6 +72,13 @@ class ManageHubScreen extends StatelessWidget {
             title: 'Advertisements',
             subtitle: 'Banners on the student home page',
             screen: AdvertisementsScreen(),
+          ),
+          SizedBox(height: AppSpacing.cardGap),
+          _ManageEntry(
+            icon: Icons.person_outline,
+            title: 'Profile & Settings',
+            subtitle: 'Your admin profile and logout',
+            screen: AdminProfileScreen(),
           ),
         ],
       ),

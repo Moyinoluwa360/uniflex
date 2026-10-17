@@ -128,9 +128,7 @@ Deno.serve(async (req: Request) => {
           api_key: apiKey,
           message_type: "NUMERIC",
           to: phone,
-          // Termii's shared generic sender ID — swap for the registered
-          // Uniflex sender ID once Termii approves it.
-          from: "Termii",
+          from: "OE Alert",
           channel: "generic",
           pin_attempts: 3,
           pin_time_to_live: 10,

@@ -40,6 +40,17 @@ class CartItem {
     this.selectedOptions = const [],
   });
 
+  factory CartItem.fromJson(Map<String, dynamic> json) {
+    return CartItem(
+      product: Product.fromMap(json['product'] as Map<String, dynamic>),
+      quantity: json['quantity'] as int,
+      selectedOptions: (json['selected_options'] as List<dynamic>?)
+              ?.map((o) => SelectedOption.fromJson(o as Map<String, dynamic>))
+              .toList() ??
+          const [],
+    );
+  }
+
   final Product product;
   final int quantity;
   final List<SelectedOption> selectedOptions;
@@ -65,4 +76,10 @@ class CartItem {
       selectedOptions: selectedOptions,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'product': product.toMap(),
+        'quantity': quantity,
+        'selected_options': selectedOptions.map((o) => o.toJson()).toList(),
+      };
 }

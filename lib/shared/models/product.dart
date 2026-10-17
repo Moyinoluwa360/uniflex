@@ -44,4 +44,16 @@ class Product {
   /// packaged into a container to be handed over (most food); false for
   /// items that never do (drinks, etc.). Admin-editable per product.
   final bool requiresPack;
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'vendor_id': vendorId,
+        'name': name,
+        'description': description,
+        'category': category,
+        'base_price': basePrice,
+        'image_url': imageUrl,
+        'is_available': isAvailable,
+        'requires_pack': requiresPack,
+      };
 }

@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/models/order.dart';
 import '../../shared/models/order_item.dart';
 import '../../shared/models/vendor.dart';
+import '../../shared/services/saving_plan/saving_plan_providers.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
 import 'cart_provider.dart';
@@ -282,6 +283,7 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
       ref.invalidate(walletBalanceProvider);
       ref.invalidate(walletInfoProvider);
       ref.invalidate(walletTransactionsProvider);
+      ref.invalidate(activeSavingPlanProvider);
 
       state = OrderPlacementState(order: order, budgetWarning: planOverBudget);
       return order;
@@ -343,6 +345,7 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
       ref.invalidate(walletBalanceProvider);
       ref.invalidate(walletInfoProvider);
       ref.invalidate(walletTransactionsProvider);
+      ref.invalidate(activeSavingPlanProvider);
 
       state = OrderPlacementState(order: order, budgetWarning: planOverBudget);
       return order;

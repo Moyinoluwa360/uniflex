@@ -11,6 +11,16 @@ import '../../shared/widgets/inputs/app_text_field.dart';
 import '../services/admin_providers.dart';
 import 'product_form_screen.dart';
 
+/// Maps any product category into one of the three fixed display categories.
+String _normalizeCategory(String raw) {
+  return switch (raw) {
+    'Meals' || 'Drinks' || 'Others' => raw,
+    'Protein Meals' || 'Main' || 'Sides' || 'Snacks' || 'Grills' => 'Meals',
+    'Smoothies' || 'Juices' => 'Drinks',
+    _ => 'Others',
+  };
+}
+
 /// Uniflex's own menu — all products for the internal Uniflex vendor
 /// (vendor ID `00000000-0000-0000-0000-000000000001`).
 ///
@@ -69,11 +79,17 @@ class MenuManagementScreen extends ConsumerWidget {
             );
           }
 
-          // Group by category
+          // Group into the 3 fixed categories: Meals, Drinks, Others.
+          const displayOrder = ['Meals', 'Drinks', 'Others'];
           final byCategory = <String, List<Product>>{};
           for (final p in products) {
-            byCategory.putIfAbsent(p.category, () => []).add(p);
+            final cat = _normalizeCategory(p.category);
+            byCategory.putIfAbsent(cat, () => []).add(p);
           }
+
+          final categories = displayOrder
+              .where((c) => byCategory.containsKey(c))
+              .toList();
 
           return ListView.builder(
             padding: const EdgeInsets.fromLTRB(
@@ -82,9 +98,9 @@ class MenuManagementScreen extends ConsumerWidget {
               AppSpacing.screenGutter,
               AppSpacing.xl + 72, // space for FAB
             ),
-            itemCount: byCategory.length,
+            itemCount: categories.length,
             itemBuilder: (context, i) {
-              final category = byCategory.keys.elementAt(i);
+              final category = categories[i];
               final items = byCategory[category]!;
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

@@ -256,9 +256,11 @@ so far:
 Phase 2 additions follow these conventions:
 
 - `CartNotifier` (`student/ordering/cart_provider.dart`) — `Notifier<CartState>`.
-  The cart is local state (no async), so a plain `Notifier` is the right
-  fit. Cart is vendor-scoped: adding items from a different vendor
-  requires clearing first (the UI asks the user).
+  Cart is vendor-scoped: adding items from a different vendor requires
+  clearing first (the UI asks the user). As of Round 2, the cart is
+  **persisted to SharedPreferences** — every mutation serializes the full
+  `CartState` (items + vendor) to JSON; `build()` restores it on startup.
+  Corrupted data is silently discarded (fresh cart).
 - `OrderNotifier` (`student/ordering/order_repository.dart`) — `Notifier<OrderPlacementState>`.
   Wraps the two-step Supabase write (insert `orders` row, then insert
   `order_items` or `around_requests`). After a successful placement it
@@ -380,6 +382,7 @@ directly, so there's one place that knows every key the app depends on.
 | Push notifications (Firebase)    | `shared/services/notifications/` |
 | Maps / live tracking             | `shared/services/maps/`, consumed from `student/tracking/` and `rider/navigation/` |
 | Post-testing fixes ✅ (first Android QA pass) | `admin/manage/`, `admin/riders/`, `admin/around_categories/`, `student/ordering/pack_allocation_screen.dart`, `shared/widgets/{async,pin}/`, `shared/models/around_category.dart`, `supabase/functions/admin-create-rider/`, schema.sql "POST-TESTING FIXES & CHANGES" block |
+| Round 2 post-testing fixes ✅ (second QA pass) | `admin/analytics/`, `admin/admin_shell.dart` (4 tabs), `admin/manage/manage_hub_screen.dart` (expanded), `student/ordering/cart_provider.dart` (persistence), category normalization in `catalog_screen.dart`/`menu_management_screen.dart`/`product_form_screen.dart` |
 
 Update this table as phases land so it stays a reliable map of the repo.
 
@@ -389,8 +392,8 @@ All admin accounts share the same `role = 'admin'` in `profiles`. The
 `admin_tier` column (nullable) subdivides admin accounts:
 
 ```
-admin_tier = NULL or 'super_admin'  →  AdminShell: all 5 tabs
-admin_tier = 'kitchen_staff'        →  AdminShell: Queue + Profile only
+admin_tier = NULL or 'super_admin'  →  AdminShell: 4 tabs (Dashboard, Orders, Manage, Analytics)
+admin_tier = 'kitchen_staff'        →  AdminShell: Orders only
 ```
 
 The tier check happens once, in `AdminShell.build()`, by reading
@@ -402,13 +405,13 @@ would reach those screens. Server-side, the admin RLS policies (which use
 the kitchen_staff *further* at the DB level (e.g. only allowing ORDER
 reads/writes) is a hardening step deferred to a later phase.
 
-**"Manage" hub (post-testing fixes):** the `super_admin` tabs are now
-Dashboard / Queue / Scheduled / Menu / **Manage** / Profile — a single
-"Manage" tab replacing the old standalone "Vendors" tab. It opens
-`ManageHubScreen`, which branches into Manage Vendors (unchanged Phase 4
-screen, just relocated), Manage Riders, and Around Categories. New admin
-capabilities should add an entry to this hub rather than a new bottom-nav
-tab, so the nav bar doesn't grow every phase.
+**"Manage" hub (post-testing fixes):** the `super_admin` bottom nav is
+now **Dashboard / Orders / Manage / Analytics** (4 tabs, down from 6 in
+Round 1). Menu Management, Scheduled Orders, and Profile & Settings moved
+into `ManageHubScreen` entries alongside Vendors, Riders, Around
+Categories, Referral Codes, and Advertisements. Kitchen staff see only 1
+tab (Orders). New admin capabilities should add a hub entry, not a new
+bottom-nav tab.
 
 Seeding a kitchen_staff account:
 1. Create the Supabase Auth user by hand (Dashboard → Authentication →
@@ -439,11 +442,12 @@ The `.stream()` call:
 On each emission, the service batch-fetches `order_items` for all active
 orders in one `inFilter` query, yielding a `List<KitchenOrder>` (order
 + items). The screen filters to `type = 'food'` and status in
-`placed | preparing | ready | ready_for_pickup` client-side (the
-`type = 'food'` filter is a post-testing fix — Around requests are also
-`source = 'uniflex'` and used to show up in the queue alongside food
-orders) and groups them into four visual sections: Scheduled, Preparing,
-Ready for Pickup, Ready for Delivery.
+`placed | preparing | ready | ready_for_pickup | out_for_delivery`
+client-side and groups them into five visual sections: Scheduled,
+Preparing, Ready for Pickup, Ready for Delivery, Out for Delivery.
+Round 2 added `out_for_delivery` to the filter (orders used to disappear
+from admin view once dispatched) and shows rider delivery stage
+(accepted/picked_up) on dispatched order cards.
 
 Status transitions go through the `update_order_status` SECURITY DEFINER
 RPC rather than a direct UPDATE, so the server validates the caller's
@@ -586,6 +590,27 @@ quantity}`), written by `place_food_order_with_payment` in the same
 transaction as the order — Kitchen/Admin can see exactly what to put in
 each pack, not just a total count. `orders.pack_count`/`pack_fee` mirror
 the totals for quick display without joining `order_packs`.
+
+## Menu categories: 3 fixed display categories (Round 2)
+
+The DB `products.category` column stores whatever string the admin typed
+(legacy values include "Protein Meals", "Main", "Sides", "Snacks",
+"Grills", "Smoothies", "Juices", etc.). As of Round 2, both the student
+catalog and admin menu management normalize these into exactly **3 fixed
+display categories**: **Meals, Drinks, Others**.
+
+The mapping (`_normalizeCategory()`, defined in `catalog_screen.dart`,
+`menu_management_screen.dart`, and `product_form_screen.dart`):
+
+```
+Protein Meals / Main / Sides / Snacks / Grills  →  Meals
+Smoothies / Juices                               →  Drinks
+Everything else                                  →  Others
+```
+
+`ProductFormScreen`'s category dropdown now only offers the 3 fixed
+values, so new products always get a clean category. Legacy products
+display under the right group without a data migration.
 
 ## Catalog: independent items, no combo-builder (post-testing fixes, Section 11)
 

@@ -113,55 +113,33 @@ class KitchenQueueScreen extends ConsumerWidget {
               .toList();
           final readyForDelivery =
               orders.where((o) => o.order.status == OrderStatus.ready).toList();
+          final outForDelivery = orders
+              .where((o) => o.order.status == OrderStatus.outForDelivery)
+              .toList();
+
+          final sections = <Widget>[];
+          void addSection(String label, List<KitchenOrder> items, Color color) {
+            if (items.isEmpty) return;
+            if (sections.isNotEmpty) {
+              sections.add(const SizedBox(height: AppSpacing.lg));
+            }
+            sections.add(_SectionHeader(
+                label: label, count: items.length, color: color));
+            sections.add(const SizedBox(height: AppSpacing.sm));
+            sections.addAll(
+                items.map((ko) => _KitchenOrderCard(kitchenOrder: ko)));
+          }
+
+          addSection('Scheduled', placed, AppColors.orange);
+          addSection('Preparing', preparing, theme.colorScheme.primary);
+          addSection('Ready for Pickup', readyForPickup, AppColors.emerald);
+          addSection('Ready for Delivery', readyForDelivery, AppColors.emerald);
+          addSection('Out for Delivery', outForDelivery, AppColors.orange);
 
           return ListView(
             padding: const EdgeInsets.all(AppSpacing.screenGutter),
             children: [
-              if (placed.isNotEmpty) ...[
-                _SectionHeader(
-                  label: 'Scheduled',
-                  count: placed.length,
-                  color: AppColors.orange,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                ...placed.map((ko) => _KitchenOrderCard(kitchenOrder: ko)),
-              ],
-              if (preparing.isNotEmpty) ...[
-                if (placed.isNotEmpty) const SizedBox(height: AppSpacing.lg),
-                _SectionHeader(
-                  label: 'Preparing',
-                  count: preparing.length,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                ...preparing.map((ko) => _KitchenOrderCard(kitchenOrder: ko)),
-              ],
-              if (readyForPickup.isNotEmpty) ...[
-                if (placed.isNotEmpty || preparing.isNotEmpty)
-                  const SizedBox(height: AppSpacing.lg),
-                _SectionHeader(
-                  label: 'Ready for Pickup',
-                  count: readyForPickup.length,
-                  color: AppColors.emerald,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                ...readyForPickup
-                    .map((ko) => _KitchenOrderCard(kitchenOrder: ko)),
-              ],
-              if (readyForDelivery.isNotEmpty) ...[
-                if (placed.isNotEmpty ||
-                    preparing.isNotEmpty ||
-                    readyForPickup.isNotEmpty)
-                  const SizedBox(height: AppSpacing.lg),
-                _SectionHeader(
-                  label: 'Ready for Delivery',
-                  count: readyForDelivery.length,
-                  color: AppColors.emerald,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                ...readyForDelivery
-                    .map((ko) => _KitchenOrderCard(kitchenOrder: ko)),
-              ],
+              ...sections,
               const SizedBox(height: AppSpacing.xl),
             ],
           );
@@ -524,10 +502,9 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
             ),
           ],
 
-          // ── Waiting-for-rider notice ──────────────────────────────────
-          // Shown once Transfer to Rider has been tapped — the order sits
-          // in the pool until a rider accepts it; there's nothing more
-          // for Admin to do here (Section 12).
+          // ── Rider delivery status ──────────────────────────────────────
+          // Shows the rider's current delivery stage so Admin can track
+          // where a dispatched order is at.
           if (order.status == OrderStatus.ready &&
               !isPickup &&
               order.transferredToRiderAt != null) ...[
@@ -544,6 +521,37 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
                       'Waiting for a rider to accept…',
                       style: theme.textTheme.labelMedium
                           ?.copyWith(color: AppColors.orange),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (order.status == OrderStatus.outForDelivery) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Row(
+                children: [
+                  Icon(
+                    order.deliveryStage == 'picked_up'
+                        ? Icons.delivery_dining
+                        : Icons.two_wheeler_outlined,
+                    size: 16,
+                    color: AppColors.emerald,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      switch (order.deliveryStage) {
+                        'accepted' => 'Rider assigned — heading to pickup',
+                        'picked_up' => 'Rider has picked up — delivering now',
+                        _ => 'Out for delivery',
+                      },
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: AppColors.emerald,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
@@ -603,6 +611,7 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
       OrderStatus.placed => AppColors.orange,
       OrderStatus.preparing => Theme.of(context).colorScheme.primary,
       OrderStatus.ready || OrderStatus.readyForPickup => AppColors.emerald,
+      OrderStatus.outForDelivery => AppColors.orange,
       _ => Theme.of(context).colorScheme.outline,
     };
   }

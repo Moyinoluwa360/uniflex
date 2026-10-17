@@ -114,17 +114,19 @@ class _InfoRow extends StatelessWidget {
               size: 20,
               color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
           const SizedBox(width: AppSpacing.md),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  ),
                 ),
-              ),
-              Text(value, style: theme.textTheme.bodyMedium),
-            ],
+                Text(value, style: theme.textTheme.bodyMedium),
+              ],
+            ),
           ),
         ],
       ),

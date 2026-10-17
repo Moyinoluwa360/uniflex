@@ -73,38 +73,77 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     super.dispose();
   }
 
+  /// Builds same-day time slots in 30-min increments from the next rounded
+  /// half-hour until end of day (22:00). Presented as a scrollable bottom
+  /// sheet of tappable chips — no date picker (everything is same-day) and
+  /// no clock dial.
   Future<void> _pickSchedule() async {
     final now = DateTime.now();
-    final date = await showDatePicker(
-      context: context,
-      initialDate: now.add(const Duration(hours: 1)),
-      firstDate: now,
-      lastDate: now.add(const Duration(days: 30)),
-    );
-    if (date == null || !mounted) return;
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(hours: 1))),
-    );
-    if (time == null || !mounted) return;
+    // Start from the next 30-minute boundary at least 30 min in the future.
+    var next = DateTime(now.year, now.month, now.day,
+        now.hour, now.minute >= 30 ? 30 : 0);
+    while (!next.isAfter(now.add(const Duration(minutes: 29)))) {
+      next = next.add(const Duration(minutes: 30));
+    }
 
-    final picked =
-        DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    final slots = <DateTime>[];
+    final endOfDay = DateTime(now.year, now.month, now.day, 22, 0);
+    while (!next.isAfter(endOfDay)) {
+      slots.add(next);
+      next = next.add(const Duration(minutes: 30));
+    }
 
-    // The date picker allows today and the time picker has no lower bound,
-    // so "today at 09:00" at 3pm was accepted and placed an order scheduled
-    // for the past. The server rejects it too (SCHEDULE_IN_PAST) — catch it
-    // here so the student finds out before reaching Confirm.
-    if (!picked.isAfter(now)) {
+    if (slots.isEmpty) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Pick a time in the future.'),
+          content: Text('No more time slots available today.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
       return;
     }
 
+    final picked = await showModalBottomSheet<DateTime>(
+      context: context,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.screenGutter),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Pick a time', style: theme.textTheme.titleMedium),
+                const SizedBox(height: AppSpacing.xs),
+                Text('Same-day pre-order — choose when you\'d like it ready.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface
+                          .withValues(alpha: 0.6),
+                    )),
+                const SizedBox(height: AppSpacing.md),
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.sm,
+                  children: slots.map((slot) {
+                    final label =
+                        '${slot.hour.toString().padLeft(2, '0')}:${slot.minute.toString().padLeft(2, '0')}';
+                    return ActionChip(
+                      label: Text(label),
+                      onPressed: () => Navigator.pop(ctx, slot),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: AppSpacing.md),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (picked == null || !mounted) return;
     setState(() => _scheduledFor = picked);
   }
 
@@ -628,10 +667,6 @@ class _ScheduleRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final months = [
-      'Jan','Feb','Mar','Apr','May','Jun',
-      'Jul','Aug','Sep','Oct','Nov','Dec'
-    ];
     if (scheduledFor == null) {
       return OutlinedButton.icon(
         icon: const Icon(Icons.schedule_outlined),
@@ -641,8 +676,7 @@ class _ScheduleRow extends StatelessWidget {
     }
     final dt = scheduledFor!;
     final label =
-        '${dt.day} ${months[dt.month - 1]}, '
-        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+        'Today at ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
     return Row(
       children: [
         const Icon(Icons.schedule, size: 18),

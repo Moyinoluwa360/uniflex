@@ -407,21 +407,22 @@ class _OrderCard extends StatelessWidget {
                 ],
               ),
               if (!order.status.isTerminal)
-                OutlinedButton.icon(
+                FilledButton.icon(
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => OrderTrackingScreen(order: order),
                     ),
                   ),
-                  icon: const Icon(Icons.location_on_outlined, size: 16),
-                  label: const Text('Track'),
-                  style: OutlinedButton.styleFrom(
+                  icon: const Icon(Icons.location_on_outlined, size: 18),
+                  label: const Text('Track Order'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.emerald,
+                    foregroundColor: AppColors.pureWhite,
                     padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md,
-                      vertical: AppSpacing.xs,
+                      horizontal: AppSpacing.lg,
+                      vertical: AppSpacing.sm + 2,
                     ),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    minimumSize: const Size(120, 44),
                   ),
                 ),
             ],
