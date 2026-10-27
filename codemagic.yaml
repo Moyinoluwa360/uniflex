@@ -13,11 +13,9 @@ workflows:
         bundle_identifier: com.uniflex.uniflex
       vars:
         BUNDLE_ID: com.uniflex.uniflex
-        # These are set in Codemagic → App Settings → Environment Variables:
-        # APP_STORE_CONNECT_KEY_IDENTIFIER
-        # APP_STORE_CONNECT_ISSUER_ID
-        # APP_STORE_CONNECT_PRIVATE_KEY
-        # ENV_FILE_CONTENTS
+      groups:
+        - app_store_credentials
+        - env_file
 
     scripts:
       - name: Write .env file
