@@ -45,5 +45,13 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Uniflex needs access to your photo library to upload product images.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Uniflex needs permission to save photos to your library.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Uniflex needs camera access to take photos for product listings.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Uniflex uses your location to help riders navigate to your delivery address.</string>
 </dict>
 </plist>

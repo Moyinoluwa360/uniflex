@@ -3569,4 +3569,563 @@ update public.products set requires_pack = false
 -- kept separate on purpose: it rewrites a dozen functions that also exist
 -- above, so duplicating it here would leave two definitions of each to
 -- keep in sync, and whichever ran last would silently win.
+
+
+-- =====================================================================
+-- ROUND 3 FIXES
+-- =====================================================================
+-- Run this after all previous blocks. Additive only.
+
+-- A1: otp_send_log — missing table that phone-otp edge function requires
+-- for rate limiting. The function queries this via the service role key;
+-- no authenticated client ever needs to read or write it directly.
+create table if not exists public.otp_send_log (
+  id      uuid        primary key default gen_random_uuid(),
+  user_id uuid        not null references auth.users(id) on delete cascade,
+  sent_at timestamptz not null default now()
+);
+alter table public.otp_send_log enable row level security;
+-- No client policies: service role (edge function) writes, nobody else reads.
+
+-- A3: cleanup — delete incomplete signup profiles where phone was never
+-- verified and the record is older than 7 days (orphaned from failed/
+-- abandoned signups before this fix). Safe to run once.
+delete from public.profiles
+where onboarding_complete = false
+  and phone_verified_at is null
+  and created_at < now() - interval '7 days';
+
+
+-- ─────────────────────────────────────────────────────────────────────
+-- ROUND 3 — Part B: commitment fee + adjustable order
+-- ─────────────────────────────────────────────────────────────────────
+
+-- 1. New order statuses for the sourcing flow.
+-- Drop the old constraint and add the two new values.
+alter table public.orders drop constraint if exists orders_status_check;
+alter table public.orders add constraint orders_status_check
+  check (status in (
+    'placed', 'preparing', 'ready',
+    'out_for_delivery', 'ready_for_pickup',
+    'completed', 'cancelled',
+    'being_sourced',           -- commitment fee paid, rider sourcing items
+    'awaiting_final_payment'   -- rider confirmed items, student pays food cost
+  ));
+
+-- 2. New columns on orders for the two-stage payment.
+alter table public.orders
+  add column if not exists commitment_fee_paid   boolean      not null default false,
+  add column if not exists commitment_fee_amount numeric(10,2) not null default 0,
+  add column if not exists final_amount          numeric(10,2),          -- set by rider
+  add column if not exists final_payment_paid    boolean      not null default false;
+
+-- 3. order_item_flags — rider flags specific items as unavailable.
+create table if not exists public.order_item_flags (
+  id            uuid        primary key default gen_random_uuid(),
+  order_id      uuid        not null references public.orders(id) on delete cascade,
+  order_item_id uuid,                  -- null for around requests (no line items)
+  product_name  text        not null,
+  quantity      int         not null default 1,
+  flagged_by    uuid        not null references auth.users(id),
+  resolved      boolean     not null default false,
+  created_at    timestamptz not null default now()
+);
+alter table public.order_item_flags enable row level security;
+
+-- Rider can insert flags for their own assigned orders.
+create policy "rider_insert_flags" on public.order_item_flags
+  for insert to authenticated
+  with check (
+    flagged_by = auth.uid()
+    and exists (
+      select 1 from public.orders o
+      where o.id = order_id and o.rider_id = auth.uid()
+    )
+    and public.is_rider()
+  );
+
+-- Student can read flags on their own orders.
+create policy "student_read_flags" on public.order_item_flags
+  for select to authenticated
+  using (
+    exists (
+      select 1 from public.orders o
+      where o.id = order_id and o.student_id = auth.uid()
+    )
+  );
+
+-- Rider can read/update flags on their assigned orders.
+create policy "rider_read_own_flags" on public.order_item_flags
+  for select to authenticated
+  using (
+    flagged_by = auth.uid()
+  );
+
+create policy "rider_update_flags" on public.order_item_flags
+  for update to authenticated
+  using (flagged_by = auth.uid())
+  with check (flagged_by = auth.uid());
+
+-- 4. RLS: partner/around orders in being_sourced are pool-eligible.
+-- The existing job_pool_read policy checked status = 'placed' for
+-- partner/around orders. We update it to check 'being_sourced' instead,
+-- since the commitment fee must be paid before they enter the rider pool.
+drop policy if exists "job_pool_read" on public.orders;
+create policy "job_pool_read" on public.orders
+  for select to authenticated
+  using (
+    -- student sees own orders
+    student_id = auth.uid()
+    -- admin sees all orders
+    or (select public.is_admin())
+    -- rider sees their own assigned orders
+    or rider_id = auth.uid()
+    -- Uniflex delivery: pool-eligible after admin "Transfer to Rider"
+    or (source = 'uniflex' and status = 'ready'
+        and delivery_type in ('delivery', 'campus_delivery', 'hostel_delivery')
+        and transferred_to_rider_at is not null)
+    -- partner food: pool-eligible once commitment fee paid (being_sourced)
+    or (source = 'partner' and status = 'being_sourced'
+        and delivery_type in ('delivery', 'campus_delivery', 'hostel_delivery'))
+    -- around requests: pool-eligible once commitment fee paid (being_sourced)
+    or (type = 'around' and status = 'being_sourced')
+  );
+
+-- 5. RPC: pay_commitment_fee
+-- Deducts ₦300 from wallet, sets order to being_sourced.
+-- Only callable by the order's own student.
+--
+-- TODO(policy): If the order falls through completely (rider finds nothing
+-- available), the ₦300 commitment fee is currently NOT automatically refunded.
+-- This is intentional — the refund policy has not been decided. Admin must
+-- manually cancel the order and process any refund via a separate flow.
+-- Do not add auto-refund logic until the policy is confirmed.
+create or replace function public.pay_commitment_fee(
+  p_order_id uuid,
+  p_pin      text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id uuid;
+  v_order      public.orders%rowtype;
+  v_wallet     public.wallets%rowtype;
+  v_fee        numeric(10,2) := 300.00;
+begin
+  v_student_id := auth.uid();
+
+  -- Verify transaction PIN first.
+  if not (select public.verify_transaction_pin(p_pin)) then
+    raise exception 'INVALID_PIN';
+  end if;
+
+  -- Lock order row.
+  select * into v_order from public.orders
+  where id = p_order_id for update;
+
+  if not found then raise exception 'Order not found'; end if;
+  if v_order.student_id <> v_student_id then raise exception 'Unauthorized'; end if;
+  if v_order.commitment_fee_paid then raise exception 'Commitment fee already paid'; end if;
+  if v_order.status <> 'placed' then raise exception 'Order is not in placed state'; end if;
+
+  -- Check source/type (partner or around only).
+  if v_order.source = 'uniflex' and v_order.type = 'food' then
+    raise exception 'Commitment fee does not apply to Uniflex orders';
+  end if;
+
+  -- Lock wallet.
+  select * into v_wallet from public.wallets
+  where user_id = v_student_id for update;
+
+  if not found then raise exception 'Wallet not found'; end if;
+  if v_wallet.balance < v_fee then raise exception 'INSUFFICIENT_BALANCE'; end if;
+
+  -- Deduct.
+  update public.wallets
+  set balance = balance - v_fee
+  where user_id = v_student_id;
+
+  -- Record transaction.
+  insert into public.wallet_transactions
+    (user_id, type, amount, source, order_id, balance_after)
+  values
+    (v_student_id, 'debit', v_fee, 'commitment_fee', p_order_id,
+     v_wallet.balance - v_fee);
+
+  -- Advance order.
+  update public.orders
+  set
+    commitment_fee_paid   = true,
+    commitment_fee_amount = v_fee,
+    status                = 'being_sourced'
+  where id = p_order_id;
+
+  return jsonb_build_object(
+    'balance_after', v_wallet.balance - v_fee
+  );
+end;
+$$;
+grant execute on function public.pay_commitment_fee(uuid, text) to authenticated;
+
+-- 6. RPC: flag_item_unavailable
+-- Rider flags an item as unavailable and sends a message to the customer.
+create or replace function public.flag_item_unavailable(
+  p_order_id      uuid,
+  p_order_item_id uuid,
+  p_product_name  text,
+  p_quantity      int
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_rider() then raise exception 'Unauthorized'; end if;
+
+  if not exists (
+    select 1 from public.orders
+    where id = p_order_id and rider_id = auth.uid() and status = 'being_sourced'
+  ) then
+    raise exception 'Order not found or not in sourcing state';
+  end if;
+
+  insert into public.order_item_flags
+    (order_id, order_item_id, product_name, quantity, flagged_by)
+  values
+    (p_order_id, p_order_item_id, p_product_name, p_quantity, auth.uid());
+end;
+$$;
+grant execute on function public.flag_item_unavailable(uuid, uuid, text, int) to authenticated;
+
+-- 7. RPC: confirm_sourced_items
+-- Rider confirms what's available and sets the final amount.
+-- Transitions order to awaiting_final_payment.
+create or replace function public.confirm_sourced_items(
+  p_order_id     uuid,
+  p_final_amount numeric(10,2)
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_rider() then raise exception 'Unauthorized'; end if;
+
+  if not exists (
+    select 1 from public.orders
+    where id = p_order_id and rider_id = auth.uid() and status = 'being_sourced'
+  ) then
+    raise exception 'Order not found or not in sourcing state';
+  end if;
+
+  if p_final_amount < 0 then
+    raise exception 'Final amount cannot be negative';
+  end if;
+
+  update public.orders
+  set
+    final_amount = p_final_amount,
+    status       = 'awaiting_final_payment'
+  where id = p_order_id;
+end;
+$$;
+grant execute on function public.confirm_sourced_items(uuid, numeric) to authenticated;
+
+-- 8. RPC: pay_final_amount
+-- Student pays the final food cost after items confirmed.
+-- Transitions order to out_for_delivery.
+create or replace function public.pay_final_amount(
+  p_order_id uuid,
+  p_pin      text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id uuid;
+  v_order      public.orders%rowtype;
+  v_wallet     public.wallets%rowtype;
+begin
+  v_student_id := auth.uid();
+
+  -- Verify transaction PIN.
+  if not (select public.verify_transaction_pin(p_pin)) then
+    raise exception 'INVALID_PIN';
+  end if;
+
+  -- Lock order.
+  select * into v_order from public.orders
+  where id = p_order_id for update;
+
+  if not found then raise exception 'Order not found'; end if;
+  if v_order.student_id <> v_student_id then raise exception 'Unauthorized'; end if;
+  if v_order.status <> 'awaiting_final_payment' then
+    raise exception 'Order is not awaiting final payment';
+  end if;
+  if v_order.final_payment_paid then raise exception 'Final payment already made'; end if;
+  if v_order.final_amount is null then raise exception 'Final amount not set by rider'; end if;
+
+  -- Lock wallet.
+  select * into v_wallet from public.wallets
+  where user_id = v_student_id for update;
+
+  if not found then raise exception 'Wallet not found'; end if;
+  if v_wallet.balance < v_order.final_amount then raise exception 'INSUFFICIENT_BALANCE'; end if;
+
+  -- Deduct.
+  update public.wallets
+  set balance = balance - v_order.final_amount
+  where user_id = v_student_id;
+
+  -- Record transaction.
+  insert into public.wallet_transactions
+    (user_id, type, amount, source, order_id, balance_after)
+  values
+    (v_student_id, 'debit', v_order.final_amount, 'order_payment', p_order_id,
+     v_wallet.balance - v_order.final_amount);
+
+  -- Update order total to reflect actual amount paid.
+  update public.orders
+  set
+    final_payment_paid = true,
+    total_amount       = v_order.commitment_fee_amount + v_order.final_amount,
+    status             = 'out_for_delivery'
+  where id = p_order_id;
+
+  return jsonb_build_object(
+    'balance_after', v_wallet.balance - v_order.final_amount
+  );
+end;
+$$;
+grant execute on function public.pay_final_amount(uuid, text) to authenticated;
+
+-- 9. accept_order — updated to handle being_sourced orders.
+-- For being_sourced orders, rider is accepted but status stays being_sourced
+-- (not out_for_delivery — that only happens after final payment).
+create or replace function public.accept_order(p_order_id uuid)
+returns void language plpgsql security definer
+set search_path = public
+as $$
+declare
+  v_order public.orders%rowtype;
+begin
+  if not public.is_rider() then
+    raise exception 'Unauthorized';
+  end if;
+
+  select * into v_order from public.orders
+  where id = p_order_id
+  for update nowait;
+
+  if not found then raise exception 'Order not found'; end if;
+  if v_order.rider_id is not null then raise exception 'Order already taken'; end if;
+
+  if not (
+    (v_order.source = 'uniflex' and v_order.status = 'ready'
+       and v_order.delivery_type in ('delivery', 'campus_delivery', 'hostel_delivery')
+       and v_order.transferred_to_rider_at is not null)
+    or (v_order.source = 'partner' and v_order.status = 'being_sourced'
+       and v_order.delivery_type in ('delivery', 'campus_delivery', 'hostel_delivery'))
+    or (v_order.type = 'around' and v_order.status = 'being_sourced')
+  ) then
+    raise exception 'Order is not eligible for acceptance';
+  end if;
+
+  update public.orders
+  set
+    rider_id       = auth.uid(),
+    delivery_stage = 'accepted',
+    -- being_sourced stays being_sourced; uniflex ready → out_for_delivery
+    status         = case
+                       when v_order.status = 'being_sourced' then 'being_sourced'
+                       else 'out_for_delivery'
+                     end
+  where id = p_order_id;
+end;
+$$;
+grant execute on function public.accept_order(uuid) to authenticated;
+
+-- 10. wallet_transactions.source CHECK — add 'commitment_fee' source type.
+-- The current constraint (from schema.sql fix-5 block) includes:
+-- 'topup','order_payment','refund','referral_bonus','gift_payment',
+-- 'birthday_reward','group_order_payment'
+-- We widen it to include 'commitment_fee'.
+alter table public.wallet_transactions drop constraint if exists wallet_transactions_source_check;
+alter table public.wallet_transactions add constraint wallet_transactions_source_check
+  check (source in ('topup', 'order_payment', 'refund', 'commitment_fee',
+                    'referral_bonus', 'gift_payment', 'birthday_reward',
+                    'group_order_payment'));
+-- =====================================================================
+
+-- =====================================================================
+-- ROUND 3 — Part C: extend commitment fee to all delivery order types
+-- =====================================================================
+
+-- C1. place_around_order — creates an Around order without any payment.
+-- The commitment fee + final payment are handled by pay_commitment_fee
+-- and pay_final_amount respectively (same as partner orders now).
+create or replace function public.place_around_order(
+  p_category          text,
+  p_pickup_location   text,
+  p_dropoff_location  text,
+  p_item_description  text,
+  p_flat_fee          numeric(10,2)
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id uuid;
+  v_order_id   uuid;
+begin
+  v_student_id := auth.uid();
+  if v_student_id is null then raise exception 'Unauthorized'; end if;
+
+  if not exists (select 1 from public.profiles where id = v_student_id) then
+    raise exception 'Profile not found';
+  end if;
+
+  insert into public.orders
+    (student_id, source, type, status, delivery_type,
+     total_amount, estimated_time)
+  values
+    (v_student_id, 'uniflex', 'around', 'placed', 'delivery',
+     p_flat_fee, '15–25 min')
+  returning id into v_order_id;
+
+  insert into public.around_requests
+    (order_id, category, pickup_location, dropoff_location, item_description)
+  values
+    (v_order_id, p_category, p_pickup_location, p_dropoff_location, p_item_description);
+
+  return jsonb_build_object('order_id', v_order_id);
+end;
+$$;
+grant execute on function public.place_around_order(text, text, text, text, numeric) to authenticated;
+
+-- C2. pay_final_amount — updated to branch on source/type:
+--   Uniflex delivery: awaiting_final_payment → ready (then admin transfers to rider pool)
+--   Partner food / Around: awaiting_final_payment → out_for_delivery (rider already assigned)
+create or replace function public.pay_final_amount(
+  p_order_id uuid,
+  p_pin      text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id uuid;
+  v_order      public.orders%rowtype;
+  v_wallet     public.wallets%rowtype;
+  v_next_status text;
+begin
+  v_student_id := auth.uid();
+
+  if not (select public.verify_transaction_pin(p_pin)) then
+    raise exception 'INVALID_PIN';
+  end if;
+
+  select * into v_order from public.orders where id = p_order_id for update;
+
+  if not found then raise exception 'Order not found'; end if;
+  if v_order.student_id <> v_student_id then raise exception 'Unauthorized'; end if;
+  if v_order.status <> 'awaiting_final_payment' then
+    raise exception 'Order is not awaiting final payment';
+  end if;
+  if v_order.final_payment_paid then raise exception 'Final payment already made'; end if;
+  if v_order.final_amount is null then raise exception 'Final amount not set'; end if;
+
+  select * into v_wallet from public.wallets where user_id = v_student_id for update;
+  if not found then raise exception 'Wallet not found'; end if;
+  if v_wallet.balance < v_order.final_amount then raise exception 'INSUFFICIENT_BALANCE'; end if;
+
+  update public.wallets set balance = balance - v_order.final_amount where user_id = v_student_id;
+
+  insert into public.wallet_transactions
+    (user_id, type, amount, source, order_id, balance_after)
+  values
+    (v_student_id, 'debit', v_order.final_amount, 'order_payment', p_order_id,
+     v_wallet.balance - v_order.final_amount);
+
+  -- Uniflex delivery: go to 'ready' so admin can Transfer to Rider.
+  -- Partner food and Around: rider is already assigned, go straight to out_for_delivery.
+  v_next_status := case
+    when v_order.source = 'uniflex' and v_order.type = 'food' then 'ready'
+    else 'out_for_delivery'
+  end;
+
+  update public.orders
+  set
+    final_payment_paid = true,
+    total_amount       = v_order.commitment_fee_amount + v_order.final_amount,
+    status             = v_next_status
+  where id = p_order_id;
+
+  return jsonb_build_object('balance_after', v_wallet.balance - v_order.final_amount);
+end;
+$$;
+grant execute on function public.pay_final_amount(uuid, text) to authenticated;
+
+-- C3. update_order_status — add being_sourced and awaiting_final_payment
+-- to the allowed target statuses, and allow being_sourced → preparing
+-- so the kitchen can start preparing a Uniflex delivery order after the
+-- student pays the commitment fee.
+create or replace function public.update_order_status(
+  p_order_id   uuid,
+  p_new_status text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_order public.orders%rowtype;
+begin
+  if not (select public.is_admin()) then
+    raise exception 'Unauthorized';
+  end if;
+
+  if p_new_status not in (
+    'placed', 'preparing', 'ready', 'awaiting_final_payment',
+    'out_for_delivery', 'ready_for_pickup',
+    'completed', 'cancelled'
+  ) then
+    raise exception 'Invalid status: %', p_new_status;
+  end if;
+
+  select * into v_order from public.orders where id = p_order_id;
+  if not found then raise exception 'Order not found: %', p_order_id; end if;
+
+  -- Delivery orders can only reach out_for_delivery / completed via the
+  -- rider workflow (accept_order / verify_delivery). These transitions
+  -- must not be available to admin direct calls.
+  if (
+       v_order.type = 'around'
+       or (v_order.type = 'food' and v_order.delivery_type in ('delivery', 'campus_delivery', 'hostel_delivery'))
+     )
+     and p_new_status in ('out_for_delivery', 'completed') then
+    raise exception 'Delivery orders can only reach that status through the rider workflow';
+  end if;
+
+  if v_order.type = 'food' and v_order.delivery_type = 'pickup'
+     and p_new_status = 'completed' and v_order.status <> 'ready_for_pickup' then
+    raise exception 'Pickup orders must be Ready for Pickup before they can be completed';
+  end if;
+
+  update public.orders set status = p_new_status where id = p_order_id;
+end;
+$$;
+grant execute on function public.update_order_status(uuid, text) to authenticated;
 -- =====================================================================
