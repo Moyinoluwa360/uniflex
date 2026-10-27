@@ -13,6 +13,7 @@ import '../../shared/widgets/inputs/app_text_field.dart';
 import '../../shared/widgets/navigation/app_bottom_nav_shell.dart';
 import '../../shared/widgets/pin/pin_entry_sheet.dart';
 import 'cart_provider.dart';
+import 'commitment_fee_screen.dart';
 import 'order_confirmation_screen.dart';
 import 'order_repository.dart';
 import 'pack_allocation_screen.dart';
@@ -279,11 +280,21 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       );
     }
 
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => OrderConfirmationScreen(order: order),
-      ),
-    );
+    // All delivery orders require the staged commitment-fee flow.
+    // Pickup orders (Uniflex) go straight to confirmation — no rider dispatch, no fee.
+    if (order.isForDelivery) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => CommitmentFeeScreen(order: order),
+        ),
+      );
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => OrderConfirmationScreen(order: order),
+        ),
+      );
+    }
   }
 
   @override

@@ -86,7 +86,7 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
 
       await ref
           .read(profileServiceProvider)
-          .createStubProfile(userId: userId, email: email);
+          .createStubProfile(userId: userId, email: email, phone: e164Phone);
 
       final otpResult = await ref
           .read(phoneOtpServiceProvider)
@@ -100,7 +100,16 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
         ),
       );
     } on AuthException catch (e) {
-      setState(() => _errorText = e.message);
+      final msg = e.message.toLowerCase();
+      if (msg.contains('already') || msg.contains('registered')) {
+        setState(
+          () => _errorText =
+              'An account with this email already exists. '
+              "Try logging in, or use 'Forgot password?' to recover access.",
+        );
+      } else {
+        setState(() => _errorText = e.message);
+      }
     } on OtpException catch (e) {
       setState(
         () => _errorText =

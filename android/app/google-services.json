@@ -7,6 +7,25 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:134015749698:android:a40ebf3c148d48d21be7db",
+        "android_client_info": {
+          "package_name": "com.uniflex.myapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCpWcsauc8yIIRSmQyuBcYpmum703X9d2s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:134015749698:android:3d764c8ab6a564f21be7db",
         "android_client_info": {
           "package_name": "com.uniflex.uniflex"

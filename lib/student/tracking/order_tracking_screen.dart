@@ -1,20 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../shared/models/order.dart';
+import '../../shared/services/auth/auth_providers.dart';
+import '../../shared/services/supabase/supabase_providers.dart';
+import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
+import '../../shared/widgets/pin/pin_entry_sheet.dart';
+import '../ordering/adjust_order_screen.dart';
 import '../ordering/order_repository.dart';
 
 /// Live order tracking — shows the current order status as a vertical
 /// step timeline, refreshable. The data source is [orderByIdProvider]
 /// (a FutureProvider) so swapping it for a Supabase realtime stream in
 /// Phase 3 leaves the UI unchanged.
-class OrderTrackingScreen extends ConsumerWidget {
+class OrderTrackingScreen extends ConsumerStatefulWidget {
   const OrderTrackingScreen({super.key, required this.order});
 
   /// Seed with the order at the point of navigation; refreshes from DB
@@ -22,17 +28,148 @@ class OrderTrackingScreen extends ConsumerWidget {
   final Order order;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OrderTrackingScreen> createState() =>
+      _OrderTrackingScreenState();
+}
+
+class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
+  bool _isPayingFinal = false;
+
+  Future<void> _payFinalAmount(Order o) async {
+    final hasPin =
+        await ref.read(profileServiceProvider).hasTransactionPin();
+    if (!mounted) return;
+
+    if (!hasPin) {
+      final didSet = await showSetPinSheet(context, ref);
+      if (!mounted || !didSet) return;
+    }
+
+    final pin = await showEnterPinSheet(
+      context,
+      title: 'Pay final amount',
+      subtitle:
+          'Enter your 4-digit PIN to pay ₦${o.finalAmount?.toStringAsFixed(0) ?? '—'}.',
+    );
+    if (pin == null || !mounted) return;
+
+    setState(() => _isPayingFinal = true);
+
+    try {
+      final client = ref.read(supabaseClientProvider);
+      await client.rpc('pay_final_amount', params: {
+        'p_order_id': o.id,
+        'p_pin': pin,
+      });
+
+      ref.invalidate(walletBalanceProvider);
+      ref.invalidate(walletInfoProvider);
+      ref.invalidate(walletTransactionsProvider);
+      ref.invalidate(studentOrdersProvider);
+      ref.invalidate(orderByIdProvider(o.id));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Payment successful — rider is on the way!'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } on PostgrestException catch (e) {
+      if (mounted) {
+        final msg = e.message.contains('INSUFFICIENT_BALANCE')
+            ? 'Insufficient balance.'
+            : e.message.contains('INVALID_PIN')
+                ? 'Incorrect PIN.'
+                : 'Payment failed. Please try again.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Payment failed. Please try again.'),
+              behavior: SnackBarBehavior.floating),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isPayingFinal = false);
+    }
+  }
+
+  Color _statusColor(OrderStatus s) {
+    return switch (s) {
+      OrderStatus.placed => AppColors.info,
+      OrderStatus.preparing => AppColors.warning,
+      OrderStatus.ready || OrderStatus.readyForPickup => AppColors.emerald,
+      OrderStatus.outForDelivery => AppColors.orange,
+      OrderStatus.completed => AppColors.emerald,
+      OrderStatus.cancelled => AppColors.error,
+      OrderStatus.beingSourced => AppColors.orange,
+      OrderStatus.awaitingFinalPayment => AppColors.warning,
+    };
+  }
+
+  List<_Step> _buildSteps(Order o) {
+    // Partner/around orders use the sourcing flow.
+    if (o.source == 'partner' || o.type == 'around') {
+      return const [
+        _Step(status: OrderStatus.placed, label: 'Order Placed'),
+        _Step(
+            status: OrderStatus.beingSourced,
+            label: 'Being Sourced — Rider is sourcing your items'),
+        _Step(
+            status: OrderStatus.awaitingFinalPayment,
+            label: 'Awaiting Final Payment'),
+        _Step(status: OrderStatus.outForDelivery, label: 'Out for Delivery'),
+        _Step(status: OrderStatus.completed, label: 'Delivered'),
+      ];
+    }
+
+    if (o.isAround) {
+      return const [
+        _Step(status: OrderStatus.placed, label: 'Request Placed'),
+        _Step(status: OrderStatus.preparing, label: 'Rider on the Way'),
+        _Step(status: OrderStatus.ready, label: 'Item Picked Up'),
+        _Step(status: OrderStatus.outForDelivery, label: 'Out for Delivery'),
+        _Step(status: OrderStatus.completed, label: 'Delivered'),
+      ];
+    }
+
+    if (o.isForDelivery) {
+      return const [
+        _Step(status: OrderStatus.placed, label: 'Order Placed'),
+        _Step(status: OrderStatus.preparing, label: 'Preparing'),
+        _Step(status: OrderStatus.ready, label: 'Ready'),
+        _Step(status: OrderStatus.outForDelivery, label: 'Out for Delivery'),
+        _Step(status: OrderStatus.completed, label: 'Delivered'),
+      ];
+    }
+
+    // Pickup
+    return const [
+      _Step(status: OrderStatus.placed, label: 'Order Placed'),
+      _Step(status: OrderStatus.preparing, label: 'Preparing'),
+      _Step(status: OrderStatus.readyForPickup, label: 'Ready for Pickup'),
+      _Step(status: OrderStatus.completed, label: 'Picked Up'),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final liveAsync = ref.watch(orderByIdProvider(order.id));
+    final liveAsync = ref.watch(orderByIdProvider(widget.order.id));
 
     return Scaffold(
       appBar: UniflexAppBar(
-        title: 'Track Order ${order.shortId}',
+        title: 'Track Order ${widget.order.shortId}',
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () => ref.invalidate(orderByIdProvider(order.id)),
+            onPressed: () => ref.invalidate(orderByIdProvider(widget.order.id)),
             tooltip: 'Refresh',
           ),
         ],
@@ -41,10 +178,10 @@ class OrderTrackingScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => RetrySection(
           message: 'Could not load this order.',
-          onRetry: () => ref.invalidate(orderByIdProvider(order.id)),
+          onRetry: () => ref.invalidate(orderByIdProvider(widget.order.id)),
         ),
         data: (liveOrder) {
-          final o = liveOrder ?? order;
+          final o = liveOrder ?? widget.order;
           final steps = _buildSteps(o);
 
           return SingleChildScrollView(
@@ -131,6 +268,134 @@ class OrderTrackingScreen extends ConsumerWidget {
                 _StatusTimeline(steps: steps, currentStatus: o.status),
 
                 const SizedBox(height: AppSpacing.xl),
+
+                // ── Being sourced — rider info + adjust link ─────────────
+                if (o.status == OrderStatus.beingSourced) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: AppColors.orange.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(AppRadius.card),
+                      border: Border.all(
+                          color: AppColors.orange.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.shopping_bag_outlined,
+                            color: AppColors.orange, size: 20),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Your rider is sourcing items',
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                  color: AppColors.orange,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'They may flag items as unavailable. '
+                                'Check back here for updates.',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: AppColors.orange
+                                      .withValues(alpha: 0.8),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: const Text('View / Adjust Order'),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => AdjustOrderScreen(order: o),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                ],
+
+                // ── Awaiting final payment ───────────────────────────────
+                if (o.status == OrderStatus.awaitingFinalPayment) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(AppRadius.card),
+                      border: Border.all(
+                          color: AppColors.warning.withValues(alpha: 0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.payment_outlined,
+                                color: AppColors.warning, size: 20),
+                            const SizedBox(width: AppSpacing.sm),
+                            Text(
+                              'Final payment required',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: AppColors.warning,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        Text(
+                          o.finalAmount != null
+                              ? 'Your rider confirmed the available items. '
+                                  'Pay ₦${o.finalAmount!.toStringAsFixed(0)} to continue delivery.'
+                              : 'Your rider confirmed the available items. '
+                                  'Final amount is being set.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: AppColors.warning.withValues(alpha: 0.9),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (o.finalAmount != null) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        icon: _isPayingFinal
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.pureWhite),
+                              )
+                            : const Icon(Icons.lock_outline, size: 18),
+                        label: Text(
+                          _isPayingFinal
+                              ? 'Processing…'
+                              : 'Pay Final Amount  ₦${o.finalAmount!.toStringAsFixed(0)}',
+                        ),
+                        style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.warning),
+                        onPressed: _isPayingFinal
+                            ? null
+                            : () => _payFinalAmount(o),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: AppSpacing.xl),
+                ],
 
                 // Delivery info
                 if (o.deliveryLocation != null) ...[
@@ -250,48 +515,6 @@ class OrderTrackingScreen extends ConsumerWidget {
     );
   }
 
-  Color _statusColor(OrderStatus s) {
-    return switch (s) {
-      OrderStatus.placed => AppColors.info,
-      OrderStatus.preparing => AppColors.warning,
-      OrderStatus.ready ||
-      OrderStatus.readyForPickup =>
-        AppColors.emerald,
-      OrderStatus.outForDelivery => AppColors.orange,
-      OrderStatus.completed => AppColors.emerald,
-      OrderStatus.cancelled => AppColors.error,
-    };
-  }
-
-  List<_Step> _buildSteps(Order o) {
-    if (o.isAround) {
-      return const [
-        _Step(status: OrderStatus.placed, label: 'Request Placed'),
-        _Step(status: OrderStatus.preparing, label: 'Rider on the Way'),
-        _Step(status: OrderStatus.ready, label: 'Item Picked Up'),
-        _Step(status: OrderStatus.outForDelivery, label: 'Out for Delivery'),
-        _Step(status: OrderStatus.completed, label: 'Delivered'),
-      ];
-    }
-
-    if (o.isForDelivery) {
-      return const [
-        _Step(status: OrderStatus.placed, label: 'Order Placed'),
-        _Step(status: OrderStatus.preparing, label: 'Preparing'),
-        _Step(status: OrderStatus.ready, label: 'Ready'),
-        _Step(status: OrderStatus.outForDelivery, label: 'Out for Delivery'),
-        _Step(status: OrderStatus.completed, label: 'Delivered'),
-      ];
-    }
-
-    // Pickup
-    return const [
-      _Step(status: OrderStatus.placed, label: 'Order Placed'),
-      _Step(status: OrderStatus.preparing, label: 'Preparing'),
-      _Step(status: OrderStatus.readyForPickup, label: 'Ready for Pickup'),
-      _Step(status: OrderStatus.completed, label: 'Picked Up'),
-    ];
-  }
 }
 
 class _Step {

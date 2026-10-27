@@ -308,8 +308,10 @@ class AdminService {
       final active = rows.where((m) {
         if (m['type'] != 'food') return false;
         if (!const [
+          'being_sourced',           // commitment fee paid — kitchen starts here
           'placed',
           'preparing',
+          'awaiting_final_payment',  // kitchen marked ready — student pays food cost
           'ready',
           'ready_for_pickup',
           'out_for_delivery',

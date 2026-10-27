@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/screens/complete_profile_screen.dart';
 import '../auth/screens/login_screen.dart';
+import '../auth/screens/resume_otp_screen.dart';
 import '../services/auth/auth_providers.dart';
 import '../theme/app_spacing.dart';
 import 'role_router.dart';
@@ -65,6 +66,11 @@ class _AuthGateState extends ConsumerState<AuthGate> {
       return const LoginScreen();
     }
     if (!profile.onboardingComplete) {
+      // Phone not yet verified → user abandoned mid-OTP (Step 1b).
+      // Send them to a screen where they can request a new code.
+      if (profile.phoneVerifiedAt == null) {
+        return ResumeOtpScreen(phone: profile.phone);
+      }
       return const CompleteProfileScreen();
     }
     if (!profile.isActive) {

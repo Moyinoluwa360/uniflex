@@ -77,8 +77,10 @@ class RiderService {
         final transferredToRiderAt = m['transferred_to_rider_at'];
         return (source == 'uniflex' && status == 'ready' && transferredToRiderAt != null
                 && deliveryTypes.contains(deliveryType))
-            || (source == 'partner' && status == 'placed' && deliveryTypes.contains(deliveryType))
-            || (type == 'around' && status == 'placed');
+            // partner/around orders enter the pool only after the commitment
+            // fee is paid (status transitions from 'placed' to 'being_sourced').
+            || (source == 'partner' && status == 'being_sourced' && deliveryTypes.contains(deliveryType))
+            || (type == 'around' && status == 'being_sourced');
       }).toList();
 
       if (pool.isEmpty) return [];
@@ -173,15 +175,16 @@ class RiderService {
 
   // ── Active delivery stream ─────────────────────────────────────────
 
-  /// Streams the rider's active deliveries (status='out_for_delivery').
-  /// Returns a list to support multiple concurrent deliveries.
+  /// Streams the rider's active deliveries.
+  /// Includes both 'out_for_delivery' (normal delivery) and 'being_sourced'
+  /// (partner/around orders the rider has accepted and is still sourcing).
   Stream<List<Order>> streamActiveDeliveries(String riderId) async* {
     Future<List<Order>> fetchActive() async {
       final rows = await _client
           .from('orders')
           .select()
           .eq('rider_id', riderId)
-          .eq('status', 'out_for_delivery')
+          .inFilter('status', ['out_for_delivery', 'being_sourced'])
           .order('created_at', ascending: false);
       return rows.map((m) => Order.fromMap(m)).toList();
     }
@@ -279,6 +282,38 @@ class RiderService {
     required String message,
   }) {
     return _notifications.messageCustomer(orderId: orderId, message: message);
+  }
+
+  // ── Sourcing flow (partner / around orders) ────────────────────────
+
+  /// Flags an item as unavailable while sourcing. The DB records the flag
+  /// and sends the student a notification. [orderItemId] is null for around
+  /// requests (which have no line items).
+  Future<void> flagItemUnavailable({
+    required String orderId,
+    String? orderItemId,
+    required String productName,
+    required int quantity,
+  }) async {
+    await _client.rpc('flag_item_unavailable', params: {
+      'p_order_id': orderId,
+      'p_order_item_id': orderItemId,
+      'p_product_name': productName,
+      'p_quantity': quantity,
+    });
+  }
+
+  /// Confirms the items that are available and sets the final total.
+  /// Moves the order to 'awaiting_final_payment' and notifies the student.
+  Future<void> confirmSourcingItems({
+    required String orderId,
+    required double finalAmount,
+  }) async {
+    await _client.rpc('confirm_sourced_items', params: {
+      'p_order_id': orderId,
+      'p_final_amount': finalAmount,
+    });
+    await _notifications.notifyOrderStatus(orderId);
   }
 
   // ── Delivery history ───────────────────────────────────────────────

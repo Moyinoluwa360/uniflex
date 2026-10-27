@@ -102,11 +102,17 @@ class KitchenQueueScreen extends ConsumerWidget {
           // pickup order's next step is "hand it over" while a delivery
           // order's next step is "transfer to a rider" — the old single
           // "Ready" bucket had no room for either action.
+          final beingSourced = orders
+              .where((o) => o.order.status == OrderStatus.beingSourced)
+              .toList();
           final placed = orders
               .where((o) => o.order.status == OrderStatus.placed)
               .toList();
           final preparing = orders
               .where((o) => o.order.status == OrderStatus.preparing)
+              .toList();
+          final awaitingPayment = orders
+              .where((o) => o.order.status == OrderStatus.awaitingFinalPayment)
               .toList();
           final readyForPickup = orders
               .where((o) => o.order.status == OrderStatus.readyForPickup)
@@ -130,8 +136,10 @@ class KitchenQueueScreen extends ConsumerWidget {
                 items.map((ko) => _KitchenOrderCard(kitchenOrder: ko)));
           }
 
+          addSection('Being Sourced', beingSourced, AppColors.orange);
           addSection('Scheduled', placed, AppColors.orange);
           addSection('Preparing', preparing, theme.colorScheme.primary);
+          addSection('Awaiting Final Payment', awaitingPayment, AppColors.info);
           addSection('Ready for Pickup', readyForPickup, AppColors.emerald);
           addSection('Ready for Delivery', readyForDelivery, AppColors.emerald);
           addSection('Out for Delivery', outForDelivery, AppColors.orange);
@@ -208,15 +216,18 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
   bool _isAdvancing = false;
   bool _expanded = false;
 
-  /// Advances placed→preparing, or preparing→ready(_for_pickup) — the
-  /// latter branches on delivery_type since pickup and delivery orders
-  /// diverge here (Section 12).
+  /// Advances through kitchen stages. beingSourced and placed both go to
+  /// preparing. preparing branches on delivery_type: pickup → ready_for_pickup,
+  /// delivery → awaiting_final_payment (student pays food cost).
   Future<void> _advance() async {
     final order = widget.kitchenOrder.order;
     final nextStatus = switch (order.status) {
+      OrderStatus.beingSourced => 'preparing',   // NEW: commitment fee paid → start preparing
       OrderStatus.placed => 'preparing',
       OrderStatus.preparing =>
-        order.deliveryType == 'pickup' ? 'ready_for_pickup' : 'ready',
+        order.deliveryType == 'pickup'
+          ? 'ready_for_pickup'
+          : 'awaiting_final_payment',             // CHANGED: delivery → await final payment
       _ => null,
     };
     if (nextStatus == null) return;
@@ -292,11 +303,13 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
     // makes "Ready" a real, actionable checkpoint instead of a dead end
     // (Section 12).
     final (String, VoidCallback)? action = switch (order.status) {
+      OrderStatus.beingSourced => ('Start Preparing', _advance),  // NEW
       OrderStatus.placed => ('Start Preparing', _advance),
       OrderStatus.preparing => (
-          isPickup ? 'Mark Ready for Pickup' : 'Mark Ready',
+          isPickup ? 'Mark Ready for Pickup' : 'Mark Ready (Awaiting Payment)',
           _advance
         ),
+      OrderStatus.awaitingFinalPayment => null,   // NEW: no admin action, student pays
       OrderStatus.readyForPickup when isPickup => (
           'Mark Completed (Picked Up)',
           _markCompleted
@@ -608,8 +621,10 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
 
   Color _statusColor(OrderStatus status) {
     return switch (status) {
+      OrderStatus.beingSourced => AppColors.orange,
       OrderStatus.placed => AppColors.orange,
       OrderStatus.preparing => Theme.of(context).colorScheme.primary,
+      OrderStatus.awaitingFinalPayment => AppColors.info,
       OrderStatus.ready || OrderStatus.readyForPickup => AppColors.emerald,
       OrderStatus.outForDelivery => AppColors.orange,
       _ => Theme.of(context).colorScheme.outline,

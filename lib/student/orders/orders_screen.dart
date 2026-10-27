@@ -203,6 +203,9 @@ class _ActiveOrdersTab extends ConsumerWidget {
     OrderStatus.ready,
     OrderStatus.outForDelivery,
     OrderStatus.readyForPickup,
+    // Part B: partner/around orders stay "active" during sourcing flow.
+    OrderStatus.beingSourced,
+    OrderStatus.awaitingFinalPayment,
   };
 
   @override
@@ -333,6 +336,8 @@ class _OrderCard extends StatelessWidget {
       OrderStatus.outForDelivery => AppColors.orange,
       OrderStatus.completed => AppColors.emerald,
       OrderStatus.cancelled => AppColors.error,
+      OrderStatus.beingSourced => AppColors.orange,
+      OrderStatus.awaitingFinalPayment => AppColors.warning,
     };
   }
 

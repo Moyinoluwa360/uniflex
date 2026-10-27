@@ -355,6 +355,56 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
     }
   }
 
+  /// Places an Around request without upfront payment.
+  /// Used by the staged commitment-fee flow — the ₦300 commitment fee
+  /// and the final flat fee are paid via [pay_commitment_fee] and
+  /// [pay_final_amount] respectively.
+  Future<Order?> placeAroundRequestStaged({
+    required String categoryKey,
+    required double flatFee,
+    required String pickupLocation,
+    required String dropoffLocation,
+    required String itemDescription,
+  }) async {
+    state = const OrderPlacementState(isLoading: true);
+    try {
+      final client = ref.read(supabaseClientProvider);
+
+      final result = await client.rpc(
+        'place_around_order',
+        params: {
+          'p_category': categoryKey,
+          'p_pickup_location': pickupLocation,
+          'p_dropoff_location': dropoffLocation,
+          'p_item_description': itemDescription,
+          'p_flat_fee': flatFee,
+        },
+      ) as Map<String, dynamic>;
+
+      final orderId = result['order_id'] as String;
+
+      final order = Order(
+        id: orderId,
+        studentId: client.auth.currentUser!.id,
+        source: 'uniflex',
+        type: 'around',
+        status: OrderStatus.placed,
+        deliveryType: 'delivery',
+        totalAmount: flatFee,
+        estimatedTime: '15–25 min',
+        createdAt: DateTime.now(),
+      );
+
+      ref.invalidate(studentOrdersProvider);
+
+      state = OrderPlacementState(order: order);
+      return order;
+    } catch (e) {
+      state = OrderPlacementState(error: _mapError(e.toString()));
+      return null;
+    }
+  }
+
   /// Translates server error codes into user-facing error strings. The
   /// sentinel values 'insufficient_balance' / 'invalid_pin' are detected by
   /// the UI to show tailored feedback rather than a generic message.

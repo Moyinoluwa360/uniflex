@@ -2,13 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/models/around_category.dart';
-import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
-import '../../shared/widgets/pin/pin_entry_sheet.dart';
-import '../ordering/order_confirmation_screen.dart';
+import '../ordering/commitment_fee_screen.dart';
 import '../ordering/order_repository.dart';
 
 /// Around request flow — the student sets a pickup point, drop-off
@@ -61,32 +59,17 @@ class _AroundScreenState extends ConsumerState<AroundScreen> {
         _ => 'Describe what needs to be carried / fetched',
       };
 
-  Future<String?> _collectPin() async {
-    final hasPin =
-        await ref.read(profileServiceProvider).hasTransactionPin();
-    if (!mounted) return null;
-    if (!hasPin) {
-      final didSet = await showSetPinSheet(context, ref);
-      if (!mounted || !didSet) return null;
-    }
-    return showEnterPinSheet(context);
-  }
-
   Future<void> _confirm() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final pin = await _collectPin();
-    if (pin == null || !mounted) return;
-
     final order = await ref
         .read(orderNotifierProvider.notifier)
-        .placeAroundRequest(
+        .placeAroundRequestStaged(
           categoryKey: widget.category.key,
-          fee: widget.category.flatFee,
+          flatFee: widget.category.flatFee,
           pickupLocation: _pickupController.text.trim(),
           dropoffLocation: _dropoffController.text.trim(),
           itemDescription: _descriptionController.text.trim(),
-          pin: pin,
         );
 
     if (!mounted) return;
@@ -94,48 +77,18 @@ class _AroundScreenState extends ConsumerState<AroundScreen> {
 
     if (order == null) {
       final error = notifierState.error ?? '';
-      if (error == 'insufficient_balance') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Insufficient wallet balance. Please top up your wallet first.',
-            ),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      } else if (error == 'invalid_pin') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Incorrect PIN. Please try again.'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error.isEmpty ? 'Request failed. Try again.' : error),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-      return;
-    }
-
-    if (notifierState.budgetWarning) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Heads up: this request has put you over your saving plan budget.',
-          ),
+        SnackBar(
+          content: Text(error.isEmpty ? 'Request failed. Try again.' : error),
           behavior: SnackBarBehavior.floating,
-          duration: Duration(seconds: 5),
         ),
       );
+      return;
     }
 
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (_) => OrderConfirmationScreen(order: order),
+        builder: (_) => CommitmentFeeScreen(order: order),
       ),
     );
   }

@@ -76,3 +76,6 @@ supabase/.temp/
 
 # Coverage output
 coverage/
+
+/android/key.properties
+/key.properties

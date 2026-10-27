@@ -11,7 +11,9 @@ enum OrderStatus {
   outForDelivery,
   readyForPickup,
   completed,
-  cancelled;
+  cancelled,
+  beingSourced,
+  awaitingFinalPayment;
 
   static OrderStatus fromString(String s) {
     return switch (s) {
@@ -21,6 +23,8 @@ enum OrderStatus {
       'ready_for_pickup' => readyForPickup,
       'completed' => completed,
       'cancelled' => cancelled,
+      'being_sourced' => beingSourced,
+      'awaiting_final_payment' => awaitingFinalPayment,
       _ => placed,
     };
   }
@@ -33,6 +37,8 @@ enum OrderStatus {
         readyForPickup => 'ready_for_pickup',
         completed => 'completed',
         cancelled => 'cancelled',
+        beingSourced => 'being_sourced',
+        awaitingFinalPayment => 'awaiting_final_payment',
       };
 
   String get label => switch (this) {
@@ -43,6 +49,8 @@ enum OrderStatus {
         readyForPickup => 'Ready for Pickup',
         completed => 'Completed',
         cancelled => 'Cancelled',
+        beingSourced => 'Being Sourced',
+        awaitingFinalPayment => 'Awaiting Final Payment',
       };
 
   bool get isTerminal => this == completed || this == cancelled;
@@ -77,6 +85,10 @@ class Order {
     this.packFee = 0,
     this.transferredToRiderAt,
     this.items = const [],
+    this.commitmentFeePaid = false,
+    this.commitmentFeeAmount = 0,
+    this.finalAmount,
+    this.finalPaymentPaid = false,
   });
 
   factory Order.fromMap(Map<String, dynamic> map) {
@@ -110,6 +122,11 @@ class Order {
       transferredToRiderAt: map['transferred_to_rider_at'] == null
           ? null
           : DateTime.parse(map['transferred_to_rider_at'] as String),
+      commitmentFeePaid: map['commitment_fee_paid'] as bool? ?? false,
+      commitmentFeeAmount:
+          (map['commitment_fee_amount'] as num?)?.toDouble() ?? 0,
+      finalAmount: (map['final_amount'] as num?)?.toDouble(),
+      finalPaymentPaid: map['final_payment_paid'] as bool? ?? false,
     );
   }
 
@@ -170,6 +187,21 @@ class Order {
   /// Populated only when the full order detail is fetched.
   final List<OrderItem> items;
 
+  // ── Part B: commitment fee + adjustable order ──────────────────────
+
+  /// True once the ₦300 commitment fee has been deducted (partner/around).
+  final bool commitmentFeePaid;
+
+  /// The commitment fee amount that was deducted (₦300 normally).
+  final double commitmentFeeAmount;
+
+  /// Final food cost set by the rider after sourcing; null until rider
+  /// calls confirm_sourced_items.
+  final double? finalAmount;
+
+  /// True once the student has paid the final food cost.
+  final bool finalPaymentPaid;
+
   /// Short display reference, e.g. "#A1B2C3D4".
   String get shortId => '#${id.substring(0, 8).toUpperCase()}';
 
@@ -184,6 +216,10 @@ class Order {
     OrderStatus? status,
     String? deliveryStage,
     List<OrderItem>? items,
+    bool? commitmentFeePaid,
+    double? commitmentFeeAmount,
+    double? finalAmount,
+    bool? finalPaymentPaid,
   }) {
     return Order(
       id: id,
@@ -210,6 +246,10 @@ class Order {
       packFee: packFee,
       transferredToRiderAt: transferredToRiderAt,
       items: items ?? this.items,
+      commitmentFeePaid: commitmentFeePaid ?? this.commitmentFeePaid,
+      commitmentFeeAmount: commitmentFeeAmount ?? this.commitmentFeeAmount,
+      finalAmount: finalAmount ?? this.finalAmount,
+      finalPaymentPaid: finalPaymentPaid ?? this.finalPaymentPaid,
     );
   }
 }

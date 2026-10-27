@@ -31,8 +31,12 @@ class ProfileService {
   Future<void> createStubProfile({
     required String userId,
     required String email,
+    required String phone,
   }) async {
-    await _client.from('profiles').insert({'id': userId, 'email': email});
+    await _client.from('profiles').upsert(
+      {'id': userId, 'email': email, 'phone': phone},
+      onConflict: 'id',
+    );
   }
 
   Future<Profile?> fetchProfile(String userId) async {

@@ -31,6 +31,8 @@ class ActiveDeliveryScreen extends ConsumerStatefulWidget {
 class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
   bool _isConfirmingPickup = false;
   bool _isVerifying = false;
+  bool _isFlagging = false;
+  bool _isConfirmingSourcing = false;
 
   Future<void> _confirmPickup() async {
     setState(() => _isConfirmingPickup = true);
@@ -215,6 +217,187 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
     }
   }
 
+  /// Shows a dialog for the rider to flag an item as unavailable.
+  Future<void> _flagItemUnavailable(String orderId) async {
+    final nameController = TextEditingController();
+    final qtyController = TextEditingController(text: '1');
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Flag Item Unavailable'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Item name',
+                hintText: 'e.g. Jollof Rice',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: qtyController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Quantity',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Flag Item'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    final name = nameController.text.trim();
+    final qty = int.tryParse(qtyController.text.trim()) ?? 1;
+    if (name.isEmpty) return;
+
+    setState(() => _isFlagging = true);
+    try {
+      await ref.read(riderServiceProvider).flagItemUnavailable(
+            orderId: orderId,
+            productName: name,
+            quantity: qty,
+          );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Item flagged — customer has been notified.'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to flag item: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isFlagging = false);
+    }
+  }
+
+  /// Shows a sheet for the rider to enter the final total and confirm items.
+  Future<void> _confirmSourcedItems(String orderId) async {
+    final amountController = TextEditingController();
+
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.sheet),
+        ),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          left: AppSpacing.screenGutter,
+          right: AppSpacing.screenGutter,
+          top: AppSpacing.lg,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.lg,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Confirm Items & Final Amount',
+              style: Theme.of(ctx).textTheme.titleMedium,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Enter the total cost of the items you were able to source. '
+              'The student will be asked to pay this amount before delivery.',
+              style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(ctx)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.6),
+                  ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            TextField(
+              controller: amountController,
+              autofocus: true,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: 'Final amount (₦)',
+                hintText: 'e.g. 1500',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                ),
+                prefixText: '₦ ',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.emerald),
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Confirm Items — Notify Customer'),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    final amount = double.tryParse(amountController.text.trim());
+    if (amount == null || amount < 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enter a valid amount')),
+        );
+      }
+      return;
+    }
+
+    setState(() => _isConfirmingSourcing = true);
+    try {
+      await ref.read(riderServiceProvider).confirmSourcingItems(
+            orderId: orderId,
+            finalAmount: amount,
+          );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Items confirmed — waiting for customer payment.'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to confirm items: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isConfirmingSourcing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -277,39 +460,47 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Status banner ────────────────────────────────────────────
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(AppSpacing.md),
-            decoration: BoxDecoration(
-              color: (isPicked ? AppColors.emerald : AppColors.orange)
-                  .withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(AppRadius.card),
-              border: Border.all(
-                color: (isPicked ? AppColors.emerald : AppColors.orange)
-                    .withValues(alpha: 0.3),
+          Builder(builder: (ctx) {
+            final isSourcing =
+                liveOrder.status == OrderStatus.beingSourced;
+            final bannerColor = isSourcing
+                ? AppColors.warning
+                : (isPicked ? AppColors.emerald : AppColors.orange);
+            final bannerText = isSourcing
+                ? 'Sourcing items at vendor — flag unavailable items below'
+                : (isPicked
+                    ? 'Item picked up — heading to customer'
+                    : 'Heading to pickup point');
+            final bannerIcon = isSourcing
+                ? Icons.shopping_bag_outlined
+                : (isPicked ? Icons.check_circle_outline : Icons.delivery_dining);
+            return Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: bannerColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(AppRadius.card),
+                border: Border.all(
+                  color: bannerColor.withValues(alpha: 0.3),
+                ),
               ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  isPicked
-                      ? Icons.check_circle_outline
-                      : Icons.delivery_dining,
-                  color: isPicked ? AppColors.emerald : AppColors.orange,
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Text(
-                  isPicked
-                      ? 'Item picked up — heading to customer'
-                      : 'Heading to pickup point',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: isPicked ? AppColors.emerald : AppColors.orange,
-                    fontWeight: FontWeight.w600,
+              child: Row(
+                children: [
+                  Icon(bannerIcon, color: bannerColor),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      bannerText,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: bannerColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
+                ],
+              ),
+            );
+          }),
 
           const SizedBox(height: AppSpacing.lg),
 
@@ -414,51 +605,91 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
 
           const SizedBox(height: AppSpacing.xl),
 
-          // ── Primary action ────────────────────────────────────────────
-          if (!isPicked)
+          // ── Sourcing actions (being_sourced orders only) ──────────────
+          if (liveOrder.status == OrderStatus.beingSourced) ...[
             SizedBox(
               width: double.infinity,
-              child: FilledButton(
-                onPressed: _isConfirmingPickup ? null : _confirmPickup,
-                style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.orange),
-                child: _isConfirmingPickup
+              child: OutlinedButton.icon(
+                icon: _isFlagging
                     ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.pureWhite,
-                        ),
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Confirm Pickup'),
-              ),
-            )
-          else
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _isVerifying
+                    : const Icon(Icons.block_outlined, size: 18),
+                label: const Text('Flag Item Unavailable'),
+                onPressed: (_isFlagging || _isConfirmingSourcing)
                     ? null
-                    : () => _showPinEntry(detail ??
-                        ActiveDeliveryDetail(
-                          order: liveOrder,
-                          pickupName: '—',
-                        )),
-                style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.emerald),
-                child: _isVerifying
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.pureWhite,
-                        ),
-                      )
-                    : const Text('Verify Delivery (Enter PIN)'),
+                    : () => _flagItemUnavailable(liveOrder.id),
               ),
             ),
+            const SizedBox(height: AppSpacing.sm),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                icon: _isConfirmingSourcing
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppColors.pureWhite),
+                      )
+                    : const Icon(Icons.check_circle_outline, size: 18),
+                label: const Text('Confirm Items Available'),
+                style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.emerald),
+                onPressed: (_isFlagging || _isConfirmingSourcing)
+                    ? null
+                    : () => _confirmSourcedItems(liveOrder.id),
+              ),
+            ),
+          ] else ...[
+            // ── Primary action (out_for_delivery orders) ─────────────────
+            if (!isPicked)
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _isConfirmingPickup ? null : _confirmPickup,
+                  style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.orange),
+                  child: _isConfirmingPickup
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.pureWhite,
+                          ),
+                        )
+                      : const Text('Confirm Pickup'),
+                ),
+              )
+            else
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _isVerifying
+                      ? null
+                      : () => _showPinEntry(detail ??
+                          ActiveDeliveryDetail(
+                            order: liveOrder,
+                            pickupName: '—',
+                          )),
+                  style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.emerald),
+                  child: _isVerifying
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.pureWhite,
+                          ),
+                        )
+                      : const Text('Verify Delivery (Enter PIN)'),
+                ),
+              ),
+          ],
 
           const SizedBox(height: AppSpacing.lg),
         ],

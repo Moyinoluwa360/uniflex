@@ -45,8 +45,8 @@ class _VerifyPhoneScreenState extends ConsumerState<VerifyPhoneScreen> {
 
   Future<void> _verify() async {
     final code = _codeController.text.trim();
-    if (code.length < 4) {
-      setState(() => _errorText = 'Enter the code we sent you');
+    if (code.length < 6) {
+      setState(() => _errorText = 'Enter the 6-digit code we sent you');
       return;
     }
 
