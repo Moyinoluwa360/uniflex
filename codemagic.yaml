@@ -17,6 +17,9 @@ workflows:
         - app_store_credentials
         - env_file
 
+    integrations:
+      app_store_connect: Codemagic
+
     scripts:
       - name: Write .env file
         script: |
