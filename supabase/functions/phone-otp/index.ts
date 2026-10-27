@@ -129,7 +129,7 @@ Deno.serve(async (req: Request) => {
           message_type: "NUMERIC",
           to: phone,
           from: "OE Alert",
-          channel: "generic",
+          channel: "dnd",
           pin_attempts: 3,
           pin_time_to_live: 10,
           pin_length: 6,

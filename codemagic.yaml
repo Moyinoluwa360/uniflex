@@ -1,0 +1,57 @@
+workflows:
+  ios-release:
+    name: iOS App Store Release
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+
+    environment:
+      flutter: 3.24.0
+      xcode: latest
+      cocoapods: default
+      # All vars below are set in Codemagic UI → Environment variables
+      # (never commit real values here)
+      vars:
+        BUNDLE_ID: com.uniflex.uniflex
+        APP_STORE_APP_ID: $APP_STORE_APP_ID   # numeric ID from App Store Connect
+      groups:
+        - app_store_credentials   # holds APP_STORE_CONNECT_KEY_IDENTIFIER,
+                                  # APP_STORE_CONNECT_ISSUER_ID,
+                                  # APP_STORE_CONNECT_PRIVATE_KEY
+        - env_file                # holds ENV_FILE_CONTENTS (the .env file)
+
+    integrations:
+      app_store_connect: Uniflex_API_Key
+
+    scripts:
+      # 1. Write the .env file from the secret variable so flutter_dotenv
+      #    can bundle it into the app (the file is gitignored).
+      - name: Write .env file
+        script: |
+          echo "$ENV_FILE_CONTENTS" > $CM_BUILD_DIR/.env
+
+      # 2. Get Flutter packages
+      - name: Flutter pub get
+        script: flutter pub get
+
+      # 3. Install CocoaPods dependencies
+      - name: Pod install
+        script: |
+          find . -name "Podfile" -execdir pod install \;
+
+      # 4. Build the iOS release IPA (no codesign at this step —
+      #    Codemagic applies signing via the integrations block above)
+      - name: Flutter build iOS
+        script: |
+          flutter build ipa --release \
+            --build-name=1.0.1 \
+            --build-number=2 \
+            --export-options-plist=/Users/builder/export_options.plist
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true   # set to false if you want manual review first
