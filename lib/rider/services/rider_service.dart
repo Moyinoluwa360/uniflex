@@ -184,7 +184,7 @@ class RiderService {
           .from('orders')
           .select()
           .eq('rider_id', riderId)
-          .inFilter('status', ['out_for_delivery', 'being_sourced'])
+          .inFilter('status', ['out_for_delivery', 'being_sourced', 'awaiting_final_payment'])
           .order('created_at', ascending: false);
       return rows.map((m) => Order.fromMap(m)).toList();
     }
@@ -317,6 +317,22 @@ class RiderService {
   }
 
   // ── Delivery history ───────────────────────────────────────────────
+
+  // ── Custom items ────────────────────────────────────────────────────
+
+  /// Adds a custom item to an order during the sourcing phase.
+  /// The student must approve it before the rider includes the cost.
+  Future<void> addCustomItem({
+    required String orderId,
+    required String description,
+    required double price,
+  }) async {
+    await _client.rpc('add_custom_item', params: {
+      'p_order_id': orderId,
+      'p_description': description,
+      'p_price': price,
+    });
+  }
 
   Future<List<DeliveryRecord>> fetchDeliveryHistory() async {
     final records = await _client

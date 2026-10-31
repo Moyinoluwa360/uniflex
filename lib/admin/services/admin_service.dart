@@ -287,10 +287,10 @@ class AdminService {
 
   // ── Kitchen Queue ─────────────────────────────────────────────────────
 
-  /// A live stream of active Uniflex kitchen orders (status: placed,
-  /// preparing, ready), newest first. Each emission includes the line
-  /// items fetched in a single batch query so the kitchen can see what to
-  /// prepare.
+  /// A live stream of active kitchen orders (both Uniflex and partner),
+  /// newest first. Each emission includes the line items fetched in a
+  /// single batch query so the kitchen can see what to prepare.
+  /// Partner orders appear read-only in the kitchen (no advance actions).
   ///
   /// Emits an initial fetch immediately, then subscribes to Supabase
   /// Realtime for live updates. If Realtime hangs or fails the initial
@@ -301,7 +301,6 @@ class AdminService {
       final rows = await _client
           .from('orders')
           .select()
-          .eq('source', 'uniflex')
           .order('created_at', ascending: false);
 
       final now = DateTime.now();
@@ -364,7 +363,6 @@ class AdminService {
       final orderStream = _client
           .from('orders')
           .stream(primaryKey: ['id'])
-          .eq('source', 'uniflex')
           .order('created_at', ascending: false);
 
       await for (final _ in orderStream) {

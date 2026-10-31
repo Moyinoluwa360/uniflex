@@ -60,6 +60,7 @@ abstract final class AppColors {
   static const Color splashGradientMid = Color(0xFF0E9E74);
 
   // ---- Membership tier accents (Design Board 24) -----------------------
+  static const Color tierBronze = Color(0xFFCD7F32);
   static const Color tierSilver = Color(0xFF6B7280);
   static const Color tierGold = Color(0xFFB45309);
   static const Color tierPlatinum = Color(0xFF6D28D9);

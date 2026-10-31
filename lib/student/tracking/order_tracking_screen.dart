@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../shared/models/custom_order_item.dart';
 import '../../shared/models/order.dart';
 import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
@@ -322,6 +323,9 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: AppSpacing.md),
+                  // Custom items pending approval
+                  _PendingCustomItems(orderId: o.id),
                   const SizedBox(height: AppSpacing.xl),
                 ],
 
@@ -680,6 +684,166 @@ class _TrackingPinCard extends StatelessWidget {
               color: AppColors.emerald.withValues(alpha: 0.8),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shows pending custom items that the rider has added to this order.
+/// The student can approve or reject each item.
+class _PendingCustomItems extends ConsumerWidget {
+  const _PendingCustomItems({required this.orderId});
+
+  final String orderId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final itemsAsync = ref.watch(pendingCustomItemsProvider(orderId));
+
+    return itemsAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (items) {
+        if (items.isEmpty) return const SizedBox.shrink();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: AppSpacing.md),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: AppColors.info.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(AppRadius.card),
+                border: Border.all(
+                    color: AppColors.info.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.add_shopping_cart,
+                          color: AppColors.info, size: 20),
+                      const SizedBox(width: AppSpacing.sm),
+                      Text(
+                        'Custom Items — Approval Needed',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: AppColors.info,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Your rider wants to add these items. Approve or reject each one.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: AppColors.info.withValues(alpha: 0.8),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  ...items.map((item) => _CustomItemRow(item: item)),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _CustomItemRow extends ConsumerStatefulWidget {
+  const _CustomItemRow({required this.item});
+
+  final CustomOrderItem item;
+
+  @override
+  ConsumerState<_CustomItemRow> createState() => _CustomItemRowState();
+}
+
+class _CustomItemRowState extends ConsumerState<_CustomItemRow> {
+  bool _isProcessing = false;
+
+  Future<void> _approve() async {
+    setState(() => _isProcessing = true);
+    try {
+      final client = ref.read(supabaseClientProvider);
+      await approveCustomItem(client, widget.item.id);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to approve: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<void> _reject() async {
+    setState(() => _isProcessing = true);
+    try {
+      final client = ref.read(supabaseClientProvider);
+      await rejectCustomItem(client, widget.item.id);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to reject: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final item = widget.item;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item.description, style: theme.textTheme.bodyMedium),
+                Text(
+                  '₦${item.price.toStringAsFixed(0)}',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_isProcessing)
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else ...[
+            IconButton(
+              icon: const Icon(Icons.check_circle, color: AppColors.emerald),
+              tooltip: 'Approve',
+              onPressed: _approve,
+              iconSize: 28,
+            ),
+            IconButton(
+              icon: const Icon(Icons.cancel, color: AppColors.error),
+              tooltip: 'Reject',
+              onPressed: _reject,
+              iconSize: 28,
+            ),
+          ],
         ],
       ),
     );

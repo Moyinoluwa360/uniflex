@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/models/cart_item.dart';
+import '../../shared/models/order.dart';
 import '../../shared/models/vendor.dart';
 import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
@@ -49,6 +50,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final _locationController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   DateTime? _scheduledFor;
+  final _notesController = TextEditingController();
 
   // Pack allocation (Section 11) — null until the student answers the
   // "Will you be using packs?" prompt; empty list means "No".
@@ -71,6 +73,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   @override
   void dispose() {
     _locationController.dispose();
+    _notesController.dispose();
     super.dispose();
   }
 
@@ -212,27 +215,49 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     }
     if (packableItems.isNotEmpty && _packs == null) return;
 
-    final pin = await _collectPin();
-    if (pin == null || !mounted) return;
-
     final itemsByProductId = {
       for (final item in packableItems) item.product.id: item,
     };
     final packs = (_packs ?? [])
         .map((p) => p.toJson(itemsByProductId))
         .toList();
+    final notes = _notesController.text.trim();
+    final isPartner = !widget.vendor.isUniflex;
 
-    final order = await ref.read(orderNotifierProvider.notifier).placeFoodOrder(
-          vendor: widget.vendor,
-          deliveryType: _deliveryType,
-          pin: pin,
-          packs: packs,
-          packFee: _packFee,
-          deliveryLocation: _needsLocation
-              ? _locationController.text.trim()
-              : null,
-          scheduledFor: _scheduledFor,
-        );
+    Order? order;
+
+    if (isPartner) {
+      // Partner vendor: create order WITHOUT payment. The commitment fee
+      // and final food cost are paid in separate later steps.
+      order = await ref.read(orderNotifierProvider.notifier).placePartnerFoodOrder(
+            vendor: widget.vendor,
+            deliveryType: _deliveryType,
+            packs: packs,
+            packFee: _packFee,
+            deliveryLocation: _needsLocation
+                ? _locationController.text.trim()
+                : null,
+            scheduledFor: _scheduledFor,
+            notes: notes.isEmpty ? null : notes,
+          );
+    } else {
+      // Uniflex vendor: full payment upfront (PIN-gated).
+      final pin = await _collectPin();
+      if (pin == null || !mounted) return;
+
+      order = await ref.read(orderNotifierProvider.notifier).placeFoodOrder(
+            vendor: widget.vendor,
+            deliveryType: _deliveryType,
+            pin: pin,
+            packs: packs,
+            packFee: _packFee,
+            deliveryLocation: _needsLocation
+                ? _locationController.text.trim()
+                : null,
+            scheduledFor: _scheduledFor,
+            notes: notes.isEmpty ? null : notes,
+          );
+    }
 
     if (!mounted) return;
 
@@ -241,8 +266,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     if (order == null) {
       final error = notifierState.error ?? '';
       if (error == 'insufficient_balance') {
-        // Handled inline — the button is already disabled, this shouldn't
-        // normally be reached, but guard against a race.
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Insufficient wallet balance. Please top up first.'),
@@ -280,18 +303,18 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       );
     }
 
-    // All delivery orders require the staged commitment-fee flow.
-    // Pickup orders (Uniflex) go straight to confirmation — no rider dispatch, no fee.
-    if (order.isForDelivery) {
+    // Partner vendor delivery → commitment fee flow.
+    // Everything else (Uniflex pickup/delivery) → confirmation.
+    if (isPartner && order.isForDelivery) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => CommitmentFeeScreen(order: order),
+          builder: (_) => CommitmentFeeScreen(order: order!),
         ),
       );
     } else {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => OrderConfirmationScreen(order: order),
+          builder: (_) => OrderConfirmationScreen(order: order!),
         ),
       );
     }
@@ -309,7 +332,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
     final balance = balanceAsync.valueOrNull ?? 0.0;
     final total = cart.subtotal + _deliveryFee + _packFee;
-    final hasSufficientBalance = balance >= total;
+    final isPartner = !widget.vendor.isUniflex;
+    // Partner vendors don't charge at checkout — the student pays a
+    // commitment fee later, then the final food cost after sourcing.
+    final hasSufficientBalance = isPartner || balance >= total;
 
     return Scaffold(
       appBar: const UniflexAppBar(title: 'Checkout'),
@@ -515,6 +541,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 theme: theme,
               ),
 
+              // ── Notes (optional) ──────────────────────────────────
+              const SizedBox(height: AppSpacing.lg),
+              Text('Note for the rider (optional)',
+                  style: theme.textTheme.titleSmall),
+              const SizedBox(height: AppSpacing.sm),
+              AppTextField(
+                controller: _notesController,
+                hint: 'e.g. Extra napkins please, or call when you arrive',
+                maxLines: 2,
+              ),
+
               const SizedBox(height: AppSpacing.xl),
 
               // ── Order total ──────────────────────────────────────────
@@ -651,8 +688,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           child: PrimaryButton(
             label: packDecisionPending
                 ? 'Set up packs to continue'
-                : 'Confirm Order  ₦${total.toStringAsFixed(0)}',
-            icon: Icons.lock_outline,
+                : isPartner
+                    ? 'Place Order (pay later)'
+                    : 'Confirm Order  ₦${total.toStringAsFixed(0)}',
+            icon: isPartner ? Icons.shopping_cart_checkout : Icons.lock_outline,
             isLoading: orderState.isLoading,
             onPressed: (hasSufficientBalance && !packDecisionPending)
                 ? () => _confirmOrder(packableItems)

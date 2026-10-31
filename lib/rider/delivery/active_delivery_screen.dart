@@ -33,6 +33,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
   bool _isVerifying = false;
   bool _isFlagging = false;
   bool _isConfirmingSourcing = false;
+  bool _isAddingCustomItem = false;
 
   Future<void> _confirmPickup() async {
     setState(() => _isConfirmingPickup = true);
@@ -214,6 +215,100 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Message sent')),
       );
+    }
+  }
+
+  /// Shows a dialog for the rider to add a custom item to the order.
+  /// The student will need to approve it before the cost is included.
+  Future<void> _addCustomItem(String orderId) async {
+    final descController = TextEditingController();
+    final priceController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Custom Item'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Add an extra item the customer didn\'t order. They\'ll need to approve it.',
+              style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(ctx)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.6),
+                  ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: descController,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Item description',
+                hintText: 'e.g. Extra meat pie',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: priceController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Price (₦)',
+                hintText: 'e.g. 500',
+                prefixText: '₦ ',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Add Item'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    final desc = descController.text.trim();
+    final price = double.tryParse(priceController.text.trim());
+    if (desc.isEmpty || price == null || price <= 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enter a valid description and price')),
+        );
+      }
+      return;
+    }
+
+    setState(() => _isAddingCustomItem = true);
+    try {
+      await ref.read(riderServiceProvider).addCustomItem(
+            orderId: orderId,
+            description: desc,
+            price: price,
+          );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Custom item added — waiting for customer approval.'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to add item: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isAddingCustomItem = false);
     }
   }
 
@@ -463,42 +558,70 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
           Builder(builder: (ctx) {
             final isSourcing =
                 liveOrder.status == OrderStatus.beingSourced;
-            final bannerColor = isSourcing
-                ? AppColors.warning
-                : (isPicked ? AppColors.emerald : AppColors.orange);
-            final bannerText = isSourcing
-                ? 'Sourcing items at vendor — flag unavailable items below'
-                : (isPicked
-                    ? 'Item picked up — heading to customer'
-                    : 'Heading to pickup point');
-            final bannerIcon = isSourcing
-                ? Icons.shopping_bag_outlined
-                : (isPicked ? Icons.check_circle_outline : Icons.delivery_dining);
-            return Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: BoxDecoration(
-                color: bannerColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(AppRadius.card),
-                border: Border.all(
-                  color: bannerColor.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(bannerIcon, color: bannerColor),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      bannerText,
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: bannerColor,
-                        fontWeight: FontWeight.w600,
-                      ),
+            final isAwaitingPayment =
+                liveOrder.status == OrderStatus.awaitingFinalPayment;
+
+            final Color bannerColor;
+            final String bannerText;
+            final IconData bannerIcon;
+
+            if (isSourcing) {
+              bannerColor = AppColors.warning;
+              bannerText = 'Sourcing items at vendor — flag unavailable items below';
+              bannerIcon = Icons.shopping_bag_outlined;
+            } else if (isAwaitingPayment) {
+              bannerColor = AppColors.info;
+              bannerText = 'Waiting for customer to pay';
+              bannerIcon = Icons.hourglass_top_outlined;
+            } else if (isPicked) {
+              bannerColor = AppColors.emerald;
+              bannerText = 'Item picked up — heading to customer';
+              bannerIcon = Icons.check_circle_outline;
+            } else {
+              bannerColor = AppColors.orange;
+              bannerText = 'Heading to pickup point';
+              bannerIcon = Icons.delivery_dining;
+            }
+
+            return Column(
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: bannerColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(AppRadius.card),
+                    border: Border.all(
+                      color: bannerColor.withValues(alpha: 0.3),
                     ),
                   ),
-                ],
-              ),
+                  child: Row(
+                    children: [
+                      Icon(bannerIcon, color: bannerColor),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          bannerText,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: bannerColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      if (isAwaitingPayment)
+                        IconButton(
+                          icon: const Icon(Icons.refresh, size: 20),
+                          color: bannerColor,
+                          tooltip: 'Refresh',
+                          onPressed: () {
+                            ref.invalidate(activeDeliveriesProvider);
+                            ref.invalidate(activeDeliveryDetailProvider(widget.orderId));
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ],
             );
           }),
 
@@ -603,10 +726,43 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
             ],
           ),
 
+          // ── Notes ─────────────────────────────────────────────────
+          if (liveOrder.notes != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            _SectionCard(
+              title: 'Note from Customer',
+              icon: Icons.sticky_note_2_outlined,
+              iconColor: AppColors.warning,
+              children: [
+                Text(
+                  liveOrder.notes!,
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ],
+            ),
+          ],
+
           const SizedBox(height: AppSpacing.xl),
 
           // ── Sourcing actions (being_sourced orders only) ──────────────
           if (liveOrder.status == OrderStatus.beingSourced) ...[
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: _isAddingCustomItem
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.add_circle_outline, size: 18),
+                label: const Text('Add Custom Item'),
+                onPressed: (_isAddingCustomItem || _isConfirmingSourcing)
+                    ? null
+                    : () => _addCustomItem(liveOrder.id),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(

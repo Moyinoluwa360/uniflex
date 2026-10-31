@@ -40,105 +40,160 @@ class StudentProfileScreen extends ConsumerWidget {
           final tier = statsAsync.valueOrNull?['membership_tier'] as String? ??
               profile.membershipTier;
           final tierColor = _tierColor(tier);
-          final points =
-              statsAsync.valueOrNull?['reward_points'] as int? ??
-                  profile.rewardPoints;
 
           return CustomScrollView(
             slivers: [
-              // ── Hero header ──────────────────────────────────────────
+              // ── Hero card ─────────────────────────────────────────────
               SliverToBoxAdapter(
-                child: Container(
-                  padding: EdgeInsets.fromLTRB(
-                    AppSpacing.screenGutter,
-                    MediaQuery.of(context).padding.top + AppSpacing.lg,
-                    AppSpacing.screenGutter,
-                    AppSpacing.xl,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [tierColor, tierColor.withValues(alpha: 0.7)],
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.screenGutter,
+                      AppSpacing.lg,
+                      AppSpacing.screenGutter,
+                      AppSpacing.sm,
                     ),
-                  ),
-                  child: Column(
-                    children: [
-                      // Avatar
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          color: AppColors.pureWhite.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: AppColors.pureWhite.withValues(alpha: 0.4),
-                            width: 2,
-                          ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            tierColor,
+                            tierColor.withValues(alpha: 0.75),
+                          ],
                         ),
-                        child: Center(
-                          child: Text(
-                            initials,
-                            style: theme.textTheme.headlineSmall?.copyWith(
+                        borderRadius: BorderRadius.circular(AppRadius.card),
+                        boxShadow: [
+                          BoxShadow(
+                            color: tierColor.withValues(alpha: 0.35),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.lg,
+                        vertical: AppSpacing.xl,
+                      ),
+                      child: Column(
+                        children: [
+                          // Avatar
+                          Container(
+                            width: 72,
+                            height: 72,
+                            decoration: BoxDecoration(
+                              color: AppColors.pureWhite.withValues(alpha: 0.2),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color:
+                                    AppColors.pureWhite.withValues(alpha: 0.5),
+                                width: 2.5,
+                              ),
+                            ),
+                            child: Center(
+                              child: Text(
+                                initials,
+                                style:
+                                    theme.textTheme.headlineSmall?.copyWith(
+                                  color: AppColors.pureWhite,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          Text(
+                            profile.nickname ?? profile.fullName ?? '—',
+                            style: theme.textTheme.titleLarge?.copyWith(
                               color: AppColors.pureWhite,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      Text(
-                        profile.nickname ?? profile.fullName ?? '—',
-                        style: theme.textTheme.titleLarge
-                            ?.copyWith(color: AppColors.pureWhite),
-                      ),
-                      if (profile.fullName != null && profile.nickname != null)
-                        Text(
-                          profile.fullName!,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: AppColors.pureWhite.withValues(alpha: 0.8),
-                          ),
-                        ),
-                      const SizedBox(height: AppSpacing.sm),
-                      // Tier badge + points
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.md, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: AppColors.pureWhite.withValues(alpha: 0.2),
-                              borderRadius:
-                                  BorderRadius.circular(AppRadius.pill),
-                            ),
-                            child: Text(
-                              tier,
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                color: AppColors.pureWhite,
-                                fontWeight: FontWeight.w700,
+                          if (profile.fullName != null &&
+                              profile.nickname != null)
+                            Text(
+                              profile.fullName!,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: AppColors.pureWhite
+                                    .withValues(alpha: 0.8),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.md, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: AppColors.pureWhite.withValues(alpha: 0.2),
-                              borderRadius:
-                                  BorderRadius.circular(AppRadius.pill),
-                            ),
-                            child: Text(
-                              '$points pts',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                color: AppColors.pureWhite,
+                          const SizedBox(height: AppSpacing.md),
+                          // Tier badge + wallet balance
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: AppSpacing.md, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: AppColors.pureWhite
+                                      .withValues(alpha: 0.2),
+                                  borderRadius:
+                                      BorderRadius.circular(AppRadius.pill),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.workspace_premium_outlined,
+                                      size: 14,
+                                      color: AppColors.pureWhite,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      tier,
+                                      style: theme.textTheme.labelMedium
+                                          ?.copyWith(
+                                        color: AppColors.pureWhite,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: AppSpacing.md, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: AppColors.pureWhite
+                                      .withValues(alpha: 0.2),
+                                  borderRadius:
+                                      BorderRadius.circular(AppRadius.pill),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.account_balance_wallet_outlined,
+                                      size: 14,
+                                      color: AppColors.pureWhite,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      balanceAsync.when(
+                                        data: (b) =>
+                                            '₦${(b ?? 0).toStringAsFixed(0)}',
+                                        loading: () => '…',
+                                        error: (_, __) => '—',
+                                      ),
+                                      style: theme.textTheme.labelMedium
+                                          ?.copyWith(
+                                        color: AppColors.pureWhite,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -303,10 +358,11 @@ class StudentProfileScreen extends ConsumerWidget {
   }
 
   Color _tierColor(String tier) => switch (tier) {
+        'Bronze' => AppColors.tierBronze,
         'Silver' => AppColors.tierSilver,
         'Gold' => AppColors.tierGold,
         'Platinum' => AppColors.tierPlatinum,
-        _ => AppColors.emerald,
+        _ => AppColors.tierBronze,
       };
 
   String _initials(String? name) {

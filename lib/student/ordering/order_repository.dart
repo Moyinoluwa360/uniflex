@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/models/custom_order_item.dart';
 import '../../shared/models/order.dart';
 import '../../shared/models/order_item.dart';
 import '../../shared/models/vendor.dart';
@@ -200,6 +201,7 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
     double bulkDiscountPct = 0,
     List<Map<String, dynamic>> packs = const [],
     double packFee = 0,
+    String? notes,
   }) async {
     final cart = ref.read(cartProvider);
     if (cart.isEmpty) return null;
@@ -240,6 +242,7 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
           'p_pin': pin,
           'p_pack_fee': packFee,
           'p_packs': packs,
+          if (notes != null && notes.isNotEmpty) 'p_notes': notes,
         },
       ) as Map<String, dynamic>;
 
@@ -286,6 +289,88 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
       ref.invalidate(activeSavingPlanProvider);
 
       state = OrderPlacementState(order: order, budgetWarning: planOverBudget);
+      return order;
+    } catch (e) {
+      state = OrderPlacementState(error: _mapError(e.toString()));
+      return null;
+    }
+  }
+
+  /// Places a partner vendor food order WITHOUT wallet deduction.
+  /// The student pays only the ₦300 commitment fee next (via
+  /// CommitmentFeeScreen), then the actual food cost once the rider
+  /// confirms availability (via pay_final_amount).
+  Future<Order?> placePartnerFoodOrder({
+    required Vendor vendor,
+    required String deliveryType,
+    String? deliveryLocation,
+    DateTime? scheduledFor,
+    List<Map<String, dynamic>> packs = const [],
+    double packFee = 0,
+    String? notes,
+  }) async {
+    final cart = ref.read(cartProvider);
+    if (cart.isEmpty) return null;
+
+    state = const OrderPlacementState(isLoading: true);
+
+    try {
+      final client = ref.read(supabaseClientProvider);
+      final total =
+          cart.subtotal + vendor.deliveryFeeFor(deliveryType) + packFee;
+
+      final lineItems = cart.items
+          .map((item) => {
+                'product_id': item.product.id,
+                'product_name': item.product.name,
+                'quantity': item.quantity,
+                'unit_price': item.unitTotal,
+                'selected_options':
+                    item.selectedOptions.map((o) => o.toJson()).toList(),
+              })
+          .toList();
+
+      final result = await client.rpc(
+        'place_partner_food_order',
+        params: {
+          'p_vendor_id': vendor.id,
+          'p_delivery_type': deliveryType,
+          'p_delivery_location': deliveryLocation,
+          'p_total_amount': total,
+          'p_estimated_time': scheduledFor != null ? 'Scheduled' : '20–30 min',
+          'p_line_items': lineItems,
+          if (scheduledFor != null)
+            'p_scheduled_for': scheduledFor.toUtc().toIso8601String(),
+          'p_pack_fee': packFee,
+          'p_packs': packs,
+          if (notes != null && notes.isNotEmpty) 'p_notes': notes,
+        },
+      ) as Map<String, dynamic>;
+
+      final orderId = result['order_id'] as String;
+
+      final order = Order(
+        id: orderId,
+        studentId: client.auth.currentUser!.id,
+        vendorId: vendor.id,
+        vendorName: vendor.name,
+        source: 'partner',
+        type: 'food',
+        status: OrderStatus.placed,
+        deliveryType: deliveryType,
+        deliveryLocation: deliveryLocation,
+        totalAmount: total,
+        estimatedTime: scheduledFor != null ? 'Scheduled' : '20–30 min',
+        scheduledFor: scheduledFor,
+        packCount: packs.length,
+        packFee: packFee,
+        createdAt: DateTime.now(),
+      );
+
+      ref.read(cartProvider.notifier).clear();
+      ref.invalidate(studentOrdersProvider);
+
+      state = OrderPlacementState(order: order);
       return order;
     } catch (e) {
       state = OrderPlacementState(error: _mapError(e.toString()));
@@ -365,6 +450,7 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
     required String pickupLocation,
     required String dropoffLocation,
     required String itemDescription,
+    String? notes,
   }) async {
     state = const OrderPlacementState(isLoading: true);
     try {
@@ -378,6 +464,7 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
           'p_dropoff_location': dropoffLocation,
           'p_item_description': itemDescription,
           'p_flat_fee': flatFee,
+          if (notes != null && notes.isNotEmpty) 'p_notes': notes,
         },
       ) as Map<String, dynamic>;
 
@@ -451,3 +538,33 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
 
 final orderNotifierProvider =
     NotifierProvider<OrderNotifier, OrderPlacementState>(OrderNotifier.new);
+
+// ---------------------------------------------------------------------------
+// Custom order items (C3 — rider adds, student approves/rejects)
+// ---------------------------------------------------------------------------
+
+/// Streams pending custom items for a specific order. Used on the
+/// order tracking screen so the student can approve/reject in real time.
+final pendingCustomItemsProvider =
+    StreamProvider.family<List<CustomOrderItem>, String>((ref, orderId) {
+  final client = ref.watch(supabaseClientProvider);
+
+  return client
+      .from('order_custom_items')
+      .stream(primaryKey: ['id'])
+      .eq('order_id', orderId)
+      .map((rows) => rows
+          .map((m) => CustomOrderItem.fromMap(m))
+          .where((item) => item.isPending)
+          .toList());
+});
+
+/// Approve a custom item added by the rider.
+Future<void> approveCustomItem(SupabaseClient client, String itemId) async {
+  await client.rpc('approve_custom_item', params: {'p_item_id': itemId});
+}
+
+/// Reject a custom item added by the rider.
+Future<void> rejectCustomItem(SupabaseClient client, String itemId) async {
+  await client.rpc('reject_custom_item', params: {'p_item_id': itemId});
+}

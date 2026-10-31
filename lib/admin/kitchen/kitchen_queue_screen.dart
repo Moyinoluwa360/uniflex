@@ -217,17 +217,24 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
   bool _expanded = false;
 
   /// Advances through kitchen stages. beingSourced and placed both go to
-  /// preparing. preparing branches on delivery_type: pickup → ready_for_pickup,
-  /// delivery → awaiting_final_payment (student pays food cost).
+  /// preparing. preparing branches on delivery_type:
+  ///   - pickup → ready_for_pickup
+  ///   - Uniflex delivery → ready (already paid in full at checkout)
+  ///   - Partner delivery → should not happen (partner orders are read-only)
   Future<void> _advance() async {
     final order = widget.kitchenOrder.order;
+    final isPartner = order.source == 'partner';
+    // Partner orders are read-only in the kitchen — they should never be
+    // advanced from here (rider pool + commitment-fee flow handles them).
+    if (isPartner) return;
+
     final nextStatus = switch (order.status) {
-      OrderStatus.beingSourced => 'preparing',   // NEW: commitment fee paid → start preparing
+      OrderStatus.beingSourced => 'preparing',
       OrderStatus.placed => 'preparing',
       OrderStatus.preparing =>
         order.deliveryType == 'pickup'
           ? 'ready_for_pickup'
-          : 'awaiting_final_payment',             // CHANGED: delivery → await final payment
+          : 'ready',  // Uniflex delivery: already paid → ready for rider transfer
       _ => null,
     };
     if (nextStatus == null) return;
@@ -302,14 +309,17 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
     // The primary action button changes meaning by status — this is what
     // makes "Ready" a real, actionable checkpoint instead of a dead end
     // (Section 12).
-    final (String, VoidCallback)? action = switch (order.status) {
-      OrderStatus.beingSourced => ('Start Preparing', _advance),  // NEW
+    final isPartner = order.source == 'partner';
+
+    // Partner orders are read-only in the kitchen — no action buttons.
+    final (String, VoidCallback)? action = isPartner ? null : switch (order.status) {
+      OrderStatus.beingSourced => ('Start Preparing', _advance),
       OrderStatus.placed => ('Start Preparing', _advance),
       OrderStatus.preparing => (
-          isPickup ? 'Mark Ready for Pickup' : 'Mark Ready (Awaiting Payment)',
+          isPickup ? 'Mark Ready for Pickup' : 'Mark Ready for Delivery',
           _advance
         ),
-      OrderStatus.awaitingFinalPayment => null,   // NEW: no admin action, student pays
+      OrderStatus.awaitingFinalPayment => null,
       OrderStatus.readyForPickup when isPickup => (
           'Mark Completed (Picked Up)',
           _markCompleted
@@ -367,6 +377,26 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
                       ],
                     ),
                   ),
+                  // PARTNER badge
+                  if (isPartner) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.sm, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.info.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                      ),
+                      child: Text(
+                        'PARTNER',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: AppColors.info,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                  ],
                   // BULK badge (Phase 6)
                   if (order.isBulk) ...[
                     Container(
@@ -507,6 +537,38 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
                       style: theme.textTheme.bodySmall?.copyWith(
                         color:
                             theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // ── Student note ──────────────────────────────────────────────
+          if (_expanded && order.notes != null) ...[
+            const Divider(height: 1, indent: AppSpacing.md),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.sm,
+                AppSpacing.md,
+                AppSpacing.sm,
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.sticky_note_2_outlined,
+                    size: 14,
+                    color: AppColors.warning.withValues(alpha: 0.8),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      order.notes!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface
+                            .withValues(alpha: 0.7),
                       ),
                     ),
                   ),

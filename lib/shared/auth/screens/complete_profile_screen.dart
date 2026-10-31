@@ -101,7 +101,9 @@ class _CompleteProfileScreenState
           .completeStudentOnboarding(
             nickname: _nicknameController.text.trim(),
             fullName: _fullNameController.text.trim(),
-            matricNumber: _matricController.text.trim(),
+            matricNumber: _matricController.text.trim().isEmpty
+                ? null
+                : _matricController.text.trim(),
             school: _school,
             dateOfBirth: _dateOfBirth!,
             referralCodeUsed: referralCode.isEmpty ? null : referralCode,
@@ -236,14 +238,10 @@ class _CompleteProfileScreenState
                 const SizedBox(height: AppSpacing.md),
                 AppTextField(
                   controller: _matricController,
-                  label: 'Matric number',
+                  label: 'Matric number (optional)',
                   hint: 'RUN / CMP / 22 / 1234',
                   prefixIcon: Icons.badge_outlined,
                   textInputAction: TextInputAction.next,
-                  validator: (v) => AuthValidators.required(
-                    v,
-                    fieldName: 'your matric number',
-                  ),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 DropdownButtonFormField<String>(

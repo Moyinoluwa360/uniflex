@@ -41,7 +41,7 @@ final List<BoxShadow> _cardGlow = [
   ),
 ];
 
-enum _HomeMode { around, foodDelivery }
+enum _HomeMode { foodDelivery, around }
 
 class StudentHomeScreen extends ConsumerStatefulWidget {
   const StudentHomeScreen({super.key});
@@ -482,16 +482,16 @@ class _ModeToggle extends StatelessWidget {
         child: Row(
           children: [
             _ToggleTab(
-              label: 'Around',
-              icon: Icons.explore_outlined,
-              selected: mode == _HomeMode.around,
-              onTap: () => onChanged(_HomeMode.around),
-            ),
-            _ToggleTab(
               label: 'Food Delivery',
               icon: Icons.restaurant_outlined,
               selected: mode == _HomeMode.foodDelivery,
               onTap: () => onChanged(_HomeMode.foodDelivery),
+            ),
+            _ToggleTab(
+              label: 'Around',
+              icon: Icons.explore_outlined,
+              selected: mode == _HomeMode.around,
+              onTap: () => onChanged(_HomeMode.around),
             ),
           ],
         ),

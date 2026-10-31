@@ -54,7 +54,7 @@ class ReferralScreen extends ConsumerWidget {
                   const Icon(Icons.people, color: AppColors.pureWhite, size: 40),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    'Earn ₦500 for every friend',
+                    'Earn rewards for every friend you refer',
                     style: theme.textTheme.titleMedium?.copyWith(
                       color: AppColors.pureWhite,
                       fontWeight: FontWeight.w700,
@@ -63,7 +63,7 @@ class ReferralScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'They place their first order, you both win.',
+                    'They place their first order, you both get rewarded.',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: AppColors.pureWhite.withValues(alpha: 0.8),
                     ),
@@ -148,8 +148,8 @@ class ReferralScreen extends ConsumerWidget {
                   onPressed: codeIsActive
                       ? () => Share.share(
                             'Use my Uniflex referral code $code when you sign up '
-                            'and we both earn ₦500! Download Uniflex for campus '
-                            'food ordering.',
+                            'and we both get rewarded! Download Uniflex for '
+                            'campus food ordering.',
                             subject: 'Join me on Uniflex',
                           )
                       : null,
@@ -296,7 +296,8 @@ class _NoCodeYet extends StatelessWidget {
                 Text(
                   'Referral codes are issued by Uniflex. Reach out to the '
                   'Uniflex team to be given one — once you have it, every '
-                  'friend who signs up with it and orders earns you ₦500.',
+                  'friend who signs up with it and orders earns you a reward. '
+                  'Contact Uniflex for current referral rates.',
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: AppColors.info),
                 ),

@@ -294,18 +294,39 @@ class _PoolOrderCardState extends ConsumerState<_PoolOrderCard> {
               ),
             ],
 
+            // ── Student note ─────────────────────────────────────────
+            if (!order.isAround && order.notes != null) ...[
+              const SizedBox(height: AppSpacing.sm),
+              _InfoRow(
+                icon: Icons.sticky_note_2_outlined,
+                label: 'Note',
+                value: order.notes!,
+              ),
+            ],
+
             const SizedBox(height: AppSpacing.md),
 
             // ── Amount + Accept ───────────────────────────────────────
             Row(
               children: [
-                Text(
-                  '₦${order.totalAmount.toStringAsFixed(0)}',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: AppColors.emerald,
-                    fontWeight: FontWeight.w700,
+                // Hide monetary amounts for partner/around orders —
+                // the final cost isn't known until after sourcing.
+                if (order.source == 'uniflex')
+                  Text(
+                    '₦${order.totalAmount.toStringAsFixed(0)}',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: AppColors.emerald,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  )
+                else
+                  Text(
+                    'Amount TBD',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                      fontStyle: FontStyle.italic,
+                    ),
                   ),
-                ),
                 const Spacer(),
                 SizedBox(
                   height: 40,

@@ -80,7 +80,7 @@ class ProfileService {
   Future<Profile> completeStudentOnboarding({
     required String nickname,
     required String fullName,
-    required String matricNumber,
+    String? matricNumber,
     required String school,
     required DateTime dateOfBirth,
     String? referralCodeUsed,

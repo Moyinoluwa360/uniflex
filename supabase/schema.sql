@@ -4128,4 +4128,500 @@ begin
 end;
 $$;
 grant execute on function public.update_order_status(uuid, text) to authenticated;
+
+-- =====================================================================
+-- ROUND 4 — Registration fixes, ordering flow overhaul, custom items
+-- Run this block ONCE in the Supabase SQL editor after Round 3.
+-- =====================================================================
+
+-- A3. Make matric number optional in onboarding RPC
+-- (Table column is already nullable; RPC now stores NULL for empty input
+-- and skips the uniqueness check when matric is not provided.)
+create or replace function public.complete_student_onboarding(
+  p_nickname text,
+  p_full_name text,
+  p_matric_number text default null,
+  p_school text default 'Redeemer''s University',
+  p_date_of_birth date default null,
+  p_referral_code_used text default null
+)
+returns public.profiles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_new_code text;
+  v_referrer_id uuid;
+  v_profile public.profiles;
+  v_clean_matric text;
+begin
+  if v_user_id is null then
+    raise exception 'Not signed in';
+  end if;
+
+  -- Normalise empty / whitespace-only matric to NULL.
+  v_clean_matric := nullif(trim(coalesce(p_matric_number, '')), '');
+
+  if p_referral_code_used is not null and length(trim(p_referral_code_used)) > 0 then
+    select id into v_referrer_id
+      from public.profiles
+      where referral_code = upper(trim(p_referral_code_used));
+
+    if v_referrer_id is null then
+      raise exception 'Referral code % not found', p_referral_code_used;
+    end if;
+  end if;
+
+  loop
+    v_new_code := upper(substr(md5(random()::text || clock_timestamp()::text), 1, 6));
+    exit when not exists (select 1 from public.profiles where referral_code = v_new_code);
+  end loop;
+
+  update public.profiles set
+    role = 'student',
+    nickname = p_nickname,
+    full_name = p_full_name,
+    matric_number = v_clean_matric,
+    school = p_school,
+    date_of_birth = p_date_of_birth,
+    referral_code = v_new_code,
+    referred_by_code = case when v_referrer_id is not null then upper(trim(p_referral_code_used)) else null end,
+    onboarding_complete = true
+  where id = v_user_id
+  returning * into v_profile;
+
+  if not found then
+    raise exception 'No profile row for %; Step One (create account) must run first', v_user_id;
+  end if;
+
+  insert into public.wallets (user_id, balance, virtual_account_number, tier)
+  values (
+    v_user_id, 0,
+    'UFX-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 10)),
+    'Bronze'
+  )
+  on conflict (user_id) do nothing;
+
+  if v_referrer_id is not null then
+    insert into public.referrals (referrer_id, referred_id, referral_code_used)
+    values (v_referrer_id, v_user_id, upper(trim(p_referral_code_used)))
+    on conflict (referred_id) do nothing;
+  end if;
+
+  return v_profile;
+end;
+$$;
+
+-- C1. place_partner_food_order — creates a partner vendor order WITHOUT
+-- wallet deduction. The student pays only the commitment fee next (via
+-- pay_commitment_fee), then the food cost later (via pay_final_amount).
+create or replace function public.place_partner_food_order(
+  p_vendor_id         uuid,
+  p_delivery_type     text,
+  p_delivery_location text default null,
+  p_total_amount      numeric default 0,
+  p_estimated_time    text default '20–30 min',
+  p_line_items        jsonb default '[]'::jsonb,
+  p_scheduled_for     timestamptz default null,
+  p_pack_fee          numeric default 0,
+  p_packs             jsonb default '[]'::jsonb,
+  p_notes             text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id uuid := auth.uid();
+  v_order_id   uuid;
+  v_item       jsonb;
+  v_pack       jsonb;
+  v_pack_idx   int := 0;
+begin
+  if v_student_id is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  if not exists (select 1 from public.vendors where id = p_vendor_id and is_active) then
+    raise exception 'VENDOR_NOT_FOUND';
+  end if;
+
+  insert into public.orders
+    (student_id, vendor_id, source, type, status, delivery_type,
+     delivery_location, total_amount, estimated_time, scheduled_for,
+     pack_count, pack_fee, notes)
+  values
+    (v_student_id, p_vendor_id, 'partner', 'food', 'placed', p_delivery_type,
+     p_delivery_location, p_total_amount, p_estimated_time, p_scheduled_for,
+     jsonb_array_length(p_packs), p_pack_fee, p_notes)
+  returning id into v_order_id;
+
+  for v_item in select * from jsonb_array_elements(p_line_items)
+  loop
+    insert into public.order_items
+      (order_id, product_id, product_name, quantity, unit_price, selected_options)
+    values
+      (v_order_id,
+       (v_item ->> 'product_id')::uuid,
+       v_item ->> 'product_name',
+       (v_item ->> 'quantity')::int,
+       (v_item ->> 'unit_price')::numeric,
+       coalesce(v_item -> 'selected_options', '[]'::jsonb));
+  end loop;
+
+  for v_pack in select * from jsonb_array_elements(p_packs)
+  loop
+    insert into public.order_packs (order_id, pack_index, items)
+    values (v_order_id, v_pack_idx, coalesce(v_pack -> 'items', '[]'::jsonb));
+    v_pack_idx := v_pack_idx + 1;
+  end loop;
+
+  return jsonb_build_object('order_id', v_order_id);
+end;
+$$;
+grant execute on function public.place_partner_food_order(uuid, text, text, numeric, text, jsonb, timestamptz, numeric, jsonb, text) to authenticated;
+
+-- C4. Add p_notes to place_food_order_with_payment
+-- (Re-create with the additional parameter; backwards-compatible via default null.)
+create or replace function public.place_food_order_with_payment(
+  p_vendor_id         uuid,
+  p_source            text,
+  p_delivery_type     text,
+  p_delivery_location text,
+  p_total_amount      numeric,
+  p_estimated_time    text,
+  p_line_items        jsonb,
+  p_scheduled_for     timestamptz default null,
+  p_is_bulk           boolean default false,
+  p_bulk_discount_pct numeric default 0,
+  p_pin               text default null,
+  p_pack_fee          numeric default 0,
+  p_packs             jsonb default '[]'::jsonb,
+  p_notes             text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id   uuid := auth.uid();
+  v_balance      numeric;
+  v_new_balance  numeric;
+  v_order_id     uuid;
+  v_item         jsonb;
+  v_plan_id      uuid;
+  v_plan_period  text;
+  v_plan_budget  numeric;
+  v_plan_spent   numeric;
+  v_period_start timestamptz;
+  v_period_end   timestamptz;
+  v_new_spent    numeric;
+  v_plan_over    boolean := false;
+  v_pack         jsonb;
+  v_pack_idx     int := 0;
+begin
+  if v_student_id is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  if not public.verify_transaction_pin(p_pin) then
+    raise exception 'INVALID_PIN';
+  end if;
+
+  select balance into v_balance
+    from public.wallets
+   where user_id = v_student_id
+  for update;
+
+  if not found then
+    raise exception 'WALLET_NOT_FOUND';
+  end if;
+
+  if v_balance < p_total_amount then
+    raise exception 'INSUFFICIENT_BALANCE';
+  end if;
+
+  update public.wallets
+    set balance = balance - p_total_amount
+  where user_id = v_student_id
+  returning balance into v_new_balance;
+
+  insert into public.orders
+    (student_id, vendor_id, source, type, status, delivery_type,
+     delivery_location, total_amount, estimated_time, scheduled_for,
+     is_bulk, bulk_discount_pct, pack_count, pack_fee, notes)
+  values
+    (v_student_id, p_vendor_id, p_source, 'food', 'placed', p_delivery_type,
+     p_delivery_location, p_total_amount, p_estimated_time, p_scheduled_for,
+     p_is_bulk, p_bulk_discount_pct, jsonb_array_length(p_packs), p_pack_fee,
+     p_notes)
+  returning id into v_order_id;
+
+  for v_item in select * from jsonb_array_elements(p_line_items)
+  loop
+    insert into public.order_items
+      (order_id, product_id, product_name, quantity, unit_price, selected_options)
+    values
+      (v_order_id,
+       (v_item ->> 'product_id')::uuid,
+       v_item ->> 'product_name',
+       (v_item ->> 'quantity')::int,
+       (v_item ->> 'unit_price')::numeric,
+       coalesce(v_item -> 'selected_options', '[]'::jsonb));
+  end loop;
+
+  for v_pack in select * from jsonb_array_elements(p_packs)
+  loop
+    insert into public.order_packs (order_id, pack_index, items)
+    values (v_order_id, v_pack_idx, coalesce(v_pack -> 'items', '[]'::jsonb));
+    v_pack_idx := v_pack_idx + 1;
+  end loop;
+
+  insert into public.wallet_transactions
+    (user_id, type, amount, source, order_id, balance_after)
+  values
+    (v_student_id, 'debit', p_total_amount, 'order_payment', v_order_id, v_new_balance);
+
+  -- Lazily update the active saving plan's spent counter.
+  select id, period, budget, spent, period_start
+    into v_plan_id, v_plan_period, v_plan_budget, v_plan_spent, v_period_start
+  from public.saving_plans
+  where user_id = v_student_id and is_active
+  limit 1;
+
+  if v_plan_id is not null then
+    v_period_end := case v_plan_period
+      when 'daily' then v_period_start + interval '1 day'
+      when 'weekly' then v_period_start + interval '7 days'
+      else v_period_start + interval '1 month'
+    end;
+
+    if now() >= v_period_end then
+      v_period_start := date_trunc('day', now());
+      v_new_spent := p_total_amount;
+    else
+      v_new_spent := v_plan_spent + p_total_amount;
+    end if;
+
+    update public.saving_plans
+       set spent = v_new_spent,
+           period_start = v_period_start,
+           updated_at = now()
+     where id = v_plan_id;
+
+    v_plan_over := (v_new_spent > v_plan_budget);
+  end if;
+
+  return jsonb_build_object(
+    'order_id', v_order_id,
+    'balance_after', v_new_balance,
+    'plan_over_budget', v_plan_over
+  );
+end;
+$$;
+
+-- C4. Add p_notes to place_around_order
+create or replace function public.place_around_order(
+  p_category          text,
+  p_pickup_location   text,
+  p_dropoff_location  text,
+  p_item_description  text,
+  p_flat_fee          numeric(10,2),
+  p_notes             text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id uuid;
+  v_order_id   uuid;
+begin
+  v_student_id := auth.uid();
+  if v_student_id is null then raise exception 'Unauthorized'; end if;
+
+  if not exists (select 1 from public.profiles where id = v_student_id) then
+    raise exception 'Profile not found';
+  end if;
+
+  insert into public.orders
+    (student_id, source, type, status, delivery_type,
+     total_amount, estimated_time, notes)
+  values
+    (v_student_id, 'uniflex', 'around', 'placed', 'delivery',
+     p_flat_fee, '15–25 min', p_notes)
+  returning id into v_order_id;
+
+  insert into public.around_requests
+    (order_id, category, pickup_location, dropoff_location, item_description)
+  values
+    (v_order_id, p_category, p_pickup_location, p_dropoff_location, p_item_description);
+
+  return jsonb_build_object('order_id', v_order_id);
+end;
+$$;
+grant execute on function public.place_around_order(text, text, text, text, numeric, text) to authenticated;
+
+-- C3. order_custom_items — rider adds items at the vendor, student approves
+create table if not exists public.order_custom_items (
+  id          uuid        primary key default gen_random_uuid(),
+  order_id    uuid        not null references public.orders(id) on delete cascade,
+  description text        not null,
+  price       numeric(10,2) not null,
+  status      text        not null default 'pending'
+                          check (status in ('pending', 'approved', 'rejected')),
+  added_by    uuid        not null references auth.users(id),
+  decided_at  timestamptz,
+  created_at  timestamptz not null default now()
+);
+alter table public.order_custom_items enable row level security;
+
+-- Rider can insert for orders they are assigned to
+create policy "rider_insert_custom_item"
+  on public.order_custom_items for insert
+  to authenticated
+  with check (
+    exists (
+      select 1 from public.orders
+      where orders.id = order_custom_items.order_id
+        and orders.rider_id = auth.uid()
+        and orders.status = 'being_sourced'
+    )
+  );
+
+-- Rider and student can read custom items on their orders
+create policy "read_own_custom_items"
+  on public.order_custom_items for select
+  to authenticated
+  using (
+    exists (
+      select 1 from public.orders
+      where orders.id = order_custom_items.order_id
+        and (orders.rider_id = auth.uid() or orders.student_id = auth.uid())
+    )
+  );
+
+-- Student can update (approve/reject) custom items on their orders
+create policy "student_decide_custom_item"
+  on public.order_custom_items for update
+  to authenticated
+  using (
+    exists (
+      select 1 from public.orders
+      where orders.id = order_custom_items.order_id
+        and orders.student_id = auth.uid()
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.orders
+      where orders.id = order_custom_items.order_id
+        and orders.student_id = auth.uid()
+    )
+  );
+
+-- Admin can read all
+create policy "admin_read_custom_items"
+  on public.order_custom_items for select
+  to authenticated
+  using (public.is_admin());
+
+-- RPCs for custom items
+create or replace function public.add_custom_item(
+  p_order_id    uuid,
+  p_description text,
+  p_price       numeric
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_rider_id uuid := auth.uid();
+  v_order    public.orders%rowtype;
+  v_item_id  uuid;
+begin
+  select * into v_order from public.orders where id = p_order_id;
+  if not found then raise exception 'Order not found'; end if;
+  if v_order.rider_id <> v_rider_id then raise exception 'Not your order'; end if;
+  if v_order.status <> 'being_sourced' then raise exception 'Order not in sourcing stage'; end if;
+
+  insert into public.order_custom_items (order_id, description, price, added_by)
+  values (p_order_id, p_description, p_price, v_rider_id)
+  returning id into v_item_id;
+
+  return v_item_id;
+end;
+$$;
+grant execute on function public.add_custom_item(uuid, text, numeric) to authenticated;
+
+create or replace function public.approve_custom_item(p_item_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id uuid := auth.uid();
+  v_item       public.order_custom_items%rowtype;
+begin
+  select * into v_item from public.order_custom_items where id = p_item_id;
+  if not found then raise exception 'Item not found'; end if;
+
+  if not exists (
+    select 1 from public.orders
+    where id = v_item.order_id and student_id = v_student_id
+  ) then
+    raise exception 'Not your order';
+  end if;
+
+  if v_item.status <> 'pending' then
+    raise exception 'Item already decided';
+  end if;
+
+  update public.order_custom_items
+  set status = 'approved', decided_at = now()
+  where id = p_item_id;
+end;
+$$;
+grant execute on function public.approve_custom_item(uuid) to authenticated;
+
+create or replace function public.reject_custom_item(p_item_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id uuid := auth.uid();
+  v_item       public.order_custom_items%rowtype;
+begin
+  select * into v_item from public.order_custom_items where id = p_item_id;
+  if not found then raise exception 'Item not found'; end if;
+
+  if not exists (
+    select 1 from public.orders
+    where id = v_item.order_id and student_id = v_student_id
+  ) then
+    raise exception 'Not your order';
+  end if;
+
+  if v_item.status <> 'pending' then
+    raise exception 'Item already decided';
+  end if;
+
+  update public.order_custom_items
+  set status = 'rejected', decided_at = now()
+  where id = p_item_id;
+end;
+$$;
+grant execute on function public.reject_custom_item(uuid) to authenticated;
+
+-- End Round 4
 -- =====================================================================

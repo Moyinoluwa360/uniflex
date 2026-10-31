@@ -102,11 +102,35 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
     } on AuthException catch (e) {
       final msg = e.message.toLowerCase();
       if (msg.contains('already') || msg.contains('registered')) {
-        setState(
-          () => _errorText =
-              'An account with this email already exists. '
-              "Try logging in, or use 'Forgot password?' to recover access.",
-        );
+        // Account exists — attempt auto-sign-in so the user can resume
+        // whatever onboarding step they left off at.
+        try {
+          await ref
+              .read(authServiceProvider)
+              .signInWithEmail(email: email, password: password);
+          // Update the phone on the stub in case it changed.
+          final session = ref.read(authServiceProvider).currentSession;
+          if (session?.user != null) {
+            await ref.read(profileServiceProvider).createStubProfile(
+                  userId: session!.user.id,
+                  email: email,
+                  phone: e164Phone,
+                );
+          }
+          ref.invalidate(currentProfileProvider);
+          if (!mounted) return;
+          // Pop to root — AuthGate picks up the session and routes to
+          // ResumeOtpScreen or CompleteProfileScreen as needed.
+          Navigator.of(context).popUntil((route) => route.isFirst);
+          return;
+        } on AuthException {
+          setState(
+            () => _errorText =
+                'An account with this email already exists but the password '
+                "doesn't match. Try logging in from the main screen, or use "
+                "'Forgot password?' to recover access.",
+          );
+        }
       } else {
         setState(() => _errorText = e.message);
       }

@@ -25,18 +25,23 @@ abstract final class AuthValidators {
     return null;
   }
 
+  /// Strips whitespace, dashes, parentheses, and dots so users can type
+  /// phone numbers in any common visual format.
+  static String _sanitize(String value) =>
+      value.trim().replaceAll(RegExp(r'[\s\-\(\)\.]'), '');
+
   static String? phone(String? value) {
-    final v = value?.trim() ?? '';
+    final v = _sanitize(value ?? '');
     if (v.isEmpty) return 'Enter your phone number';
     if (!_localPhonePattern.hasMatch(v) && !_e164PhonePattern.hasMatch(v)) {
-      return 'Enter a valid Nigerian number, e.g. 08012345678';
+      return 'Enter a valid Nigerian number, e.g. 08012345678 or +2348012345678';
     }
     return null;
   }
 
   /// Normalises a Nigerian number to E.164 (`+234...`) for Termii.
   static String toE164(String value) {
-    final v = value.trim();
+    final v = _sanitize(value);
     if (v.startsWith('+234')) return v;
     if (v.startsWith('0')) return '+234${v.substring(1)}';
     return v;
