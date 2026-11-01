@@ -51,10 +51,12 @@ class _ResumeOtpScreenState extends ConsumerState<ResumeOtpScreen> {
   @override
   void initState() {
     super.initState();
-    // If we already know the phone, pre-resolve it so the UI skips straight
-    // to the "Send Code" button.
+    // If we already know the phone, auto-send the OTP immediately so the
+    // user lands directly on the code-entry phase (no interstitial).
     if (widget.phone != null) {
       _resolvedPhone = widget.phone;
+      // Auto-send after first frame to avoid calling setState during build.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _sendCode());
     }
   }
 
@@ -161,13 +163,12 @@ class _ResumeOtpScreenState extends ConsumerState<ResumeOtpScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Resume verification',
+                'Verify your phone',
                 style: textTheme.headlineMedium,
               ),
               const SizedBox(height: AppSpacing.xs),
               Text(
-                'Your sign-up was interrupted. '
-                'Verify your phone number to continue.',
+                'We need to verify your phone number to continue.',
                 style: textTheme.bodyMedium?.copyWith(color: secondaryInk),
               ),
               const SizedBox(height: AppSpacing.xl),

@@ -53,5 +53,7 @@
 	<string>Uniflex needs camera access to take photos for product listings.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Uniflex uses your location to help riders navigate to your delivery address.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

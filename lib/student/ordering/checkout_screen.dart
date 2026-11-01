@@ -677,15 +677,16 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         ),
       ),
 
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.screenGutter,
-            AppSpacing.sm,
-            AppSpacing.screenGutter,
-            AppSpacing.md,
-          ),
-          child: PrimaryButton(
+      bottomNavigationBar: Padding(
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.screenGutter,
+          AppSpacing.sm,
+          AppSpacing.screenGutter,
+          MediaQuery.of(context).viewInsets.bottom +
+              MediaQuery.of(context).padding.bottom +
+              AppSpacing.md,
+        ),
+        child: PrimaryButton(
             label: packDecisionPending
                 ? 'Set up packs to continue'
                 : isPartner
@@ -696,7 +697,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             onPressed: (hasSufficientBalance && !packDecisionPending)
                 ? () => _confirmOrder(packableItems)
                 : null,
-          ),
         ),
       ),
     );

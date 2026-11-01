@@ -4134,9 +4134,36 @@ grant execute on function public.update_order_status(uuid, text) to authenticate
 -- Run this block ONCE in the Supabase SQL editor after Round 3.
 -- =====================================================================
 
--- A3. Make matric number optional in onboarding RPC
--- (Table column is already nullable; RPC now stores NULL for empty input
--- and skips the uniqueness check when matric is not provided.)
+-- Ensure admin-minted referral code tables exist (idempotent — Phase 10
+-- creates these as well, but Round 4 must work even if Phase 10 hasn't
+-- been deployed yet).
+create table if not exists public.referral_codes (
+  id          uuid primary key default gen_random_uuid(),
+  code        text unique not null,
+  owner_id    uuid references public.profiles (id) on delete set null,
+  owner_label text,
+  note        text,
+  is_active   boolean not null default true,
+  created_by  uuid references public.profiles (id) on delete set null,
+  created_at  timestamptz not null default now()
+);
+alter table public.referral_codes enable row level security;
+
+create table if not exists public.referral_code_uses (
+  id          uuid primary key default gen_random_uuid(),
+  code_id     uuid not null references public.referral_codes (id) on delete cascade,
+  referred_id uuid not null unique references public.profiles (id) on delete cascade,
+  used_at     timestamptz not null default now()
+);
+alter table public.referral_code_uses enable row level security;
+
+-- A3 + B. Onboarding RPC — final authoritative version.
+-- Combines: Phase 9 trusted_write bypass, Phase 10 admin-minted referral
+-- code lookup (no auto-generation of personal codes), Round 4 optional matric.
+-- DROP the old overload first (the one with all-required middle params) so
+-- PostgreSQL doesn't keep two signatures alive.
+drop function if exists public.complete_student_onboarding(text, text, text, text, date, text);
+
 create or replace function public.complete_student_onboarding(
   p_nickname text,
   p_full_name text,
@@ -4151,50 +4178,64 @@ security definer
 set search_path = public
 as $$
 declare
-  v_user_id uuid := auth.uid();
-  v_new_code text;
+  v_user_id     uuid := auth.uid();
   v_referrer_id uuid;
-  v_profile public.profiles;
+  v_code_id     uuid;
+  v_code        text := upper(trim(coalesce(p_referral_code_used, '')));
+  v_profile     public.profiles;
+  v_done        boolean;
   v_clean_matric text;
 begin
   if v_user_id is null then
     raise exception 'Not signed in';
   end if;
 
-  -- Normalise empty / whitespace-only matric to NULL.
-  v_clean_matric := nullif(trim(coalesce(p_matric_number, '')), '');
-
-  if p_referral_code_used is not null and length(trim(p_referral_code_used)) > 0 then
-    select id into v_referrer_id
-      from public.profiles
-      where referral_code = upper(trim(p_referral_code_used));
-
-    if v_referrer_id is null then
-      raise exception 'Referral code % not found', p_referral_code_used;
-    end if;
-  end if;
-
-  loop
-    v_new_code := upper(substr(md5(random()::text || clock_timestamp()::text), 1, 6));
-    exit when not exists (select 1 from public.profiles where referral_code = v_new_code);
-  end loop;
-
-  update public.profiles set
-    role = 'student',
-    nickname = p_nickname,
-    full_name = p_full_name,
-    matric_number = v_clean_matric,
-    school = p_school,
-    date_of_birth = p_date_of_birth,
-    referral_code = v_new_code,
-    referred_by_code = case when v_referrer_id is not null then upper(trim(p_referral_code_used)) else null end,
-    onboarding_complete = true
-  where id = v_user_id
-  returning * into v_profile;
-
+  select onboarding_complete into v_done
+    from public.profiles where id = v_user_id;
   if not found then
     raise exception 'No profile row for %; Step One (create account) must run first', v_user_id;
   end if;
+  if v_done then
+    raise exception 'ALREADY_ONBOARDED';
+  end if;
+
+  -- Normalise empty / whitespace-only matric to NULL.
+  v_clean_matric := nullif(trim(coalesce(p_matric_number, '')), '');
+
+  -- Resolve referral code: admin-minted first, then legacy per-student.
+  if v_code <> '' then
+    select id, owner_id into v_code_id, v_referrer_id
+      from public.referral_codes
+     where code = v_code and is_active;
+
+    if v_code_id is null then
+      -- Legacy per-student code (from before codes became admin-minted).
+      select id into v_referrer_id
+        from public.profiles where referral_code = v_code;
+      if v_referrer_id is null then
+        raise exception 'Referral code % not found', p_referral_code_used;
+      end if;
+    end if;
+
+    if v_referrer_id = v_user_id then
+      raise exception 'CANNOT_REFER_SELF';
+    end if;
+  end if;
+
+  -- Bypass the Phase 9 guard_profile_privileged_columns trigger.
+  perform set_config('uniflex.trusted_write', 'on', true);
+
+  update public.profiles set
+    role                = 'student',
+    nickname            = p_nickname,
+    full_name           = p_full_name,
+    matric_number       = v_clean_matric,
+    school              = p_school,
+    date_of_birth       = p_date_of_birth,
+    referred_by_code    = nullif(v_code, ''),
+    onboarding_complete = true
+  where id = v_user_id
+  returning * into v_profile;
 
   insert into public.wallets (user_id, balance, virtual_account_number, tier)
   values (
@@ -4204,15 +4245,28 @@ begin
   )
   on conflict (user_id) do nothing;
 
-  if v_referrer_id is not null then
-    insert into public.referrals (referrer_id, referred_id, referral_code_used)
-    values (v_referrer_id, v_user_id, upper(trim(p_referral_code_used)))
+  -- Record admin-minted code usage.
+  if v_code_id is not null then
+    insert into public.referral_code_uses (code_id, referred_id)
+    values (v_code_id, v_user_id)
     on conflict (referred_id) do nothing;
   end if;
 
+  -- Record referral relationship (for the ₦500 payout trigger).
+  if v_referrer_id is not null then
+    insert into public.referrals (referrer_id, referred_id, referral_code_used)
+    values (v_referrer_id, v_user_id, v_code)
+    on conflict (referred_id) do nothing;
+  end if;
+
+  perform set_config('uniflex.trusted_write', 'off', true);
   return v_profile;
 end;
 $$;
+
+grant execute on function public.complete_student_onboarding(
+  text, text, text, text, date, text
+) to authenticated;
 
 -- C1. place_partner_food_order — creates a partner vendor order WITHOUT
 -- wallet deduction. The student pays only the commitment fee next (via
@@ -4285,7 +4339,10 @@ $$;
 grant execute on function public.place_partner_food_order(uuid, text, text, numeric, text, jsonb, timestamptz, numeric, jsonb, text) to authenticated;
 
 -- C4. Add p_notes to place_food_order_with_payment
--- (Re-create with the additional parameter; backwards-compatible via default null.)
+-- DROP the old 13-param signature first so we don't create a PostgreSQL
+-- overload (PostgREST cannot reliably resolve overloaded functions).
+drop function if exists public.place_food_order_with_payment(uuid, text, text, text, numeric, text, jsonb, timestamptz, boolean, numeric, text, numeric, jsonb);
+
 create or replace function public.place_food_order_with_payment(
   p_vendor_id         uuid,
   p_source            text,
@@ -4423,8 +4480,12 @@ begin
   );
 end;
 $$;
+grant execute on function public.place_food_order_with_payment(uuid, text, text, text, numeric, text, jsonb, timestamptz, boolean, numeric, text, numeric, jsonb, text) to authenticated;
 
 -- C4. Add p_notes to place_around_order
+-- DROP old 5-param signature to avoid overload.
+drop function if exists public.place_around_order(text, text, text, text, numeric);
+
 create or replace function public.place_around_order(
   p_category          text,
   p_pickup_location   text,
@@ -4482,6 +4543,7 @@ create table if not exists public.order_custom_items (
 alter table public.order_custom_items enable row level security;
 
 -- Rider can insert for orders they are assigned to
+drop policy if exists "rider_insert_custom_item" on public.order_custom_items;
 create policy "rider_insert_custom_item"
   on public.order_custom_items for insert
   to authenticated
@@ -4495,6 +4557,7 @@ create policy "rider_insert_custom_item"
   );
 
 -- Rider and student can read custom items on their orders
+drop policy if exists "read_own_custom_items" on public.order_custom_items;
 create policy "read_own_custom_items"
   on public.order_custom_items for select
   to authenticated
@@ -4507,6 +4570,7 @@ create policy "read_own_custom_items"
   );
 
 -- Student can update (approve/reject) custom items on their orders
+drop policy if exists "student_decide_custom_item" on public.order_custom_items;
 create policy "student_decide_custom_item"
   on public.order_custom_items for update
   to authenticated
@@ -4526,6 +4590,7 @@ create policy "student_decide_custom_item"
   );
 
 -- Admin can read all
+drop policy if exists "admin_read_custom_items" on public.order_custom_items;
 create policy "admin_read_custom_items"
   on public.order_custom_items for select
   to authenticated

@@ -35,9 +35,11 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   final _phoneController = TextEditingController();
 
   bool _obscurePassword = true;
+  bool _obscureConfirm = true;
   bool _isLoading = false;
   String? _errorText;
 
@@ -45,6 +47,7 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     _phoneController.dispose();
     super.dispose();
   }
@@ -87,6 +90,16 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
       await ref
           .read(profileServiceProvider)
           .createStubProfile(userId: userId, email: email, phone: e164Phone);
+
+      // Check if phone is already verified (user went back after verifying).
+      // If so, skip OTP entirely and let AuthGate route to CompleteProfile.
+      final freshProfile = await ref.read(profileServiceProvider).fetchProfile(userId);
+      if (freshProfile != null && freshProfile.phoneVerifiedAt != null) {
+        ref.invalidate(currentProfileProvider);
+        if (!mounted) return;
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        return;
+      }
 
       final otpResult = await ref
           .read(phoneOtpServiceProvider)
@@ -235,6 +248,30 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
                         setState(() => _obscurePassword = !_obscurePassword),
                   ),
                   validator: AuthValidators.password,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                AppTextField(
+                  controller: _confirmPasswordController,
+                  label: 'Confirm password',
+                  obscureText: _obscureConfirm,
+                  textInputAction: TextInputAction.next,
+                  prefixIcon: Icons.lock_outline,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscureConfirm
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                    ),
+                    onPressed: () =>
+                        setState(() => _obscureConfirm = !_obscureConfirm),
+                  ),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Confirm your password';
+                    if (v != _passwordController.text) {
+                      return 'Passwords do not match';
+                    }
+                    return null;
+                  },
                 ),
                 const SizedBox(height: AppSpacing.md),
                 AppTextField(

@@ -27,11 +27,11 @@ String _formatDate(DateTime date) =>
 /// Step Two — shown immediately after Step One (phone OTP) succeeds, or
 /// on app start if a signed-in student's profile row exists but
 /// `onboarding_complete` is still false (see AuthGate). On submit this
-/// creates the profile, wallet, referral code, and referral relationship
-/// in one transaction (complete_student_onboarding() RPC), then
-/// invalidates [currentProfileProvider] so AuthGate picks up the change
-/// and swaps to StudentShell on its own — this screen never navigates
-/// directly to a shell.
+/// creates the profile, wallet, and (if a valid code was entered) the
+/// referral relationship in one transaction (complete_student_onboarding()
+/// RPC), then invalidates [currentProfileProvider] so AuthGate picks up
+/// the change and swaps to StudentShell on its own — this screen never
+/// navigates directly to a shell.
 class CompleteProfileScreen extends ConsumerStatefulWidget {
   const CompleteProfileScreen({super.key});
 
@@ -54,6 +54,7 @@ class _CompleteProfileScreenState
   DateTime? _dateOfBirth;
   bool _isLoading = false;
   String? _errorText;
+  String? _pinError;
 
   @override
   void dispose() {
@@ -84,13 +85,14 @@ class _CompleteProfileScreenState
       return;
     }
     if (_pinController.text.trim() != _pinConfirmController.text.trim()) {
-      setState(() => _errorText = 'PINs do not match');
+      setState(() => _pinError = 'PINs do not match');
       return;
     }
 
     setState(() {
       _isLoading = true;
       _errorText = null;
+      _pinError = null;
     });
 
     final referralCode = _referralController.text.trim();
@@ -151,7 +153,20 @@ class _CompleteProfileScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const OnboardingProgressHeader(step: 2, totalSteps: 2),
+                OnboardingProgressHeader(
+                  step: 2,
+                  totalSteps: 2,
+                  onBack: () {
+                    // If we can pop (pushed from Step 1), do so. Otherwise
+                    // this is a root route (app reopened mid-onboarding) —
+                    // sign out so AuthGate returns to LoginScreen.
+                    if (Navigator.of(context).canPop()) {
+                      Navigator.of(context).pop();
+                    } else {
+                      ref.read(authServiceProvider).signOut();
+                    }
+                  },
+                ),
                 const SizedBox(height: AppSpacing.xl),
                 Text(
                   'Complete your\nprofile',
@@ -309,6 +324,15 @@ class _CompleteProfileScreenState
                     ),
                   ],
                 ),
+                if (_pinError != null) ...[
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    _pinError!,
+                    style: textTheme.bodySmall?.copyWith(
+                      color: colorScheme.error,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.xl),
                 PrimaryButton(
                   label: 'Finish setup',
