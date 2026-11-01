@@ -530,7 +530,10 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
     if (raw.contains('WALLET_NOT_FOUND')) {
       return 'Wallet not found — please contact support.';
     }
-    return 'Order failed. Please try again.';
+    if (raw.contains('crypt')) {
+      return 'Server configuration error — please contact support. (ref: crypt)';
+    }
+    return 'Order failed: $raw';
   }
 
   void reset() => state = const OrderPlacementState();

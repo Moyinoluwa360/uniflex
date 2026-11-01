@@ -4690,3 +4690,245 @@ grant execute on function public.reject_custom_item(uuid) to authenticated;
 
 -- End Round 4
 -- =====================================================================
+
+
+-- =====================================================================
+-- Round 5 — PIN / payment root-cause fix (2026-10-31)
+--
+-- Problem: All PIN functions use `set search_path = public`, but on
+-- Supabase Cloud pgcrypto lives in the `extensions` schema.  When a
+-- SECURITY DEFINER function explicitly sets search_path = public, the
+-- role default (`extensions` in the path) is overridden, so
+-- crypt() / gen_salt() cannot be resolved → every call that hashes or
+-- verifies a PIN silently (or loudly) fails.
+--
+-- Additionally, Phase 9 introduced a 2-param set_transaction_pin that
+-- requires the current PIN when changing.  The Flutter change-PIN UI
+-- was never updated to collect the current PIN, so it always sends
+-- p_current_pin = null → INVALID_CURRENT_PIN.
+--
+-- Fix: re-create every PIN-touching function with
+--      set search_path = public, extensions
+-- Also upgrade pay_commitment_fee to use _check_transaction_pin for
+-- lockout support and better error granularity.
+-- =====================================================================
+
+-- 1. set_transaction_pin (1-param — first-time / onboarding)
+create or replace function public.set_transaction_pin(p_pin text)
+returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then
+    raise exception 'Not authenticated';
+  end if;
+  if p_pin !~ '^[0-9]{4}$' then
+    raise exception 'PIN must be exactly 4 digits';
+  end if;
+
+  insert into public.transaction_pins (user_id, pin_hash, updated_at)
+  values (v_user_id, crypt(p_pin, gen_salt('bf')), now())
+  on conflict (user_id) do update
+    set pin_hash = excluded.pin_hash, updated_at = now();
+end;
+$$;
+
+-- 2. has_transaction_pin (no crypt, but keep consistent)
+create or replace function public.has_transaction_pin()
+returns boolean
+language sql
+security definer
+set search_path = public, extensions
+stable
+as $$
+  select exists (
+    select 1 from public.transaction_pins where user_id = auth.uid()
+  );
+$$;
+
+-- 3. verify_transaction_pin (used by pay_commitment_fee and other RPCs)
+create or replace function public.verify_transaction_pin(p_pin text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_hash text;
+begin
+  select pin_hash into v_hash
+    from public.transaction_pins
+   where user_id = auth.uid();
+
+  if v_hash is null then
+    return false;
+  end if;
+
+  return crypt(p_pin, v_hash) = v_hash;
+end;
+$$;
+
+-- 4. set_transaction_pin (2-param — change PIN, Phase 9 overload)
+create or replace function public.set_transaction_pin(
+  p_pin         text,
+  p_current_pin text default null
+)
+returns void language plpgsql security definer
+set search_path = public, extensions
+as $$
+declare
+  v_user_id  uuid := auth.uid();
+  v_existing text;
+begin
+  if v_user_id is null then
+    raise exception 'Not authenticated';
+  end if;
+  if p_pin !~ '^[0-9]{4}$' then
+    raise exception 'PIN must be exactly 4 digits';
+  end if;
+
+  select pin_hash into v_existing
+    from public.transaction_pins where user_id = v_user_id;
+
+  if v_existing is not null then
+    if p_current_pin is null
+       or crypt(p_current_pin, v_existing) <> v_existing then
+      raise exception 'INVALID_CURRENT_PIN';
+    end if;
+  end if;
+
+  insert into public.transaction_pins
+    (user_id, pin_hash, failed_attempts, locked_until, updated_at)
+  values (v_user_id, crypt(p_pin, gen_salt('bf')), 0, null, now())
+  on conflict (user_id) do update
+    set pin_hash        = excluded.pin_hash,
+        failed_attempts = 0,
+        locked_until    = null,
+        updated_at      = now();
+end;
+$$;
+
+-- 5. _check_transaction_pin (Phase 9 lockout-aware checker)
+create or replace function public._check_transaction_pin(p_pin text)
+returns text language plpgsql security definer
+set search_path = public, extensions
+as $$
+declare
+  v_row public.transaction_pins%rowtype;
+begin
+  select * into v_row from public.transaction_pins
+   where user_id = auth.uid() for update;
+
+  if not found then
+    return 'not_set';
+  end if;
+
+  if v_row.locked_until is not null and v_row.locked_until > now() then
+    return 'locked';
+  end if;
+
+  if p_pin is not null and crypt(p_pin, v_row.pin_hash) = v_row.pin_hash then
+    update public.transaction_pins
+       set failed_attempts = 0, locked_until = null
+     where user_id = auth.uid();
+    return 'ok';
+  end if;
+
+  update public.transaction_pins
+     set failed_attempts = v_row.failed_attempts + 1,
+         locked_until    = case
+           when v_row.failed_attempts + 1 >= 5 then now() + interval '15 minutes'
+           else null
+         end
+   where user_id = auth.uid();
+
+  return 'invalid';
+end;
+$$;
+
+-- 6. pay_commitment_fee — fix search_path + use _check_transaction_pin
+--    for lockout support and granular error messages.
+create or replace function public.pay_commitment_fee(
+  p_order_id uuid,
+  p_pin      text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_student_id uuid;
+  v_order      public.orders%rowtype;
+  v_wallet     public.wallets%rowtype;
+  v_fee        numeric(10,2) := 300.00;
+  v_pin_status text;
+begin
+  v_student_id := auth.uid();
+
+  -- Use lockout-aware PIN check instead of simple verify.
+  v_pin_status := public._check_transaction_pin(p_pin);
+  if v_pin_status = 'not_set' then
+    raise exception 'PIN_NOT_SET';
+  end if;
+  if v_pin_status = 'locked' then
+    raise exception 'PIN_LOCKED';
+  end if;
+  if v_pin_status = 'invalid' then
+    raise exception 'INVALID_PIN';
+  end if;
+  -- v_pin_status = 'ok' — proceed.
+
+  -- Lock order row.
+  select * into v_order from public.orders
+  where id = p_order_id for update;
+
+  if not found then raise exception 'Order not found'; end if;
+  if v_order.student_id <> v_student_id then raise exception 'Unauthorized'; end if;
+  if v_order.commitment_fee_paid then raise exception 'Commitment fee already paid'; end if;
+  if v_order.status <> 'placed' then raise exception 'Order is not in placed state'; end if;
+
+  -- Check source/type (partner or around only).
+  if v_order.source = 'uniflex' and v_order.type = 'food' then
+    raise exception 'Commitment fee does not apply to Uniflex orders';
+  end if;
+
+  -- Lock wallet.
+  select * into v_wallet from public.wallets
+  where user_id = v_student_id for update;
+
+  if not found then raise exception 'Wallet not found'; end if;
+  if v_wallet.balance < v_fee then raise exception 'INSUFFICIENT_BALANCE'; end if;
+
+  -- Deduct.
+  update public.wallets
+  set balance = balance - v_fee
+  where user_id = v_student_id;
+
+  -- Record transaction.
+  insert into public.wallet_transactions
+    (user_id, type, amount, source, order_id, balance_after)
+  values
+    (v_student_id, 'debit', v_fee, 'commitment_fee', p_order_id,
+     v_wallet.balance - v_fee);
+
+  -- Advance order.
+  update public.orders
+  set
+    commitment_fee_paid   = true,
+    commitment_fee_amount = v_fee,
+    status                = 'being_sourced'
+  where id = p_order_id;
+
+  return jsonb_build_object(
+    'balance_after', v_wallet.balance - v_fee
+  );
+end;
+$$;
+
+-- End Round 5
+-- =====================================================================

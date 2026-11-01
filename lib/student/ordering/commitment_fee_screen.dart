@@ -107,13 +107,33 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
     if (raw.contains('INSUFFICIENT_BALANCE')) {
       return 'Insufficient wallet balance. Please top up and try again.';
     }
+    if (raw.contains('PIN_LOCKED')) {
+      return 'Too many wrong attempts — PIN is locked for 15 minutes.';
+    }
+    if (raw.contains('PIN_NOT_SET')) {
+      return 'No transaction PIN set. Please set one first.';
+    }
     if (raw.contains('INVALID_PIN')) {
       return 'Incorrect PIN. Please try again.';
     }
     if (raw.contains('Commitment fee already paid')) {
       return 'Commitment fee already paid for this order.';
     }
-    return 'Payment failed. Please try again.';
+    if (raw.contains('not in placed state')) {
+      return 'This order can no longer accept a commitment fee.';
+    }
+    if (raw.contains('does not apply to Uniflex')) {
+      return 'Uniflex orders do not require a commitment fee.';
+    }
+    if (raw.contains('Wallet not found')) {
+      return 'Wallet not found. Please contact support.';
+    }
+    if (raw.contains('crypt')) {
+      // pgcrypto not reachable — Round 5 SQL fix not yet deployed.
+      return 'Server configuration error. Please contact support. (ref: crypt)';
+    }
+    // Surface the raw message so debugging is possible.
+    return 'Payment failed: $raw';
   }
 
   @override

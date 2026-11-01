@@ -122,11 +122,15 @@ class ProfileService {
     try {
       await _client.rpc('set_transaction_pin', params: {
         'p_pin': pin,
-        'p_current_pin': currentPin,
+        if (currentPin != null) 'p_current_pin': currentPin,
       });
     } on PostgrestException catch (e) {
       if (e.message.contains('INVALID_CURRENT_PIN')) {
         throw ProfileException('That is not your current PIN.');
+      }
+      if (e.message.contains('crypt')) {
+        throw ProfileException(
+            'Server configuration error. Please contact support.');
       }
       throw ProfileException(e.message);
     }
