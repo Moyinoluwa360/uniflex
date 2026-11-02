@@ -4995,15 +4995,6 @@ alter table public.products
   add column if not exists food_subsection text
     check (food_subsection is null or food_subsection in ('meal', 'protein_topping'));
 
--- Constraint: food_subsection only when section = 'food'.
--- (Cannot add a table check with if not exists, so use DO block.)
-do $$ begin
-  alter table public.products
-    add constraint products_subsection_only_for_food
-    check (section <> 'food' or food_subsection is not null);
-exception when duplicate_object then null;
-end $$;
-
 -- Pack capacity constant — shared between client and server validation.
 -- 8 meal-spoons per pack.
 -- (Stored as a delivery_settings row for single source of truth.)
@@ -5014,6 +5005,8 @@ on conflict (key) do nothing;
 -- ─────────────────────────────────────────────────────────────────────
 -- 7-B2. Migrate existing products to new section/food_subsection fields.
 -- Maps the legacy `category` column values to the new structured fields.
+-- IMPORTANT: backfill runs BEFORE the cross-column constraint so that
+-- existing rows (section='food', food_subsection=NULL) don't violate it.
 -- ─────────────────────────────────────────────────────────────────────
 update public.products set section = 'food', food_subsection = 'meal'
 where lower(category) in ('meals', 'protein meals', 'main', 'sides', 'snacks', 'grills')
@@ -5037,6 +5030,15 @@ where lower(category) in ('others', 'shawarma', 'snacks & pastries', 'bread', 'p
 -- default to meal (admin can review and correct).
 update public.products set food_subsection = 'meal'
 where section = 'food' and food_subsection is null;
+
+-- Constraint: food_subsection must be set when section = 'food'.
+-- Added AFTER backfill so existing rows don't violate it.
+do $$ begin
+  alter table public.products
+    add constraint products_subsection_only_for_food
+    check (section <> 'food' or food_subsection is not null);
+exception when duplicate_object then null;
+end $$;
 
 -- ─────────────────────────────────────────────────────────────────────
 -- 7-C. delivery_groups — parent record for multi-vendor checkouts

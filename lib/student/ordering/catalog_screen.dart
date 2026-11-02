@@ -1,3 +1,5 @@
+import 'dart:developer' as dev;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -98,42 +100,67 @@ class CatalogScreen extends ConsumerWidget {
             );
           }
 
-          // Group by section.
-          final foodProducts =
-              products.where((p) => p.section == 'food').toList();
-          final drinkProducts =
-              products.where((p) => p.section == 'drinks').toList();
-          final otherProducts =
-              products.where((p) => p.section == 'others').toList();
+          // Group by section. Products with null or unrecognised
+          // section fall into Others with a dev-log warning.
+          final foodProducts = <Product>[];
+          final drinkProducts = <Product>[];
+          final otherProducts = <Product>[];
+
+          for (final p in products) {
+            switch (p.section) {
+              case 'food':
+                foodProducts.add(p);
+              case 'drinks':
+                drinkProducts.add(p);
+              case 'others':
+                otherProducts.add(p);
+              default:
+                dev.log(
+                  'Product "${p.name}" (${p.id}) has unknown '
+                  'section "${p.section}" — showing under Others.',
+                  name: 'CatalogScreen',
+                );
+                otherProducts.add(p);
+            }
+          }
 
           return ListView(
             padding:
                 const EdgeInsets.only(top: AppSpacing.sm, bottom: 96),
             children: [
               // ── Food section (pack-first entry point) ──────────
-              if (foodProducts.isNotEmpty) ...[
-                const _SectionHeader(title: 'Food', icon: Icons.restaurant),
+              const _SectionHeader(title: 'Food', icon: Icons.restaurant),
+              if (foodProducts.isNotEmpty)
                 _FoodSectionCard(
                   vendor: vendor,
                   foodProducts: foodProducts,
+                )
+              else
+                const _EmptySectionMessage(
+                  message: 'No food items available right now.',
                 ),
-              ],
 
               // ── Drinks section ─────────────────────────────────
-              if (drinkProducts.isNotEmpty) ...[
-                const _SectionHeader(title: 'Drinks', icon: Icons.local_cafe),
+              const _SectionHeader(title: 'Drinks', icon: Icons.local_cafe),
+              if (drinkProducts.isNotEmpty)
                 ...drinkProducts.map(
                   (p) => _ProductTile(product: p, vendor: vendor),
+                )
+              else
+                const _EmptySectionMessage(
+                  message: 'No drinks available right now.',
                 ),
-              ],
 
               // ── Others section ─────────────────────────────────
-              if (otherProducts.isNotEmpty) ...[
-                const _SectionHeader(title: 'Others', icon: Icons.fastfood),
+              const _SectionHeader(title: 'Others', icon: Icons.fastfood),
+              if (otherProducts.isNotEmpty)
                 ...otherProducts.map(
                   (p) => _ProductTile(product: p, vendor: vendor),
+                )
+              else
+                const _EmptySectionMessage(
+                  message: 'No other items available right now.',
                 ),
-              ],
             ],
           );
         },
@@ -180,6 +207,29 @@ class _SectionHeader extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           Text(title, style: theme.textTheme.titleSmall),
         ],
+      ),
+    );
+  }
+}
+
+class _EmptySectionMessage extends StatelessWidget {
+  const _EmptySectionMessage({required this.message});
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.screenGutter,
+        vertical: AppSpacing.md,
+      ),
+      child: Text(
+        message,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+          fontStyle: FontStyle.italic,
+        ),
       ),
     );
   }

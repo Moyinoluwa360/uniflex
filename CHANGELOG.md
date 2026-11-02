@@ -2,6 +2,48 @@
 
 All notable changes to this project are documented here, phase by phase.
 
+## Round 7 Hotfix — Empty vendor menus, pack builder UI (2026-11-02)
+
+### Root cause
+
+Round 7 SQL migration added a `CHECK` constraint
+(`products_subsection_only_for_food`) **before** running the backfill
+`UPDATE`s. All existing products had `section='food'` (column default) with
+`food_subsection=NULL`, violating the constraint. The `DO` block's exception
+handler only caught `duplicate_object`, not `check_violation`, so the entire
+Supabase SQL Editor transaction rolled back. No columns were added, no data
+was backfilled. The client defaulted every product to `section='food'` with
+`null` subsection — `isMeal` and `isProteinTopping` both returned false,
+leaving the pack screen empty and Drinks/Others sections hidden.
+
+### Fixed
+
+- **schema.sql**: moved cross-column constraint to **after** the backfill
+  `UPDATE`s so existing rows satisfy it before it's created.
+- **hotfix_product_sections.sql**: standalone idempotent script to add columns,
+  backfill, and add the constraint in the correct order on a live database.
+- **CatalogScreen**: all 3 sections (Food, Drinks, Others) now render
+  unconditionally. Empty sections show an italic placeholder message. Products
+  with unknown/null `section` fall into Others with a `dev.log` warning.
+
+### Changed
+
+- **Pack count selector**: redesigned with large centered number, 52px circular
+  +/- buttons, "How many packs of food?" label, and price/total below.
+- **Spoon counter**: removed the visible "X / 8 meal spoons" text. The 8-spoon
+  limit is still enforced. A warning banner now appears only when the pack is
+  full: "This pack is full. Add another pack to get more." with an inline
+  "Add pack" button.
+
+### Tests
+
+- 3 new widget tests (`catalog_sections_test.dart`): verifies all 3 section
+  headers render, empty sections show placeholders, unknown sections route
+  to Others.
+- 23 existing round7 unit tests still pass.
+
+---
+
 ## Round 7 — Pack-first ordering, vendor menu structure, multi-vendor cart, delivery groups (2026-11-02)
 
 ### Summary

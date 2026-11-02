@@ -148,34 +148,53 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
       appBar: UniflexAppBar(title: '${widget.vendor.name} — Food Packs'),
       body: Column(
         children: [
-          // ── Pack count stepper ────────────────────────────────────
+          // ── Pack count selector ──────────────────────────────────
           Container(
-            padding: const EdgeInsets.all(AppSpacing.md),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.screenGutter,
+              vertical: AppSpacing.lg,
+            ),
             color: theme.colorScheme.surfaceContainerHighest,
-            child: Row(
+            child: Column(
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('How many packs?',
-                          style: theme.textTheme.titleSmall),
-                      const SizedBox(height: 2),
-                      Text(
-                        '₦${widget.vendor.packPrice.toStringAsFixed(0)} per pack'
-                        ' · Total: ₦${_totalPackFee.toStringAsFixed(0)}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: 0.6),
+                Text(
+                  'How many packs of food?',
+                  style: theme.textTheme.titleSmall,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _PackCountButton(
+                      icon: Icons.remove,
+                      onTap: _packCount > 1
+                          ? () => _setPackCount(_packCount - 1)
+                          : null,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.lg),
+                      child: Text(
+                        '$_packCount',
+                        style: theme.textTheme.headlineLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    _PackCountButton(
+                      icon: Icons.add,
+                      onTap: () => _setPackCount(_packCount + 1),
+                    ),
+                  ],
                 ),
-                _CountStepper(
-                  value: _packCount,
-                  min: 1,
-                  onChanged: _setPackCount,
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  '₦${widget.vendor.packPrice.toStringAsFixed(0)} per pack'
+                  ' · Total: ₦${_totalPackFee.toStringAsFixed(0)}',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurface
+                        .withValues(alpha: 0.6),
+                  ),
                 ),
               ],
             ),
@@ -215,43 +234,47 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
               ),
             ),
 
-          // ── Capacity indicator ────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.screenGutter,
-              vertical: AppSpacing.sm,
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.inventory_2_outlined,
-                    size: 16,
-                    color: spoons >= kPackMealCapacity
-                        ? AppColors.error
-                        : AppColors.emerald),
-                const SizedBox(width: AppSpacing.sm),
-                Text(
-                  'Pack ${_activePack + 1}: $spoons / $kPackMealCapacity meal spoons',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: spoons >= kPackMealCapacity
-                        ? AppColors.error
-                        : AppColors.emerald,
-                  ),
-                ),
-                const Spacer(),
-                if (spoons >= kPackMealCapacity)
-                  TextButton.icon(
-                    onPressed: () => _setPackCount(_packCount + 1),
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add pack'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.orange,
-                      padding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
+          // ── Pack-full warning (only visible at capacity) ──────────
+          if (spoons >= kPackMealCapacity)
+            Container(
+              margin: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.screenGutter,
+                vertical: AppSpacing.sm,
+              ),
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: AppColors.orange.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                border: Border.all(
+                    color: AppColors.orange.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline,
+                      size: 16, color: AppColors.orange),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      'This pack is full. Add another pack to get more.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.orange,
+                      ),
                     ),
                   ),
-              ],
+                  const SizedBox(width: AppSpacing.sm),
+                  TextButton(
+                    onPressed: () => _setPackCount(_packCount + 1),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.orange,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.sm),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    child: const Text('Add pack'),
+                  ),
+                ],
+              ),
             ),
-          ),
 
           // ── Product list (Meals then Proteins) ─────────────────
           Expanded(
@@ -432,6 +455,38 @@ class _PackProductTile extends StatelessWidget {
               },
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _PackCountButton extends StatelessWidget {
+  const _PackCountButton({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final enabled = onTap != null;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          color: enabled
+              ? theme.colorScheme.primary.withValues(alpha: 0.1)
+              : theme.colorScheme.onSurface.withValues(alpha: 0.05),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(
+          icon,
+          size: 28,
+          color: enabled
+              ? theme.colorScheme.primary
+              : theme.disabledColor,
+        ),
       ),
     );
   }
