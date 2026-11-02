@@ -2,6 +2,366 @@
 
 All notable changes to this project are documented here, phase by phase.
 
+## Round 7 — Pack-first ordering, vendor menu structure, multi-vendor cart, delivery groups (2026-11-02)
+
+### Summary
+
+Four workstreams: (A) pack-first ordering — choose pack count before filling
+packs, with an 8-spoon capacity limit per pack; (B) vendor menu structure with
+DB-backed `section` ('food'|'drinks'|'others') and `food_subsection`
+('meal'|'protein_topping') fields; (C) multi-vendor cart allowing items from
+multiple vendors in a single checkout, creating `delivery_groups` with
+per-vendor order legs; (D) delivery fee = commitment fee, admin-editable via
+`delivery_settings` table.
+
+### Added
+
+- **`delivery_groups` table** — parent record for multi-vendor checkouts with
+  `status`, `rider_id`, `delivery_pin`, `delivery_stage`, `commitment_fee_total`,
+  `final_amount`, `student_note`, `delivery_location`, `delivery_type`.
+- **`delivery_settings` table** — admin-editable key-value store for
+  `campus_delivery_fee` (default ₦200/vendor) and `hostel_delivery_fee`
+  (default ₦300/vendor).
+- **`place_multi_vendor_order` RPC** — creates a delivery group + per-vendor
+  order legs without wallet deduction. Returns `{group_id, commitment_fee_total}`.
+- **`pay_group_commitment_fee` RPC** — deducts fee from wallet, advances
+  Uniflex legs to `preparing`, partner legs to `being_sourced`.
+- **`accept_delivery_group` RPC** — assigns rider to entire group with
+  `FOR UPDATE NOWAIT` to prevent double-accepts.
+- **`confirm_group_leg_pickup` RPC** — marks individual vendor leg as picked up.
+- **`verify_group_delivery` RPC** — PIN verification + completion for whole group.
+- **`_check_group_ready_after_kitchen` trigger** — auto-advances group when all
+  Uniflex legs reach `ready` status.
+- **`get_delivery_settings` / `update_delivery_setting` RPCs** — read/write
+  delivery fee settings.
+- **`pack_constants.dart`** — shared `kPackMealCapacity = 8` constant.
+- **`PackBuilderScreen`** — replaces old `PackAllocationScreen`; pack-first
+  flow with per-pack meal capacity bar, meal vs protein_topping separation.
+- **`GroupDeliveryScreen`** — multi-stop rider delivery screen with per-vendor
+  pickup confirmation and single PIN delivery.
+- **`PoolGroup` model** — delivery group in the rider job pool with vendor
+  names and leg count.
+- **`DeliveryGroup` model** — full delivery group model with status enum.
+- **`delivery_settings_screen.dart`** — admin screen for editing delivery fees.
+- **`deliverySettingsProvider`** — fetches fee settings from server.
+- **`groupPoolProvider` / `groupDetailProvider` / `groupLegsProvider`** —
+  rider-side providers for delivery group streaming.
+- **23 unit tests** (`test/round7_test.dart`) — pack capacity, product
+  classification, delivery fee calculation, multi-vendor cart grouping,
+  serialization round-trip, legacy v1→v2 cart migration.
+
+### Changed
+
+- **`Product` model** — added `section`, `foodSubsection`, `requiresPack`
+  fields; `isMeal`, `isProteinTopping`, `sectionLabel` computed getters.
+- **`Order` model** — added `deliveryGroupId` field.
+- **`CartState` / `VendorCartGroup`** — multi-vendor cart with per-vendor
+  groups, pack metadata (`packCount`, `packFee`, `packContents`), v2 JSON
+  format with v1 migration. `isUniflexOnly` / `hasPartnerVendor` getters.
+- **`CartScreen`** — no longer takes a vendor param; shows items grouped by
+  vendor.
+- **`CheckoutScreen`** — rewritten for multi-vendor: pickup restricted to
+  Uniflex-only carts; delivery creates group via `placeMultiVendorOrder` then
+  routes to `CommitmentFeeScreen` in group mode.
+- **`CommitmentFeeScreen`** — dual-mode: `CommitmentFeeScreen(groupId, ...)`
+  for delivery groups, `CommitmentFeeScreen.forOrder(order)` for Around/legacy.
+- **`CatalogScreen`** — removed vendor-locking; product quantities read from
+  vendor-specific cart group; FAB shows for any non-empty cart.
+- **`job_pool_screen.dart`** — watches both `jobPoolProvider` and
+  `groupPoolProvider`; shows group cards with "Accept Group" button.
+- **`RiderService`** — added `streamGroupPool`, `streamGroupDetail`,
+  `acceptDeliveryGroup`, `confirmGroupLegPickup`, `verifyGroupDelivery`,
+  `fetchGroupLegs` methods.
+- **`kitchen_queue_screen.dart`** — "GROUP" badge on orders with
+  `deliveryGroupId`.
+- **`manage_hub_screen.dart`** — added "Delivery Fees" entry.
+
+### Notes
+
+- Run the Round 7 SQL block in the Supabase SQL editor.
+- Payment/Paystack/PIN internals are untouched.
+- The pack builder enforces `kPackMealCapacity = 8` client-side; the DB
+  `pack_meal_capacity` setting in `delivery_settings` provides the server-side
+  validation source.
+
+---
+
+## Round 5 — PIN / payment root-cause fix (2026-10-31)
+
+### Root causes fixed
+
+- **pgcrypto search_path**: All PIN-touching SECURITY DEFINER functions used
+  `set search_path = public`, but on Supabase Cloud pgcrypto lives in the
+  `extensions` schema. This override hid `crypt()` / `gen_salt()`, causing
+  every PIN hash/verify call to fail. Fixed by re-creating every PIN function
+  (and `pay_commitment_fee`) with `set search_path = public, extensions`.
+
+- **Change PIN UI**: Phase 9 added a 2-param `set_transaction_pin(text, text)`
+  overload requiring the current PIN when changing. The Flutter `showSetPinSheet`
+  never collected the current PIN, so it always failed with
+  `INVALID_CURRENT_PIN`. Fixed: sheet now detects whether a PIN exists and
+  shows a "Current PIN" field when changing.
+
+- **Error surfacing**: `_mapError()` in `commitment_fee_screen.dart` and
+  `order_repository.dart` only matched 3 error patterns — all other failures
+  showed a generic message. Expanded to cover all known error codes
+  (`PIN_LOCKED`, `PIN_NOT_SET`, `INVALID_PIN`, `crypt`, etc.) with raw
+  error fallback for debugging.
+
+### Changed
+
+- `supabase/schema.sql` — Round 5 block: 6 functions re-created with
+  `search_path = public, extensions`.
+- `lib/shared/widgets/pin/pin_entry_sheet.dart` — `showSetPinSheet` rewritten
+  with current PIN detection and collection.
+- `lib/shared/services/profile/profile_service.dart` — `setTransactionPin`
+  conditionally includes `p_current_pin` param (critical for PostgREST
+  overload resolution between 1-param and 2-param signatures).
+- `lib/student/ordering/commitment_fee_screen.dart` — comprehensive `_mapError`.
+- `lib/student/ordering/order_repository.dart` — `crypt` and raw error
+  fallback added to `_mapError`.
+
+---
+
+## Round 4 — Registration fixes, ordering flow overhaul, custom items (2026-10-28)
+
+### Summary
+
+Three workstreams: (A) registration/signup hardening, (B) UI corrections,
+(C) ordering flow overhaul separating Uniflex and partner vendor payment
+paths, and (D) payment bug fixes.
+
+### Added
+
+- **Confirm Password field** on `CreateAccountScreen` — passwords must match
+  before the account is created.
+- **`place_partner_food_order` RPC** — creates a partner vendor order without
+  wallet deduction or PIN. Student pays only the commitment fee next, then
+  food cost after sourcing.
+- **`order_custom_items` table** + RPCs (`add_custom_item`,
+  `approve_custom_item`, `reject_custom_item`) — riders can add items during
+  sourcing that require student in-app approval before they touch the bill.
+- **Admin-only referral codes** — `referral_codes` and `referral_code_uses`
+  tables. `complete_student_onboarding` updated to look up admin-minted codes
+  first, then fall back to legacy per-student codes. Auto-generation of
+  personal referral codes removed.
+- **Notes field** — `p_notes` parameter added to `place_food_order_with_payment`,
+  `place_partner_food_order`, and `place_around_order`. Displayed to riders
+  and in the kitchen queue.
+
+### Changed
+
+- **Phone normalization** — `validators.dart` strips whitespace, dashes,
+  parentheses, and dots before regex matching. Both `phone()` validator and
+  `toE164()` use sanitized input.
+- **Matric number optional** — `complete_student_onboarding` treats
+  null/empty matric as NULL; uniqueness check skipped when null.
+- **Checkout routing** — Uniflex vendors: full payment + PIN at checkout →
+  `OrderConfirmationScreen`. Partner vendors: no payment → `CommitmentFeeScreen`.
+- **Kitchen advance logic** — `preparing` + Uniflex delivery → `ready`
+  (was incorrectly `awaiting_final_payment`).
+- **Profile card** — tier-coloured header card with `tierBronze` color.
+- **Home toggle** — Food Delivery renders first (left), Around second (right).
+- **Referral screen** — "₦500" references replaced with generic "earn rewards"
+  copy.
+- **Rider fee hiding** — partner/around orders show "Amount TBD" instead of
+  monetary amounts in the rider pool and active delivery screens.
+- Keyboard overlap fix on checkout screen.
+- Inline PIN mismatch error display (previously only showed in SnackBar).
+
+### Notes
+
+- Run the Round 4 SQL block after Round 3.
+- `pay_commitment_fee` still used the old `search_path = public` (fixed in
+  Round 5).
+
+---
+
+## Round 3 fixes (2026-10-26)
+
+Two unrelated workstreams addressed in this round.
+
+---
+
+### Part A — OTP delivery & signup flow fixes
+
+#### Root causes fixed
+
+- **A1 — OTP not arriving at all**: The `phone-otp` Edge Function queries an
+  `otp_send_log` table for rate limiting — that table was never created. Every
+  OTP send returned a DB error before reaching Termii. Added `otp_send_log`
+  (with RLS enabled, no client policies) to `schema.sql`.
+
+- **A2 — Wrong screen after returning mid-signup**: `AuthGate` routed any
+  session with `onboarding_complete = false` straight to `CompleteProfileScreen`
+  (Step Two), even if the user was actually still at the OTP step (Step 1b) and
+  `phone_verified_at` was null. The gate now distinguishes the two:
+  `phoneVerifiedAt == null` → `ResumeOtpScreen`; `phoneVerifiedAt != null` →
+  `CompleteProfileScreen` (unchanged).
+
+- **A3 — Duplicate accounts on signup retry**: `createStubProfile` used a raw
+  `INSERT`, which failed with a unique-constraint error if the same user ID
+  already had a profile row. Changed to `.upsert(..., onConflict: 'id')`. The
+  method now also saves the phone number so `ResumeOtpScreen` can pre-fill it.
+
+- **A4 — General OTP flow stability**: OTP code length guard corrected from
+  `< 4` to `< 6` (Termii sends 6-digit codes). `AuthException` messages
+  containing "already"/"registered" now surface a clear "account exists, try
+  logging in" message instead of a generic error.
+
+#### Added
+
+- **`lib/shared/auth/screens/resume_otp_screen.dart`** — new screen shown by
+  `AuthGate` when a user returns with an unverified phone. Three phases:
+  (A) phone unknown (legacy stub) → re-enter number; (B) phone known → confirm
+  and request new code; (C) code sent → 6-digit input + Verify + Resend.
+  Close button calls `signOut()` (returns to LoginScreen).
+- **`otp_send_log` table** in `supabase/schema.sql` Round 3 block.
+- One-time cleanup `DELETE` in the same block: removes incomplete signup
+  profiles (`phone_verified_at IS NULL`, `onboarding_complete = false`) older
+  than 7 days.
+
+#### Changed
+
+- `lib/shared/services/profile/profile_service.dart` — `createStubProfile`
+  adds `required String phone`, uses `.upsert(onConflict: 'id')`.
+- `lib/shared/auth/screens/create_account_screen.dart` — passes phone to
+  `createStubProfile`; friendlier error for "already registered".
+- `lib/shared/router/auth_gate.dart` — `!onboardingComplete` branch now checks
+  `phoneVerifiedAt == null` and routes to `ResumeOtpScreen` when true.
+- `lib/shared/auth/screens/verify_phone_screen.dart` — OTP length guard fixed
+  (4 → 6).
+
+#### Notes
+
+- **Run the Round 3 schema block** in the Supabase SQL editor. It is additive
+  and safe to run once.
+- **Re-deploy `phone-otp`** Edge Function (`supabase functions deploy phone-otp`)
+  — no code changes to the function itself, but the missing table must exist
+  before the function will work.
+- Test against real number 09160556368 after deploying.
+
+---
+
+### Part B — Commitment fee + adjustable order for uncertain-availability orders
+
+Scope: **All delivery orders** (partner vendor, Uniflex delivery, and Around
+requests). Pickup orders (Uniflex) are exempt — no rider is dispatched, so no
+commitment fee applies. The ₦300 fee is **non-refundable** regardless of
+outcome.
+
+#### Problem solved
+
+When sourcing food from a location Uniflex doesn't control, items may not be
+available. This adds a two-stage payment flow instead of charging the full
+amount upfront.
+
+#### New flow
+
+1. Student places a delivery order (partner vendor, Uniflex delivery, or Around request).
+2. A new **CommitmentFeeScreen** prompts for a flat ₦300 commitment fee (same
+   regardless of distance or order type). Paying this dispatches the rider.
+3. Order enters **`being_sourced`** state and becomes pool-eligible (no admin
+   "Transfer to Rider" step needed for these orders).
+4. Rider accepts from the job pool; status stays `being_sourced` (not
+   `out_for_delivery` — that only comes after final payment).
+5. Rider sources items; can flag unavailable items via a new "Flag item
+   unavailable" action in `ActiveDeliveryScreen`.
+6. Student can view flagged items on the new **`AdjustOrderScreen`** and
+   communicate adjustments via the existing messaging system.
+7. Rider taps "Confirm Items" → enters the confirmed total → order moves to
+   **`awaiting_final_payment`**.
+8. Student is notified → pays the actual food cost from `OrderTrackingScreen`
+   (PIN-gated, same as regular checkout).
+9. Order moves to `out_for_delivery` → existing rider delivery + PIN gate at
+   the door.
+
+#### Policy: non-refundable fee
+
+The ₦300 commitment fee is **never refunded** under any circumstances. Admin
+must manually cancel an order that falls through completely — there is no
+auto-refund logic.
+
+#### Added
+
+- **`lib/student/ordering/commitment_fee_screen.dart`** — ₦300 payment screen
+  with wallet balance check, PIN gate, and non-refundable notice.
+- **`lib/student/ordering/adjust_order_screen.dart`** — shows order items with
+  rider-flagged items highlighted; `OrderItemFlag` model; `orderItemFlagsProvider`.
+- **`supabase/schema.sql` Round 3 Part B block**:
+  - `being_sourced` and `awaiting_final_payment` added to orders status CHECK.
+  - 4 new columns on `orders`: `commitment_fee_paid`, `commitment_fee_amount`,
+    `final_amount`, `final_payment_paid`.
+  - `order_item_flags` table with RLS policies (rider inserts, student reads).
+  - `job_pool_read` RLS policy updated: partner/around orders use `being_sourced`
+    as pool-eligibility status (was `placed`).
+  - New RPCs: `pay_commitment_fee`, `flag_item_unavailable`,
+    `confirm_sourced_items`, `pay_final_amount`.
+  - `accept_order` rewritten: `being_sourced` orders stay in that status after
+    acceptance (previously always set `out_for_delivery`).
+  - `wallet_transactions.source` constraint widened to include `commitment_fee`.
+
+#### Changed
+
+- `lib/shared/models/order.dart` — `beingSourced` and `awaitingFinalPayment`
+  added to `OrderStatus`; 4 new fields on `Order` + `fromMap` + `copyWith`.
+- `lib/student/ordering/checkout_screen.dart` — all delivery orders route to
+  `CommitmentFeeScreen` after placement; pickup orders go straight to
+  `OrderConfirmationScreen`.
+- `lib/student/tracking/order_tracking_screen.dart` — timeline branch for the
+  sourcing flow; "Pay Final Amount" button when `awaitingFinalPayment`.
+- `lib/student/orders/orders_screen.dart` — `beingSourced` and
+  `awaitingFinalPayment` added to active orders set; `_statusColor` switch fixed.
+- `lib/rider/delivery/active_delivery_screen.dart` — "Flag Item Unavailable"
+  and "Confirm Items" actions for `being_sourced` orders.
+- `lib/rider/services/rider_service.dart` — `streamActiveDeliveries` includes
+  `being_sourced`; `flagItemUnavailable` and `confirmSourcingItems` methods
+  added.
+
+#### Notes
+
+- **Run the Round 3 schema block** (Parts A, B, and C) in the Supabase SQL
+  editor before testing.
+- The `job_pool_read` policy is recreated in the Part B block — the version
+  in `schema.sql` body is superseded; only the Round 3 version matters after
+  this point.
+- ARCHITECTURE.md: update the "Where future phases' work goes" table to note
+  that commitment-fee sourcing orders live in `student/ordering/` and
+  `rider/delivery/`.
+
+---
+
+### Part C — Extend commitment fee to all delivery order types
+
+Adds Around-request support to the staged flow and wires up the kitchen queue
+to show the new statuses.
+
+#### Added
+
+- **`supabase/schema.sql` Round 3 Part C block**:
+  - `place_around_order` RPC: creates an Around order without any wallet
+    deduction (replaces `place_around_with_payment` in this path).
+  - `pay_final_amount` updated: Uniflex delivery orders go to `ready` (admin
+    then transfers to rider pool); partner food and Around orders go straight
+    to `out_for_delivery` (rider already assigned at sourcing stage).
+  - `update_order_status` updated: `being_sourced` and `awaiting_final_payment`
+    added to the allowed target-status set; `being_sourced → preparing`
+    transition permitted so the kitchen can start work once the fee is paid.
+
+#### Changed
+
+- `lib/student/around/around_screen.dart` — removed PIN collection; calls
+  `placeAroundRequestStaged` (new staged RPC); routes to `CommitmentFeeScreen`.
+- `lib/student/ordering/order_repository.dart` — `placeAroundRequestStaged`
+  method added (calls `place_around_order`, no payment, no PIN).
+- `lib/admin/kitchen/kitchen_queue_screen.dart` — "Being Sourced" and
+  "Awaiting Final Payment" section groups added to the queue view;
+  `_statusColor` handles both new statuses.
+- `lib/student/ordering/commitment_fee_screen.dart` — "partner/external order"
+  copy generalised; non-refundable language added; `TODO(policy)` removed.
+
+---
+
 ## Round 2 post-testing fixes (2026-10-12)
 
 Second on-device QA pass. Twelve items addressed; no automated tests

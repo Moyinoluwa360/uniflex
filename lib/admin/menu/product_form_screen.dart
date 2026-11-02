@@ -34,31 +34,21 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _descCtrl;
   late final TextEditingController _priceCtrl;
-  late String _category;
+  late String _section;
+  late String? _foodSubsection;
   late bool _isAvailable;
-  late bool _requiresPack;
   String? _imageUrl; // existing URL (from product being edited)
   Uint8List? _pickedBytes; // newly picked image bytes
   String? _pickedFileName;
   bool _isSaving = false;
 
-  static const _categories = [
-    'Meals',
-    'Drinks',
-    'Others',
-  ];
-
-  /// Maps legacy categories (from the old 9-category system) into the
-  /// new 3-category scheme. Unknown categories map to 'Others'.
-  static String? _normalizeCategory(String? raw) {
-    if (raw == null) return null;
-    if (_categories.contains(raw)) return raw;
-    return switch (raw) {
-      'Protein Meals' || 'Main' || 'Sides' || 'Snacks' || 'Grills' => 'Meals',
-      'Drinks' || 'Smoothies' || 'Juices' => 'Drinks',
-      _ => 'Others',
-    };
-  }
+  static const _sections = ['food', 'drinks', 'others'];
+  static const _sectionLabels = {'food': 'Food', 'drinks': 'Drinks', 'others': 'Others'};
+  static const _foodSubsections = ['meal', 'protein_topping'];
+  static const _foodSubsectionLabels = {
+    'meal': 'Meals (counts toward pack capacity)',
+    'protein_topping': 'Proteins / Toppings (no capacity limit)',
+  };
 
   @override
   void initState() {
@@ -68,9 +58,9 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     _descCtrl = TextEditingController(text: p?.description ?? '');
     _priceCtrl = TextEditingController(
         text: p != null ? p.basePrice.toStringAsFixed(0) : '');
-    _category = _normalizeCategory(p?.category) ?? _categories.first;
+    _section = p?.section ?? 'food';
+    _foodSubsection = p?.foodSubsection ?? (_section == 'food' ? 'meal' : null);
     _isAvailable = p?.isAvailable ?? true;
-    _requiresPack = p?.requiresPack ?? false;
     _imageUrl = p?.imageUrl;
   }
 
@@ -119,11 +109,13 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
         vendorId: widget.vendorId,
         name: _nameCtrl.text.trim(),
         description: _descCtrl.text.trim(),
-        category: _category,
+        category: _sectionLabels[_section] ?? 'Others',
         basePrice: double.parse(_priceCtrl.text.trim()),
         imageUrl: imageUrl,
         isAvailable: _isAvailable,
-        requiresPack: _requiresPack,
+        requiresPack: _section == 'food',
+        section: _section,
+        foodSubsection: _section == 'food' ? _foodSubsection : null,
       );
 
       if (mounted) Navigator.of(context).pop(true);
@@ -183,11 +175,11 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
 
               const SizedBox(height: AppSpacing.md),
 
-              // ── Category ─────────────────────────────────────────────
-              Text('Category', style: theme.textTheme.labelLarge),
+              // ── Section ───────────────────────────────────────────────
+              Text('Section', style: theme.textTheme.labelLarge),
               const SizedBox(height: AppSpacing.sm),
               DropdownButtonFormField<String>(
-                initialValue: _category,
+                value: _section,
                 decoration: InputDecoration(
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppRadius.control),
@@ -197,14 +189,46 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                     vertical: AppSpacing.sm + 4,
                   ),
                 ),
-                items: _categories
-                    .map((c) =>
-                        DropdownMenuItem(value: c, child: Text(c)))
+                items: _sections
+                    .map((s) => DropdownMenuItem(
+                        value: s, child: Text(_sectionLabels[s] ?? s)))
                     .toList(),
                 onChanged: (v) {
-                  if (v != null) setState(() => _category = v);
+                  if (v != null) {
+                    setState(() {
+                      _section = v;
+                      _foodSubsection = v == 'food' ? 'meal' : null;
+                    });
+                  }
                 },
               ),
+
+              // ── Food Subsection (only when section == food) ──────────
+              if (_section == 'food') ...[
+                const SizedBox(height: AppSpacing.md),
+                Text('Food Type', style: theme.textTheme.labelLarge),
+                const SizedBox(height: AppSpacing.sm),
+                DropdownButtonFormField<String>(
+                  value: _foodSubsection ?? 'meal',
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.control),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                      vertical: AppSpacing.sm + 4,
+                    ),
+                  ),
+                  items: _foodSubsections
+                      .map((s) => DropdownMenuItem(
+                          value: s,
+                          child: Text(_foodSubsectionLabels[s] ?? s)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setState(() => _foodSubsection = v);
+                  },
+                ),
+              ],
 
               const SizedBox(height: AppSpacing.md),
 
@@ -248,35 +272,6 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                   Switch(
                     value: _isAvailable,
                     onChanged: (v) => setState(() => _isAvailable = v),
-                    activeThumbColor: AppColors.emerald,
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: AppSpacing.md),
-
-              // ── Requires Pack toggle (Section 11) ─────────────────────
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Requires Pack', style: theme.textTheme.labelLarge),
-                        Text(
-                          'On for food that needs a container to hand over '
-                          '(off for drinks, etc.)',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.6),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Switch(
-                    value: _requiresPack,
-                    onChanged: (v) => setState(() => _requiresPack = v),
                     activeThumbColor: AppColors.emerald,
                   ),
                 ],

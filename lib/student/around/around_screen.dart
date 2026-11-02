@@ -88,7 +88,7 @@ class _AroundScreenState extends ConsumerState<AroundScreen> {
 
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (_) => CommitmentFeeScreen(order: order),
+        builder: (_) => CommitmentFeeScreen.forOrder(order: order),
       ),
     );
   }

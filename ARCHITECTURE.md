@@ -156,9 +156,13 @@ user's `profiles` row. Based on what it sees:
 AuthGate
  ├─ still resolving / < 900ms since launch → SplashScreen
  ├─ no session, or profile fetch failed    → LoginScreen
- ├─ session, profiles.onboarding_complete
- │  is false (Step One done, Step Two not) → CompleteProfileScreen (resumes Step Two)
- └─ session, onboarding_complete is true   → RoleRouter(role: profile.role)
+ ├─ session, onboarding_complete = false
+ │  ├─ phone_verified_at is null           → ResumeOtpScreen (resumes Step 1b)
+ │  └─ phone_verified_at is set            → CompleteProfileScreen (resumes Step Two)
+ ├─ session, onboarding_complete = true,
+ │  is_active = false                      → _AccountDeactivatedScreen (signs out)
+ └─ session, onboarding_complete = true,
+    is_active = true                       → RoleRouter(role: profile.role)
 ```
 
 `RoleRouter` (`lib/shared/router/role_router.dart`) now takes `role` as a
@@ -383,6 +387,10 @@ directly, so there's one place that knows every key the app depends on.
 | Maps / live tracking             | `shared/services/maps/`, consumed from `student/tracking/` and `rider/navigation/` |
 | Post-testing fixes ✅ (first Android QA pass) | `admin/manage/`, `admin/riders/`, `admin/around_categories/`, `student/ordering/pack_allocation_screen.dart`, `shared/widgets/{async,pin}/`, `shared/models/around_category.dart`, `supabase/functions/admin-create-rider/`, schema.sql "POST-TESTING FIXES & CHANGES" block |
 | Round 2 post-testing fixes ✅ (second QA pass) | `admin/analytics/`, `admin/admin_shell.dart` (4 tabs), `admin/manage/manage_hub_screen.dart` (expanded), `student/ordering/cart_provider.dart` (persistence), category normalization in `catalog_screen.dart`/`menu_management_screen.dart`/`product_form_screen.dart` |
+| Round 3 ✅ (commitment fee + adjustable orders) | `student/ordering/commitment_fee_screen.dart`, `student/ordering/adjust_order_screen.dart`, `order_item_flags` table, `being_sourced`/`awaiting_final_payment` statuses, `pay_commitment_fee`/`confirm_sourced_items`/`pay_final_amount` RPCs |
+| Round 4 ✅ (registration fixes + ordering overhaul) | `place_partner_food_order` RPC, `order_custom_items` table, admin referral codes (`referral_codes`/`referral_code_uses`), confirm password field, optional matric, phone normalization, partner checkout routing, notes field on orders |
+| Round 5 ✅ (PIN / payment root-cause fix) | All PIN functions + `pay_commitment_fee` re-created with `search_path = public, extensions`; `showSetPinSheet` rewritten with current-PIN detection; comprehensive `_mapError` coverage |
+| Round 7 ✅ (pack-first, multi-vendor, delivery groups) | `delivery_groups`/`delivery_settings` tables, `place_multi_vendor_order`/`pay_group_commitment_fee`/`accept_delivery_group`/`verify_group_delivery` RPCs, `PackBuilderScreen`, multi-vendor `CartState`, `GroupDeliveryScreen`, `DeliverySettingsScreen`, `deliveryFeePerVendor` helper |
 
 Update this table as phases land so it stays a reliable map of the repo.
 
@@ -590,6 +598,55 @@ quantity}`), written by `place_food_order_with_payment` in the same
 transaction as the order — Kitchen/Admin can see exactly what to put in
 each pack, not just a total count. `orders.pack_count`/`pack_fee` mirror
 the totals for quick display without joining `order_packs`.
+
+## Multi-vendor cart and delivery groups (Round 7)
+
+The cart (`CartState` in `cart_provider.dart`) is multi-vendor: a map of
+`vendorId → VendorCartGroup`, each containing items, pack metadata, and the
+vendor reference. Adding items from different vendors no longer clears the
+cart — `CatalogScreen` reads/writes the vendor-specific group directly.
+
+**Checkout routing:**
+- **Pickup** (Uniflex-only carts): full payment + PIN at checkout →
+  `OrderConfirmationScreen`. Uses the existing single-vendor `placeFoodOrder`.
+- **Delivery** (any cart): no payment → `placeMultiVendorOrder` (creates a
+  `delivery_groups` parent + per-vendor `orders` legs) → `CommitmentFeeScreen`
+  in group mode (pays ₦200–₦300 per vendor from `delivery_settings`).
+
+**Delivery group lifecycle:**
+```
+placed → commitment_paid → [kitchen prepares Uniflex legs] →
+  [trigger checks all ready] → out_for_delivery → completed
+```
+
+The `_check_group_ready_after_kitchen` trigger fires on each Uniflex leg
+status change; when all legs reach `ready`, it auto-advances the group. The
+rider pool shows committed groups via `groupPoolProvider`; accepting assigns
+the rider to the whole group. `GroupDeliveryScreen` shows per-vendor pickup
+stops; the rider confirms each leg individually, then delivers with a single
+PIN at the customer's door.
+
+**Delivery fees** are admin-editable via `delivery_settings` (key-value
+table, accessed by `get_delivery_settings` RPC). `deliveryFeePerVendor()`
+helper extracts the fee for a given delivery type, defaulting to ₦200
+(campus) / ₦300 (hostel). The commitment fee = sum of per-vendor delivery
+fees.
+
+## Vendor menu structure (Round 7)
+
+Products now have a `section` field ('food'|'drinks'|'others') and an
+optional `food_subsection` ('meal'|'protein_topping'). `CatalogScreen`
+groups by section, with food items further split by subsection.
+
+- **Meal items** (`section='food', food_subsection='meal'`) count toward the
+  pack's 8-spoon capacity (`kPackMealCapacity` in `pack_constants.dart`).
+- **Protein/toppings** (`food_subsection='protein_topping'`) go in packs but
+  have no capacity limit.
+- **Drinks/Others** are added directly — no pack step.
+
+The pack builder (`PackBuilderScreen`) enforces pack-first ordering: choose
+pack count → fill each pack up to 8 meal spoons → add to cart. The capacity
+bar shows current/max per pack with color feedback.
 
 ## Menu categories: 3 fixed display categories (Round 2)
 

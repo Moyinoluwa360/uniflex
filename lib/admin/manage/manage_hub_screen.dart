@@ -4,6 +4,7 @@ import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../advertisements/advertisements_screen.dart';
 import '../around_categories/around_categories_screen.dart';
+import '../delivery_settings/delivery_settings_screen.dart';
 import '../menu/menu_management_screen.dart';
 import '../profile/admin_profile_screen.dart';
 import '../referrals/referral_codes_screen.dart';
@@ -65,6 +66,13 @@ class ManageHubScreen extends StatelessWidget {
             title: 'Referral Codes',
             subtitle: 'Mint codes, allocate them, and track signups',
             screen: ReferralCodesScreen(),
+          ),
+          SizedBox(height: AppSpacing.cardGap),
+          _ManageEntry(
+            icon: Icons.local_shipping_outlined,
+            title: 'Delivery Fees',
+            subtitle: 'Campus and hostel delivery fee settings',
+            screen: DeliverySettingsScreen(),
           ),
           SizedBox(height: AppSpacing.cardGap),
           _ManageEntry(

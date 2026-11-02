@@ -7,54 +7,164 @@ import '../../shared/models/cart_item.dart';
 import '../../shared/models/vendor.dart';
 
 /// SharedPreferences key used to persist the cart between app restarts.
-const _cartKey = 'uniflex_cart';
+const _cartKey = 'uniflex_cart_v2';
+const _legacyCartKey = 'uniflex_cart';
 
-/// The shopping cart, persisted to local storage. The cart is scoped to a
-/// single vendor — adding items from a different vendor requires clearing
-/// first (the UI prompts the user before doing so).
-class CartState {
-  const CartState({
+/// Pack contents for one vendor's food order: a list of maps where each
+/// map represents one pack (productId → quantity).
+typedef PackContentsData = List<Map<String, int>>;
+
+/// Per-vendor data in the multi-vendor cart.
+class VendorCartGroup {
+  const VendorCartGroup({
+    required this.vendor,
     this.items = const [],
-    this.vendor,
+    this.packCount = 0,
+    this.packFee = 0,
+    this.packContents = const [],
   });
 
+  final Vendor vendor;
   final List<CartItem> items;
 
-  /// The vendor this cart belongs to. Null when the cart is empty.
-  final Vendor? vendor;
+  /// Number of food packs (0 if no food items or if this vendor
+  /// only has drinks/others).
+  final int packCount;
+
+  /// Total pack fee (packCount × vendor.packPrice).
+  final double packFee;
+
+  /// Per-pack food contents: packContents[i] = {productId: quantity}.
+  final PackContentsData packContents;
 
   bool get isEmpty => items.isEmpty;
+  int get itemCount => items.fold(0, (sum, i) => sum + i.quantity);
+  double get subtotal => items.fold(0.0, (sum, i) => sum + i.lineTotal);
+  double get totalWithPacks => subtotal + packFee;
 
-  int get itemCount => items.fold(0, (sum, item) => sum + item.quantity);
-
-  double get subtotal =>
-      items.fold(0.0, (sum, item) => sum + item.lineTotal);
-
-  CartState copyWith({List<CartItem>? items, Vendor? vendor}) {
-    return CartState(
+  VendorCartGroup copyWith({
+    List<CartItem>? items,
+    int? packCount,
+    double? packFee,
+    PackContentsData? packContents,
+  }) {
+    return VendorCartGroup(
+      vendor: vendor,
       items: items ?? this.items,
-      vendor: vendor ?? this.vendor,
+      packCount: packCount ?? this.packCount,
+      packFee: packFee ?? this.packFee,
+      packContents: packContents ?? this.packContents,
     );
   }
 
-  CartState withVendor(Vendor vendor) =>
-      CartState(items: items, vendor: vendor);
-
   Map<String, dynamic> toJson() => {
+        'vendor': vendor.toMap(),
         'items': items.map((i) => i.toJson()).toList(),
-        if (vendor != null) 'vendor': vendor!.toMap(),
+        'pack_count': packCount,
+        'pack_fee': packFee,
+        'pack_contents': packContents
+            .map((m) => m.map((k, v) => MapEntry(k, v)))
+            .toList(),
       };
 
-  factory CartState.fromJson(Map<String, dynamic> json) {
-    return CartState(
+  factory VendorCartGroup.fromJson(Map<String, dynamic> json) {
+    return VendorCartGroup(
+      vendor: Vendor.fromMap(json['vendor'] as Map<String, dynamic>),
       items: (json['items'] as List<dynamic>?)
               ?.map((i) => CartItem.fromJson(i as Map<String, dynamic>))
               .toList() ??
           const [],
-      vendor: json['vendor'] != null
-          ? Vendor.fromMap(json['vendor'] as Map<String, dynamic>)
-          : null,
+      packCount: json['pack_count'] as int? ?? 0,
+      packFee: (json['pack_fee'] as num?)?.toDouble() ?? 0,
+      packContents: (json['pack_contents'] as List<dynamic>?)
+              ?.map((m) => (m as Map<String, dynamic>)
+                  .map((k, v) => MapEntry(k, (v as num).toInt())))
+              .toList() ??
+          const [],
     );
+  }
+}
+
+/// Multi-vendor cart state. Groups items by vendor.
+class CartState {
+  const CartState({this.groups = const {}});
+
+  /// VendorId → VendorCartGroup
+  final Map<String, VendorCartGroup> groups;
+
+  bool get isEmpty => groups.values.every((g) => g.isEmpty);
+  int get vendorCount => groups.values.where((g) => !g.isEmpty).length;
+
+  int get itemCount =>
+      groups.values.fold(0, (sum, g) => sum + g.itemCount);
+
+  double get subtotal =>
+      groups.values.fold(0.0, (sum, g) => sum + g.subtotal);
+
+  double get totalPackFee =>
+      groups.values.fold(0.0, (sum, g) => sum + g.packFee);
+
+  /// Backwards compat: single vendor if only one group.
+  Vendor? get vendor {
+    final nonEmpty = groups.values.where((g) => !g.isEmpty).toList();
+    if (nonEmpty.length == 1) return nonEmpty.first.vendor;
+    return nonEmpty.isEmpty ? null : nonEmpty.first.vendor;
+  }
+
+  /// Flat list of all items across all vendors (for display/counting).
+  List<CartItem> get items =>
+      groups.values.expand((g) => g.items).toList();
+
+  /// Whether the cart contains any partner vendor.
+  bool get hasPartnerVendor =>
+      groups.values.any((g) => !g.isEmpty && !g.vendor.isUniflex);
+
+  /// Whether the cart is Uniflex-only.
+  bool get isUniflexOnly =>
+      groups.values.every((g) => g.isEmpty || g.vendor.isUniflex);
+
+  CartState copyWith({Map<String, VendorCartGroup>? groups}) {
+    return CartState(groups: groups ?? this.groups);
+  }
+
+  Map<String, dynamic> toJson() => {
+        'version': 2,
+        'groups': groups
+            .map((vendorId, group) => MapEntry(vendorId, group.toJson())),
+      };
+
+  factory CartState.fromJson(Map<String, dynamic> json) {
+    if (json['version'] == 2) {
+      final rawGroups = json['groups'] as Map<String, dynamic>? ?? {};
+      final groups = rawGroups.map((vendorId, g) => MapEntry(
+          vendorId,
+          VendorCartGroup.fromJson(g as Map<String, dynamic>)));
+      return CartState(groups: groups);
+    }
+    // Legacy v1 format: single vendor cart.
+    return _migrateLegacy(json);
+  }
+
+  /// Migrate old single-vendor cart format to multi-vendor.
+  static CartState _migrateLegacy(Map<String, dynamic> json) {
+    try {
+      final items = (json['items'] as List<dynamic>?)
+              ?.map((i) => CartItem.fromJson(i as Map<String, dynamic>))
+              .toList() ??
+          const [];
+      if (items.isEmpty) return const CartState();
+
+      final vendor = json['vendor'] != null
+          ? Vendor.fromMap(json['vendor'] as Map<String, dynamic>)
+          : null;
+      if (vendor == null) return const CartState();
+
+      return CartState(groups: {
+        vendor.id: VendorCartGroup(vendor: vendor, items: items),
+      });
+    } catch (_) {
+      return const CartState();
+    }
   }
 }
 
@@ -65,21 +175,27 @@ class CartNotifier extends Notifier<CartState> {
     return const CartState();
   }
 
-  /// Loads persisted cart from SharedPreferences on startup.
   Future<void> _restore() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_cartKey);
+    // Try v2 first, then legacy.
+    var raw = prefs.getString(_cartKey);
+    if (raw == null) {
+      raw = prefs.getString(_legacyCartKey);
+      if (raw != null) {
+        // Migrate and clean up.
+        await prefs.remove(_legacyCartKey);
+      }
+    }
     if (raw == null) return;
     try {
       final json = jsonDecode(raw) as Map<String, dynamic>;
       state = CartState.fromJson(json);
     } catch (_) {
-      // Corrupted data — start fresh.
       await prefs.remove(_cartKey);
+      await prefs.remove(_legacyCartKey);
     }
   }
 
-  /// Persists the current cart state to SharedPreferences.
   Future<void> _persist() async {
     final prefs = await SharedPreferences.getInstance();
     if (state.isEmpty) {
@@ -89,11 +205,13 @@ class CartNotifier extends Notifier<CartState> {
     }
   }
 
-  /// Adds [item] to the cart, scoped to [vendor].
-  /// If an identical product+options combo already exists, increments
-  /// its quantity instead of adding a duplicate line.
+  /// Adds a non-food item (drinks, others) to the cart for [vendor].
   void addItem(CartItem item, Vendor vendor) {
-    final items = [...state.items];
+    final groups = Map<String, VendorCartGroup>.from(state.groups);
+    final group = groups[vendor.id] ??
+        VendorCartGroup(vendor: vendor);
+
+    final items = [...group.items];
     final idx = items.indexWhere(
       (ci) =>
           ci.product.id == item.product.id &&
@@ -101,35 +219,130 @@ class CartNotifier extends Notifier<CartState> {
     );
 
     if (idx >= 0) {
-      items[idx] = items[idx].copyWith(
-        quantity: items[idx].quantity + item.quantity,
-      );
+      items[idx] = items[idx]
+          .copyWith(quantity: items[idx].quantity + item.quantity);
     } else {
       items.add(item);
     }
 
-    state = CartState(items: items, vendor: vendor);
+    groups[vendor.id] = group.copyWith(items: items);
+    state = CartState(groups: groups);
     _persist();
   }
 
-  void removeAt(int index) {
-    final items = [...state.items]..removeAt(index);
-    state = CartState(
-      items: items,
-      vendor: items.isEmpty ? null : state.vendor,
+  /// Adds a food item from the pack builder (tagged with pack index).
+  void addPackItem(CartItem item, Vendor vendor, {required int packIndex}) {
+    // Pack items are added as regular cart items — the pack metadata
+    // is stored separately via setPackInfo.
+    addItem(item, vendor);
+  }
+
+  /// Records pack metadata for a vendor after the pack builder completes.
+  void setPackInfo({
+    required Vendor vendor,
+    required int packCount,
+    required double packFee,
+    required List<Map<String, int>> packContents,
+  }) {
+    final groups = Map<String, VendorCartGroup>.from(state.groups);
+    final group = groups[vendor.id] ??
+        VendorCartGroup(vendor: vendor);
+
+    groups[vendor.id] = group.copyWith(
+      packCount: packCount,
+      packFee: packFee,
+      packContents: packContents,
     );
+
+    state = CartState(groups: groups);
     _persist();
   }
 
-  void updateQuantity(int index, int quantity) {
+  /// Remove an item at [index] within a specific vendor's group.
+  void removeItemFromVendor(String vendorId, int index) {
+    final groups = Map<String, VendorCartGroup>.from(state.groups);
+    final group = groups[vendorId];
+    if (group == null) return;
+
+    final items = [...group.items]..removeAt(index);
+    if (items.isEmpty) {
+      groups.remove(vendorId);
+    } else {
+      groups[vendorId] = group.copyWith(items: items);
+    }
+
+    state = CartState(groups: groups);
+    _persist();
+  }
+
+  /// Remove a whole vendor's group from the cart.
+  void removeVendor(String vendorId) {
+    final groups = Map<String, VendorCartGroup>.from(state.groups);
+    groups.remove(vendorId);
+    state = CartState(groups: groups);
+    _persist();
+  }
+
+  /// Clear all food packs for a vendor (when re-entering pack builder).
+  void clearFoodPacks(String vendorId) {
+    final groups = Map<String, VendorCartGroup>.from(state.groups);
+    final group = groups[vendorId];
+    if (group == null) return;
+
+    // Remove food items, keep drinks/others.
+    final nonFoodItems =
+        group.items.where((i) => i.product.section != 'food').toList();
+
+    if (nonFoodItems.isEmpty) {
+      groups.remove(vendorId);
+    } else {
+      groups[vendorId] = group.copyWith(
+        items: nonFoodItems,
+        packCount: 0,
+        packFee: 0,
+        packContents: [],
+      );
+    }
+
+    state = CartState(groups: groups);
+    _persist();
+  }
+
+  // ── Legacy compat (single-vendor API) ──────────────────────────────
+
+  /// Remove item at flat index across all items. Used by old CartScreen.
+  void removeAt(int flatIndex) {
+    int offset = 0;
+    for (final entry in state.groups.entries) {
+      final groupLen = entry.value.items.length;
+      if (flatIndex < offset + groupLen) {
+        removeItemFromVendor(entry.key, flatIndex - offset);
+        return;
+      }
+      offset += groupLen;
+    }
+  }
+
+  void updateQuantity(int flatIndex, int quantity) {
     if (quantity <= 0) {
-      removeAt(index);
+      removeAt(flatIndex);
       return;
     }
-    final items = [...state.items];
-    items[index] = items[index].copyWith(quantity: quantity);
-    state = state.copyWith(items: items);
-    _persist();
+    int offset = 0;
+    final groups = Map<String, VendorCartGroup>.from(state.groups);
+    for (final entry in groups.entries) {
+      final groupLen = entry.value.items.length;
+      if (flatIndex < offset + groupLen) {
+        final localIdx = flatIndex - offset;
+        final items = [...entry.value.items];
+        items[localIdx] = items[localIdx].copyWith(quantity: quantity);
+        groups[entry.key] = entry.value.copyWith(items: items);
+        state = CartState(groups: groups);
+        _persist();
+        return;
+      }
+      offset += groupLen;
+    }
   }
 
   void clear() {

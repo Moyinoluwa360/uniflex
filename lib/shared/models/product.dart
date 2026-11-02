@@ -1,9 +1,9 @@
-/// A menu item from the `products` table. Post-testing fixes, Section
-/// 11: every product is its own independently orderable catalog item —
-/// there is no more protein/extras option bundling (the old
-/// `product_options` table and combo-builder wizard are retired from the
-/// ordering flow; former protein choices are now standalone products,
-/// e.g. "Chicken" under a "Proteins" category).
+/// A menu item from the `products` table.
+///
+/// Round 7 adds structured [section] and [foodSubsection] fields replacing
+/// the free-text [category] for display grouping. The legacy [category]
+/// column is kept for backward compatibility but is no longer the primary
+/// grouping mechanism.
 class Product {
   const Product({
     required this.id,
@@ -15,6 +15,8 @@ class Product {
     this.imageUrl,
     this.isAvailable = true,
     this.requiresPack = false,
+    this.section = 'food',
+    this.foodSubsection,
   });
 
   factory Product.fromMap(Map<String, dynamic> map) {
@@ -28,6 +30,8 @@ class Product {
       imageUrl: map['image_url'] as String?,
       isAvailable: map['is_available'] as bool? ?? true,
       requiresPack: map['requires_pack'] as bool? ?? false,
+      section: map['section'] as String? ?? 'food',
+      foodSubsection: map['food_subsection'] as String?,
     );
   }
 
@@ -35,15 +39,39 @@ class Product {
   final String vendorId;
   final String name;
   final String description;
+
+  /// Legacy free-text category. Kept for backward compat but [section]
+  /// and [foodSubsection] are the canonical grouping fields.
   final String category;
   final double basePrice;
   final String? imageUrl;
   final bool isAvailable;
 
-  /// Post-testing fixes, Section 11: true when this item needs to be
-  /// packaged into a container to be handed over (most food); false for
-  /// items that never do (drinks, etc.). Admin-editable per product.
+  /// True when this item needs to be packaged into a container.
   final bool requiresPack;
+
+  /// Round 7: top-level menu section — 'food' | 'drinks' | 'others'.
+  final String section;
+
+  /// Round 7: only meaningful when [section] == 'food'.
+  /// 'meal' (counts toward pack capacity) or 'protein_topping' (unlimited).
+  final String? foodSubsection;
+
+  /// True when this is a meal item that counts toward the pack's 8-spoon
+  /// capacity limit.
+  bool get isMeal => section == 'food' && foodSubsection == 'meal';
+
+  /// True when this is a protein/topping (inside a pack but no capacity limit).
+  bool get isProteinTopping =>
+      section == 'food' && foodSubsection == 'protein_topping';
+
+  /// Display label for the section.
+  String get sectionLabel => switch (section) {
+        'food' => 'Food',
+        'drinks' => 'Drinks',
+        'others' => 'Others',
+        _ => 'Others',
+      };
 
   Map<String, dynamic> toMap() => {
         'id': id,
@@ -55,5 +83,7 @@ class Product {
         'image_url': imageUrl,
         'is_available': isAvailable,
         'requires_pack': requiresPack,
+        'section': section,
+        'food_subsection': foodSubsection,
       };
 }

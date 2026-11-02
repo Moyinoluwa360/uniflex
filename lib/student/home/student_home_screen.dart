@@ -136,7 +136,7 @@ class _HomeCartButton extends ConsumerWidget {
         foregroundColor: AppColors.pureWhite,
         onPressed: () => Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => CartScreen(vendor: cart.vendor!),
+            builder: (_) => const CartScreen(),
           ),
         ),
         child: const Icon(Icons.shopping_cart_outlined),

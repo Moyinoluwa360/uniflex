@@ -81,6 +81,7 @@ class Order {
     this.isBulk = false,
     this.bulkDiscountPct = 0,
     this.groupOrderId,
+    this.deliveryGroupId,
     this.packCount = 0,
     this.packFee = 0,
     this.transferredToRiderAt,
@@ -117,6 +118,7 @@ class Order {
       isBulk: map['is_bulk'] as bool? ?? false,
       bulkDiscountPct: (map['bulk_discount_pct'] as num?)?.toDouble() ?? 0,
       groupOrderId: map['group_order_id'] as String?,
+      deliveryGroupId: map['delivery_group_id'] as String?,
       packCount: map['pack_count'] as int? ?? 0,
       packFee: (map['pack_fee'] as num?)?.toDouble() ?? 0,
       transferredToRiderAt: map['transferred_to_rider_at'] == null
@@ -172,6 +174,9 @@ class Order {
 
   /// Phase 6: group order session this order belongs to (null if standalone).
   final String? groupOrderId;
+
+  /// Round 7: delivery group this order leg belongs to (null for standalone).
+  final String? deliveryGroupId;
 
   /// Post-testing fixes, Section 11: number of packs the student built at
   /// checkout, and the total pack fee (packCount * vendor.packPrice)
@@ -242,6 +247,7 @@ class Order {
       isBulk: isBulk,
       bulkDiscountPct: bulkDiscountPct,
       groupOrderId: groupOrderId,
+      deliveryGroupId: deliveryGroupId,
       packCount: packCount,
       packFee: packFee,
       transferredToRiderAt: transferredToRiderAt,

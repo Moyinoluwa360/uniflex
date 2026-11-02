@@ -15,28 +15,56 @@ import '../../shared/widgets/pin/pin_entry_sheet.dart';
 import 'order_confirmation_screen.dart';
 import 'order_repository.dart';
 
-const _commitmentFee = 300.0;
-
-/// Shown immediately after a partner/around order is placed.
-/// Prompts the student to pay a ₦300 commitment fee which moves the
-/// order into [OrderStatus.beingSourced] and makes it visible in the
-/// rider job pool.
+/// Commitment fee screen — supports two modes:
 ///
-/// The student can go back to cancel without paying — the order stays
-/// in 'placed' state but no rider is dispatched.
+/// 1. **Delivery group** (Round 7): [groupId] + fee params provided.
+///    Calls `pay_group_commitment_fee` RPC.
+/// 2. **Single order** (Around/legacy): [order] provided.
+///    Calls `pay_commitment_fee` RPC.
 class CommitmentFeeScreen extends ConsumerStatefulWidget {
-  const CommitmentFeeScreen({super.key, required this.order});
+  /// Delivery group mode (Round 7 multi-vendor flow).
+  const CommitmentFeeScreen({
+    super.key,
+    required this.groupId,
+    required this.commitmentFeeTotal,
+    required this.deliveryFeePerVendor,
+    required this.vendorCount,
+  }) : order = null;
 
-  final Order order;
+  /// Single-order mode (Around requests, legacy partner orders).
+  const CommitmentFeeScreen.forOrder({
+    super.key,
+    required this.order,
+  })  : groupId = null,
+       commitmentFeeTotal = 0,
+       deliveryFeePerVendor = 0,
+       vendorCount = 0;
+
+  // Delivery group mode params.
+  final String? groupId;
+  final double commitmentFeeTotal;
+  final double deliveryFeePerVendor;
+  final int vendorCount;
+
+  // Single-order mode param.
+  final Order? order;
+
+  bool get _isGroupMode => groupId != null;
 
   @override
   ConsumerState<CommitmentFeeScreen> createState() =>
       _CommitmentFeeScreenState();
 }
 
+const _singleOrderCommitmentFee = 300.0;
+
 class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
   bool _isLoading = false;
   String? _error;
+
+  double get _fee => widget._isGroupMode
+      ? widget.commitmentFeeTotal
+      : _singleOrderCommitmentFee;
 
   Future<void> _pay() async {
     final hasPin =
@@ -51,7 +79,8 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
     final pin = await showEnterPinSheet(
       context,
       title: 'Confirm commitment fee',
-      subtitle: 'Enter your 4-digit PIN to pay ₦300 and dispatch a rider.',
+      subtitle:
+          'Enter your 4-digit PIN to pay ₦${_fee.toStringAsFixed(0)} and dispatch a rider.',
     );
     if (pin == null || !mounted) return;
 
@@ -62,12 +91,19 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
 
     try {
       final client = ref.read(supabaseClientProvider);
-      await client.rpc('pay_commitment_fee', params: {
-        'p_order_id': widget.order.id,
-        'p_pin': pin,
-      });
 
-      // Invalidate wallet so balance refreshes.
+      if (widget._isGroupMode) {
+        await client.rpc('pay_group_commitment_fee', params: {
+          'p_group_id': widget.groupId,
+          'p_pin': pin,
+        });
+      } else {
+        await client.rpc('pay_commitment_fee', params: {
+          'p_order_id': widget.order!.id,
+          'p_pin': pin,
+        });
+      }
+
       ref.invalidate(walletBalanceProvider);
       ref.invalidate(walletInfoProvider);
       ref.invalidate(walletTransactionsProvider);
@@ -75,19 +111,29 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
 
       if (!mounted) return;
 
-      // Build a copy of the order with the updated status for the
-      // confirmation screen.
-      final updatedOrder = widget.order.copyWith(
-        status: OrderStatus.beingSourced,
-        commitmentFeePaid: true,
-        commitmentFeeAmount: _commitmentFee,
-      );
-
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => OrderConfirmationScreen(order: updatedOrder),
-        ),
-      );
+      if (widget._isGroupMode) {
+        // Pop to root — student lands on orders list.
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('Order confirmed! A rider will be dispatched shortly.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        // Single-order mode: navigate to order confirmation.
+        final updatedOrder = widget.order!.copyWith(
+          status: OrderStatus.beingSourced,
+          commitmentFeePaid: true,
+          commitmentFeeAmount: _singleOrderCommitmentFee,
+        );
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => OrderConfirmationScreen(order: updatedOrder),
+          ),
+        );
+      }
     } on PostgrestException catch (e) {
       final msg = _mapError(e.message);
       setState(() {
@@ -116,10 +162,12 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
     if (raw.contains('INVALID_PIN')) {
       return 'Incorrect PIN. Please try again.';
     }
-    if (raw.contains('Commitment fee already paid')) {
+    if (raw.contains('Already paid') ||
+        raw.contains('Commitment fee already paid')) {
       return 'Commitment fee already paid for this order.';
     }
-    if (raw.contains('not in placed state')) {
+    if (raw.contains('not in placed state') ||
+        raw.contains('not available')) {
       return 'This order can no longer accept a commitment fee.';
     }
     if (raw.contains('does not apply to Uniflex')) {
@@ -129,10 +177,8 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
       return 'Wallet not found. Please contact support.';
     }
     if (raw.contains('crypt')) {
-      // pgcrypto not reachable — Round 5 SQL fix not yet deployed.
       return 'Server configuration error. Please contact support. (ref: crypt)';
     }
-    // Surface the raw message so debugging is possible.
     return 'Payment failed: $raw';
   }
 
@@ -141,7 +187,8 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
     final theme = Theme.of(context);
     final balanceAsync = ref.watch(walletBalanceProvider);
     final balance = balanceAsync.valueOrNull ?? 0.0;
-    final hasSufficientBalance = balance >= _commitmentFee;
+    final fee = _fee;
+    final hasSufficientBalance = balance >= fee;
 
     return Scaffold(
       appBar: const UniflexAppBar(title: 'Commitment Fee'),
@@ -168,9 +215,13 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
-                      'A ₦300 commitment fee is required to dispatch a rider. '
-                      'The rider will source your items and confirm the final cost before delivery. '
-                      'This fee is non-refundable.',
+                      widget._isGroupMode
+                          ? 'A commitment fee covers the delivery cost and dispatches a rider. '
+                            'The rider will source your items and confirm the final cost before delivery. '
+                            'This fee is non-refundable.'
+                          : 'A ₦${fee.toStringAsFixed(0)} commitment fee is required to dispatch a rider. '
+                            'The rider will source your items and confirm the final cost before delivery. '
+                            'This fee is non-refundable.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: AppColors.info,
                       ),
@@ -182,50 +233,52 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
 
             const SizedBox(height: AppSpacing.lg),
 
-            // ── Order reference ─────────────────────────────────────────
-            Text('Order', style: theme.textTheme.titleSmall),
-            const SizedBox(height: AppSpacing.sm),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(AppRadius.card),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.order.shortId,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  if (widget.order.vendorName != null) ...[
-                    const SizedBox(height: 2),
+            // ── Order reference (single-order mode only) ────────────────
+            if (!widget._isGroupMode && widget.order != null) ...[
+              Text('Order', style: theme.textTheme.titleSmall),
+              const SizedBox(height: AppSpacing.sm),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(AppRadius.card),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      'from ${widget.order.vendorName}',
-                      style: theme.textTheme.bodySmall?.copyWith(
+                      widget.order!.shortId,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (widget.order!.vendorName != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        'from ${widget.order!.vendorName}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      widget.order!.type == 'around'
+                          ? 'Around / Errand request'
+                          : 'Partner vendor order',
+                      style: theme.textTheme.labelSmall?.copyWith(
                         color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.6),
+                            .withValues(alpha: 0.5),
                       ),
                     ),
                   ],
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    widget.order.type == 'around'
-                        ? 'Around / Errand request'
-                        : 'Partner vendor order',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-
-            const SizedBox(height: AppSpacing.lg),
+              const SizedBox(height: AppSpacing.lg),
+            ],
 
             // ── Fee breakdown ───────────────────────────────────────────
             Text('Payment', style: theme.textTheme.titleSmall),
@@ -239,9 +292,20 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
               ),
               child: Column(
                 children: [
+                  if (widget._isGroupMode && widget.vendorCount > 1)
+                    _FeeRow(
+                      label:
+                          'Delivery fee × ${widget.vendorCount} vendors',
+                      value:
+                          '₦${widget.deliveryFeePerVendor.toStringAsFixed(0)} each',
+                      theme: theme,
+                      bold: false,
+                    ),
                   _FeeRow(
-                    label: 'Commitment fee',
-                    value: '₦${_commitmentFee.toStringAsFixed(0)}',
+                    label: widget._isGroupMode
+                        ? 'Total commitment fee'
+                        : 'Commitment fee',
+                    value: '₦${fee.toStringAsFixed(0)}',
                     theme: theme,
                     bold: true,
                   ),
@@ -250,7 +314,8 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
                     'This covers the rider going to source your items. '
                     'You will pay the actual food cost separately once the rider confirms what is available.',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                      color: theme.colorScheme.onSurface
+                          .withValues(alpha: 0.5),
                     ),
                   ),
                   const Divider(height: AppSpacing.lg),
@@ -334,12 +399,12 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
 
             const SizedBox(height: AppSpacing.xl),
 
-            // ── Cancel note ──────────────────────────────────────────────
             Text(
               'If you go back without paying, your order will remain in "placed" state '
               'and no rider will be dispatched.',
               style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                color:
+                    theme.colorScheme.onSurface.withValues(alpha: 0.45),
               ),
             ),
 
@@ -360,10 +425,12 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               PrimaryButton(
-                label: 'Pay ₦300 and dispatch rider',
+                label:
+                    'Pay ₦${fee.toStringAsFixed(0)} and dispatch rider',
                 icon: Icons.send_outlined,
                 isLoading: _isLoading,
-                onPressed: (hasSufficientBalance && !_isLoading) ? _pay : null,
+                onPressed:
+                    (hasSufficientBalance && !_isLoading) ? _pay : null,
               ),
               const SizedBox(height: AppSpacing.sm),
               SecondaryButton(
@@ -401,7 +468,8 @@ class _FeeRow extends StatelessWidget {
       children: [
         Text(
           label,
-          style: bold ? theme.textTheme.titleSmall : theme.textTheme.bodyMedium,
+          style:
+              bold ? theme.textTheme.titleSmall : theme.textTheme.bodyMedium,
         ),
         Text(
           value,
@@ -409,8 +477,7 @@ class _FeeRow extends StatelessWidget {
                   ? theme.textTheme.titleSmall
                   : theme.textTheme.labelMedium)
               ?.copyWith(
-            color: valueColor ??
-                (bold ? theme.colorScheme.primary : null),
+            color: valueColor ?? (bold ? theme.colorScheme.primary : null),
           ),
         ),
       ],

@@ -377,6 +377,26 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
                       ],
                     ),
                   ),
+                  // MULTI-VENDOR badge (Round 7 delivery groups)
+                  if (order.deliveryGroupId != null) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.sm, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.emerald.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                      ),
+                      child: Text(
+                        'GROUP',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: AppColors.emerald,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                  ],
                   // PARTNER badge
                   if (isPartner) ...[
                     Container(

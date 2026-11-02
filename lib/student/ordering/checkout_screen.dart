@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../shared/models/cart_item.dart';
 import '../../shared/models/order.dart';
-import '../../shared/models/vendor.dart';
 import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/theme/app_colors.dart';
@@ -17,58 +15,35 @@ import 'cart_provider.dart';
 import 'commitment_fee_screen.dart';
 import 'order_confirmation_screen.dart';
 import 'order_repository.dart';
-import 'pack_allocation_screen.dart';
 
-/// Checkout — steps 6 and 7 of the ordering flow:
-///   step 6: pickup / campus delivery / hostel room delivery
-///   step 7: delivery location (shown for delivery types)
-///   step 7b: schedule date/time (optional)
+/// Round 7 checkout screen — multi-vendor aware.
 ///
-/// Post-testing fixes, Section 11: if the cart has any pack-requiring
-/// items, a "Packing" section asks the student up front whether they
-/// want packs, so the total shown by the time they reach Confirm is
-/// already accurate.
+/// Pickup is only offered when every vendor in the cart is Uniflex.
+/// Delivery creates a delivery_group with per-vendor legs, then
+/// routes to CommitmentFeeScreen to pay the commitment fee
+/// (= sum of per-vendor delivery fees from admin settings).
 ///
-/// Step 8 (payment): gates on the transaction PIN (Section 6), then
-/// checks the wallet balance and calls [place_food_order_with_payment]
-/// RPC which atomically deducts the wallet and creates the order.
-/// Index of the Wallet tab in [StudentShell]'s nav bar.
+/// Pickup for Uniflex orders uses the existing [placeFoodOrder] RPC
+/// (full payment upfront with PIN).
 const _studentWalletTabIndex = 2;
 
 class CheckoutScreen extends ConsumerStatefulWidget {
-  const CheckoutScreen({super.key, required this.vendor});
-
-  final Vendor vendor;
+  const CheckoutScreen({super.key});
 
   @override
   ConsumerState<CheckoutScreen> createState() => _CheckoutScreenState();
 }
 
 class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
-  // 'pickup' | 'campus_delivery' | 'hostel_delivery'
-  String _deliveryType = 'pickup';
+  String _deliveryType = 'campus_delivery';
   final _locationController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   DateTime? _scheduledFor;
   final _notesController = TextEditingController();
 
-  // Pack allocation (Section 11) — null until the student answers the
-  // "Will you be using packs?" prompt; empty list means "No".
-  List<PackAllocation>? _packs;
-
-  double get _campusDeliveryFee => widget.vendor.campusDeliveryFee;
-  double get _hostelDeliveryFee => widget.vendor.hostelDeliveryFee;
-
-  double get _deliveryFee => widget.vendor.deliveryFeeFor(_deliveryType);
-
   bool get _needsLocation =>
       _deliveryType == 'campus_delivery' ||
       _deliveryType == 'hostel_delivery';
-
-  List<CartItem> _packableItems(List<CartItem> items) =>
-      items.where((i) => i.product.requiresPack).toList();
-
-  double get _packFee => (_packs?.length ?? 0) * widget.vendor.packPrice;
 
   @override
   void dispose() {
@@ -77,13 +52,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     super.dispose();
   }
 
-  /// Builds same-day time slots in 30-min increments from the next rounded
-  /// half-hour until end of day (22:00). Presented as a scrollable bottom
-  /// sheet of tappable chips — no date picker (everything is same-day) and
-  /// no clock dial.
   Future<void> _pickSchedule() async {
     final now = DateTime.now();
-    // Start from the next 30-minute boundary at least 30 min in the future.
     var next = DateTime(now.year, now.month, now.day,
         now.hour, now.minute >= 30 ? 30 : 0);
     while (!next.isAfter(now.add(const Duration(minutes: 29)))) {
@@ -121,7 +91,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               children: [
                 Text('Pick a time', style: theme.textTheme.titleMedium),
                 const SizedBox(height: AppSpacing.xs),
-                Text('Same-day pre-order — choose when you\'d like it ready.',
+                Text("Same-day pre-order — choose when you'd like it ready.",
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurface
                           .withValues(alpha: 0.6),
@@ -151,10 +121,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     setState(() => _scheduledFor = picked);
   }
 
-  /// Runs the transaction-PIN gate before any wallet funds move: prompts
-  /// existing-without-a-PIN accounts to set one first, then always asks
-  /// for the PIN itself. Returns null if the student backs out at either
-  /// step — the caller should abort the order in that case.
   Future<String?> _collectPin() async {
     final hasPin =
         await ref.read(profileServiceProvider).hasTransactionPin();
@@ -166,101 +132,97 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     return showEnterPinSheet(context);
   }
 
-  /// "Will you be using packs for this order?" — Yes opens the
-  /// allocation flow, No records an empty pack list. Does nothing (keeps
-  /// `_packs` null / undecided) if the student backs out of either.
-  Future<void> _decidePacks(List<CartItem> packableItems) async {
-    final wantsPacks = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Using packs?'),
-        content: const Text(
-          'Will you be using packs for this order? Some items in your '
-          'cart need to be packaged into a container to be handed over.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('No'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Yes'),
-          ),
-        ],
-      ),
-    );
-    if (wantsPacks == null || !mounted) return;
-
-    if (!wantsPacks) {
-      setState(() => _packs = []);
-      return;
-    }
-
-    final result = await Navigator.of(context).push<List<PackAllocation>>(
-      MaterialPageRoute(
-        builder: (_) => PackAllocationScreen(
-          vendor: widget.vendor,
-          packableItems: packableItems,
-        ),
-      ),
-    );
-    if (!mounted || result == null) return;
-    setState(() => _packs = result);
-  }
-
-  Future<void> _confirmOrder(List<CartItem> packableItems) async {
+  Future<void> _confirmOrder() async {
     if (_needsLocation) {
       if (!_formKey.currentState!.validate()) return;
     }
-    if (packableItems.isNotEmpty && _packs == null) return;
 
-    final itemsByProductId = {
-      for (final item in packableItems) item.product.id: item,
-    };
-    final packs = (_packs ?? [])
-        .map((p) => p.toJson(itemsByProductId))
-        .toList();
+    final cart = ref.read(cartProvider);
+    final isPickup = _deliveryType == 'pickup';
     final notes = _notesController.text.trim();
-    final isPartner = !widget.vendor.isUniflex;
 
-    Order? order;
+    if (isPickup) {
+      // Pickup is only available for Uniflex-only carts (enforced by UI).
+      // Use existing single-vendor full-payment flow.
+      final vendor = cart.vendor;
+      if (vendor == null) return;
 
-    if (isPartner) {
-      // Partner vendor: create order WITHOUT payment. The commitment fee
-      // and final food cost are paid in separate later steps.
-      order = await ref.read(orderNotifierProvider.notifier).placePartnerFoodOrder(
-            vendor: widget.vendor,
-            deliveryType: _deliveryType,
-            packs: packs,
-            packFee: _packFee,
-            deliveryLocation: _needsLocation
-                ? _locationController.text.trim()
-                : null,
-            scheduledFor: _scheduledFor,
-            notes: notes.isEmpty ? null : notes,
-          );
-    } else {
-      // Uniflex vendor: full payment upfront (PIN-gated).
       final pin = await _collectPin();
       if (pin == null || !mounted) return;
 
-      order = await ref.read(orderNotifierProvider.notifier).placeFoodOrder(
-            vendor: widget.vendor,
+      // Build pack data from cart's group.
+      final group = cart.groups[vendor.id];
+      final packs = (group?.packContents ?? [])
+          .map((contents) => {
+                'items': contents.entries
+                    .where((e) => e.value > 0)
+                    .map((e) {
+                      final product = group!.items.firstWhere(
+                        (i) => i.product.id == e.key,
+                        orElse: () => group.items.first,
+                      );
+                      return {
+                        'product_id': e.key,
+                        'product_name': product.product.name,
+                        'quantity': e.value,
+                      };
+                    })
+                    .toList(),
+              })
+          .toList();
+
+      final order = await ref.read(orderNotifierProvider.notifier).placeFoodOrder(
+            vendor: vendor,
             deliveryType: _deliveryType,
             pin: pin,
             packs: packs,
-            packFee: _packFee,
-            deliveryLocation: _needsLocation
-                ? _locationController.text.trim()
-                : null,
+            packFee: group?.packFee ?? 0,
+            deliveryLocation: null,
             scheduledFor: _scheduledFor,
             notes: notes.isEmpty ? null : notes,
           );
+
+      if (!mounted) return;
+      _handleSingleOrderResult(order);
+    } else {
+      // Delivery: multi-vendor flow via delivery_groups.
+      final result = await ref
+          .read(orderNotifierProvider.notifier)
+          .placeMultiVendorOrder(
+            deliveryType: _deliveryType,
+            deliveryLocation: _locationController.text.trim(),
+            studentNote: notes.isEmpty ? null : notes,
+            scheduledFor: _scheduledFor,
+          );
+
+      if (!mounted) return;
+
+      if (result == null) {
+        final error = ref.read(orderNotifierProvider).error ?? '';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.isEmpty ? 'Order failed. Please try again.' : error),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      // Navigate to commitment fee screen (delivery fee = commitment fee).
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => CommitmentFeeScreen(
+            groupId: result.groupId,
+            commitmentFeeTotal: result.commitmentFeeTotal,
+            deliveryFeePerVendor: result.deliveryFeePerVendor,
+            vendorCount: result.vendorCount,
+          ),
+        ),
+      );
     }
+  }
 
-    if (!mounted) return;
-
+  void _handleSingleOrderResult(Order? order) {
     final notifierState = ref.read(orderNotifierProvider);
 
     if (order == null) {
@@ -290,7 +252,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       return;
     }
 
-    // Warn if the saving plan budget was exceeded (soft warning, not a block).
     if (notifierState.budgetWarning) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -303,21 +264,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       );
     }
 
-    // Partner vendor delivery → commitment fee flow.
-    // Everything else (Uniflex pickup/delivery) → confirmation.
-    if (isPartner && order.isForDelivery) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => CommitmentFeeScreen(order: order!),
-        ),
-      );
-    } else {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => OrderConfirmationScreen(order: order!),
-        ),
-      );
-    }
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => OrderConfirmationScreen(order: order),
+      ),
+    );
   }
 
   @override
@@ -326,16 +277,42 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final cart = ref.watch(cartProvider);
     final orderState = ref.watch(orderNotifierProvider);
     final balanceAsync = ref.watch(walletBalanceProvider);
+    final settingsAsync = ref.watch(deliverySettingsProvider);
 
-    final packableItems = _packableItems(cart.items);
-    final packDecisionPending = packableItems.isNotEmpty && _packs == null;
+    final isUniflexOnly = cart.isUniflexOnly;
+    final isPickup = _deliveryType == 'pickup';
 
+    // Delivery fee per vendor from settings.
+    final feePerVendor = settingsAsync.when(
+      data: (s) => deliveryFeePerVendor(s, _deliveryType),
+      loading: () => _deliveryType == 'hostel_delivery' ? 300.0 : 200.0,
+      error: (_, __) => _deliveryType == 'hostel_delivery' ? 300.0 : 200.0,
+    );
+    final vendorCount = cart.vendorCount;
+    final totalDeliveryFee = isPickup ? 0.0 : feePerVendor * vendorCount;
+
+    final total = cart.subtotal + cart.totalPackFee + totalDeliveryFee;
     final balance = balanceAsync.valueOrNull ?? 0.0;
-    final total = cart.subtotal + _deliveryFee + _packFee;
-    final isPartner = !widget.vendor.isUniflex;
-    // Partner vendors don't charge at checkout — the student pays a
-    // commitment fee later, then the final food cost after sourcing.
-    final hasSufficientBalance = isPartner || balance >= total;
+
+    // For pickup (Uniflex, full payment): need sufficient balance.
+    // For delivery (commitment fee only): balance check is on the next screen.
+    final hasSufficientBalance = isPickup ? balance >= total : true;
+
+    // Campus/hostel fee labels from settings.
+    final campusFee = settingsAsync.when(
+      data: (s) => deliveryFeePerVendor(s, 'campus_delivery'),
+      loading: () => 200.0,
+      error: (_, __) => 200.0,
+    );
+    final hostelFee = settingsAsync.when(
+      data: (s) => deliveryFeePerVendor(s, 'hostel_delivery'),
+      loading: () => 300.0,
+      error: (_, __) => 300.0,
+    );
+
+    final vendorGroups = cart.groups.values
+        .where((g) => !g.isEmpty)
+        .toList();
 
     return Scaffold(
       appBar: const UniflexAppBar(title: 'Checkout'),
@@ -346,7 +323,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Order summary ────────────────────────────────────────
+              // ── Order summary (grouped by vendor) ──────────────────
               Text('Order summary', style: theme.textTheme.titleSmall),
               const SizedBox(height: AppSpacing.sm),
               Container(
@@ -356,47 +333,91 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 ),
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ...cart.items.map(
-                      (item) => Padding(
-                        padding:
-                            const EdgeInsets.only(bottom: AppSpacing.sm),
-                        child: Row(
-                          children: [
-                            Text(
-                              '${item.quantity}×',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                color: theme.colorScheme.onSurface
-                                    .withValues(alpha: 0.55),
+                    for (int vi = 0; vi < vendorGroups.length; vi++) ...[
+                      if (vi > 0) const Divider(height: AppSpacing.md),
+                      // Vendor name header.
+                      Row(
+                        children: [
+                          Icon(Icons.storefront,
+                              size: 16, color: theme.colorScheme.primary),
+                          const SizedBox(width: AppSpacing.xs),
+                          Text(
+                            vendorGroups[vi].vendor.name,
+                            style: theme.textTheme.labelLarge,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      // Items for this vendor.
+                      ...vendorGroups[vi].items.map(
+                        (item) => Padding(
+                          padding:
+                              const EdgeInsets.only(bottom: AppSpacing.xs),
+                          child: Row(
+                            children: [
+                              Text(
+                                '${item.quantity}×',
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                  color: theme.colorScheme.onSurface
+                                      .withValues(alpha: 0.55),
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(item.product.name,
-                                      style: theme.textTheme.bodyMedium),
-                                  if (item.optionsSummary.isNotEmpty)
-                                    Text(
-                                      item.optionsSummary,
-                                      style: theme.textTheme.labelSmall
-                                          ?.copyWith(
-                                        color: theme.colorScheme.onSurface
-                                            .withValues(alpha: 0.5),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(item.product.name,
+                                        style: theme.textTheme.bodyMedium),
+                                    if (item.optionsSummary.isNotEmpty)
+                                      Text(
+                                        item.optionsSummary,
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(
+                                          color: theme
+                                              .colorScheme.onSurface
+                                              .withValues(alpha: 0.5),
+                                        ),
                                       ),
-                                    ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                            Text(
-                              '₦${item.lineTotal.toStringAsFixed(0)}',
-                              style: theme.textTheme.labelMedium,
-                            ),
-                          ],
+                              Text(
+                                '₦${item.lineTotal.toStringAsFixed(0)}',
+                                style: theme.textTheme.labelMedium,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
+                      // Pack fee line for this vendor.
+                      if (vendorGroups[vi].packFee > 0)
+                        Padding(
+                          padding:
+                              const EdgeInsets.only(top: AppSpacing.xs),
+                          child: Row(
+                            mainAxisAlignment:
+                                MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                '${vendorGroups[vi].packCount} pack${vendorGroups[vi].packCount > 1 ? 's' : ''}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: AppColors.emerald,
+                                ),
+                              ),
+                              Text(
+                                '+₦${vendorGroups[vi].packFee.toStringAsFixed(0)}',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: AppColors.emerald,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
                     const Divider(height: AppSpacing.md),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -404,7 +425,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         Text('Subtotal',
                             style: theme.textTheme.bodySmall),
                         Text(
-                          '₦${cart.subtotal.toStringAsFixed(0)}',
+                          '₦${(cart.subtotal + cart.totalPackFee).toStringAsFixed(0)}',
                           style: theme.textTheme.labelMedium,
                         ),
                       ],
@@ -415,55 +436,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
               const SizedBox(height: AppSpacing.lg),
 
-              // ── Packing (Section 11) — only when the cart has any
-              // pack-requiring items. Asked up front so the total below
-              // is accurate by the time the student reaches Confirm.
-              if (packableItems.isNotEmpty) ...[
-                Text('Packing', style: theme.textTheme.titleSmall),
-                const SizedBox(height: AppSpacing.sm),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  decoration: BoxDecoration(
-                    color: packDecisionPending
-                        ? AppColors.orange.withValues(alpha: 0.08)
-                        : theme.colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(AppRadius.card),
-                    border: packDecisionPending
-                        ? Border.all(color: AppColors.orange.withValues(alpha: 0.3))
-                        : null,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.inventory_2_outlined,
-                        color: packDecisionPending
-                            ? AppColors.orange
-                            : theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: Text(
-                          packDecisionPending
-                              ? 'This order needs packs for some items.'
-                              : (_packs!.isEmpty
-                                  ? 'No packs — you\'re eating in / providing your own.'
-                                  : '${_packs!.length} pack${_packs!.length == 1 ? '' : 's'} '
-                                    '· +₦${_packFee.toStringAsFixed(0)}'),
-                          style: theme.textTheme.bodySmall,
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () => _decidePacks(packableItems),
-                        child: Text(packDecisionPending ? 'Set up' : 'Change'),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-              ],
-
-              // ── Step 6: Fulfillment type ─────────────────────────────
+              // ── Fulfillment type ─────────────────────────────────────
               Text('How would you like to receive it?',
                   style: theme.textTheme.titleSmall),
               const SizedBox(height: AppSpacing.sm),
@@ -472,23 +445,27 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 children: [
                   Row(
                     children: [
-                      Expanded(
-                        child: _FulfillmentChoice(
-                          label: 'Pickup',
-                          icon: Icons.storefront_outlined,
-                          subtitle: 'Free',
-                          selected: _deliveryType == 'pickup',
-                          onTap: () =>
-                              setState(() => _deliveryType = 'pickup'),
+                      // Pickup only for Uniflex-only carts.
+                      if (isUniflexOnly)
+                        Expanded(
+                          child: _FulfillmentChoice(
+                            label: 'Pickup',
+                            icon: Icons.storefront_outlined,
+                            subtitle: 'Free',
+                            selected: isPickup,
+                            onTap: () =>
+                                setState(() => _deliveryType = 'pickup'),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
+                      if (isUniflexOnly)
+                        const SizedBox(width: AppSpacing.sm),
                       Expanded(
                         child: _FulfillmentChoice(
-                          label: 'Campus Delivery',
+                          label: 'Campus',
                           icon: Icons.directions_walk_outlined,
-                          subtitle:
-                              '+₦${_campusDeliveryFee.toStringAsFixed(0)}',
+                          subtitle: vendorCount > 1
+                              ? '₦${campusFee.toStringAsFixed(0)}/vendor'
+                              : '+₦${campusFee.toStringAsFixed(0)}',
                           selected: _deliveryType == 'campus_delivery',
                           onTap: () => setState(
                               () => _deliveryType = 'campus_delivery'),
@@ -500,8 +477,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   _FulfillmentChoice(
                     label: 'Hostel Room Delivery',
                     icon: Icons.hotel_outlined,
-                    subtitle:
-                        '+₦${_hostelDeliveryFee.toStringAsFixed(0)}',
+                    subtitle: vendorCount > 1
+                        ? '₦${hostelFee.toStringAsFixed(0)}/vendor'
+                        : '+₦${hostelFee.toStringAsFixed(0)}',
                     selected: _deliveryType == 'hostel_delivery',
                     onTap: () =>
                         setState(() => _deliveryType = 'hostel_delivery'),
@@ -509,7 +487,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 ],
               ),
 
-              // ── Step 7: Delivery location ────────────────────────────
+              // ── Delivery location ────────────────────────────────────
               if (_needsLocation) ...[
                 const SizedBox(height: AppSpacing.lg),
                 Text(
@@ -530,7 +508,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 ),
               ],
 
-              // ── Step 7b: Schedule for later ──────────────────────────
+              // ── Schedule ─────────────────────────────────────────────
               const SizedBox(height: AppSpacing.lg),
               Text('When?', style: theme.textTheme.titleSmall),
               const SizedBox(height: AppSpacing.sm),
@@ -541,7 +519,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 theme: theme,
               ),
 
-              // ── Notes (optional) ──────────────────────────────────
+              // ── Notes ────────────────────────────────────────────────
               const SizedBox(height: AppSpacing.lg),
               Text('Note for the rider (optional)',
                   style: theme.textTheme.titleSmall),
@@ -564,58 +542,78 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 child: Column(
                   children: [
                     _TotalRow(
-                        label: 'Subtotal',
-                        value: '₦${cart.subtotal.toStringAsFixed(0)}',
-                        bold: false,
-                        theme: theme),
-                    if (_deliveryFee > 0)
-                      _TotalRow(
-                        label: 'Delivery fee',
-                        value: '+₦${_deliveryFee.toStringAsFixed(0)}',
-                        bold: false,
-                        theme: theme,
-                      ),
-                    if (_packFee > 0)
-                      _TotalRow(
-                        label: 'Packs (${_packs!.length})',
-                        value: '+₦${_packFee.toStringAsFixed(0)}',
-                        bold: false,
-                        theme: theme,
-                      ),
-                    const Divider(height: AppSpacing.md),
-                    _TotalRow(
-                      label: 'Total',
-                      value: '₦${total.toStringAsFixed(0)}',
-                      bold: true,
+                      label: 'Food + packs',
+                      value:
+                          '₦${(cart.subtotal + cart.totalPackFee).toStringAsFixed(0)}',
+                      bold: false,
                       theme: theme,
                     ),
+                    if (!isPickup && totalDeliveryFee > 0) ...[
+                      // Show per-vendor delivery fee breakdown.
+                      for (final group in vendorGroups)
+                        _TotalRow(
+                          label:
+                              'Delivery (${group.vendor.name})',
+                          value:
+                              '+₦${feePerVendor.toStringAsFixed(0)}',
+                          bold: false,
+                          theme: theme,
+                        ),
+                    ],
                     const Divider(height: AppSpacing.md),
-                    // Wallet balance row
-                    balanceAsync.when(
-                      data: (b) => _TotalRow(
-                        label: 'Wallet balance',
-                        value: '₦${(b ?? 0).toStringAsFixed(0)}',
-                        bold: false,
+                    if (isPickup)
+                      _TotalRow(
+                        label: 'Total',
+                        value: '₦${total.toStringAsFixed(0)}',
+                        bold: true,
                         theme: theme,
-                        valueColor: hasSufficientBalance
-                            ? AppColors.emerald
-                            : AppColors.error,
+                      )
+                    else ...[
+                      _TotalRow(
+                        label: 'Commitment fee (delivery)',
+                        value:
+                            '₦${totalDeliveryFee.toStringAsFixed(0)}',
+                        bold: true,
+                        theme: theme,
                       ),
-                      loading: () => const SizedBox(
-                        height: 20,
-                        child: Center(
-                          child:
-                              CircularProgressIndicator(strokeWidth: 2),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Food cost is paid after items are confirmed.',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.5),
                         ),
                       ),
-                      error: (_, __) => const SizedBox.shrink(),
-                    ),
+                    ],
+                    const Divider(height: AppSpacing.md),
+                    // Wallet balance row (only relevant for pickup).
+                    if (isPickup)
+                      balanceAsync.when(
+                        data: (b) => _TotalRow(
+                          label: 'Wallet balance',
+                          value: '₦${(b ?? 0).toStringAsFixed(0)}',
+                          bold: false,
+                          theme: theme,
+                          valueColor: hasSufficientBalance
+                              ? AppColors.emerald
+                              : AppColors.error,
+                        ),
+                        loading: () => const SizedBox(
+                          height: 20,
+                          child: Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                        error: (_, __) => const SizedBox.shrink(),
+                      ),
                   ],
                 ),
               ),
 
-              // Insufficient balance message
-              if (!hasSufficientBalance && balanceAsync.hasValue) ...[
+              // Insufficient balance message (pickup only).
+              if (isPickup &&
+                  !hasSufficientBalance &&
+                  balanceAsync.hasValue) ...[
                 const SizedBox(height: AppSpacing.sm),
                 Container(
                   padding: const EdgeInsets.all(AppSpacing.sm),
@@ -640,10 +638,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                               WidgetSpan(
                                 child: GestureDetector(
                                   onTap: () {
-                                    // Ask the shell for the Wallet tab, then
-                                    // pop back to it. Popping alone used to
-                                    // leave whichever tab was already open,
-                                    // so this link went nowhere.
                                     ref
                                         .read(shellTabRequestProvider.notifier)
                                         .state = _studentWalletTabIndex;
@@ -687,16 +681,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               AppSpacing.md,
         ),
         child: PrimaryButton(
-            label: packDecisionPending
-                ? 'Set up packs to continue'
-                : isPartner
-                    ? 'Place Order (pay later)'
-                    : 'Confirm Order  ₦${total.toStringAsFixed(0)}',
-            icon: isPartner ? Icons.shopping_cart_checkout : Icons.lock_outline,
-            isLoading: orderState.isLoading,
-            onPressed: (hasSufficientBalance && !packDecisionPending)
-                ? () => _confirmOrder(packableItems)
-                : null,
+          label: isPickup
+              ? 'Confirm Order  ₦${total.toStringAsFixed(0)}'
+              : 'Place Order (₦${totalDeliveryFee.toStringAsFixed(0)} delivery fee)',
+          icon: isPickup ? Icons.lock_outline : Icons.shopping_cart_checkout,
+          isLoading: orderState.isLoading,
+          onPressed: hasSufficientBalance
+              ? _confirmOrder
+              : null,
         ),
       ),
     );

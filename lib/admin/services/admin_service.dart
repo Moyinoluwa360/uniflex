@@ -246,6 +246,8 @@ class AdminService {
     String? imageUrl,
     bool isAvailable = true,
     bool requiresPack = false,
+    String section = 'food',
+    String? foodSubsection,
   }) async {
     final map = <String, dynamic>{
       'vendor_id': vendorId,
@@ -256,6 +258,8 @@ class AdminService {
       'image_url': imageUrl,
       'is_available': isAvailable,
       'requires_pack': requiresPack,
+      'section': section,
+      'food_subsection': foodSubsection,
     };
     if (id != null) {
       await _client.from('products').update(map).eq('id', id);

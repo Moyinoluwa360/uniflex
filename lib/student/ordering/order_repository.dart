@@ -144,6 +144,31 @@ final orderRiderInfoProvider =
 });
 
 // ---------------------------------------------------------------------------
+// Delivery settings (Round 7 — admin-editable fees)
+// ---------------------------------------------------------------------------
+
+/// Fetches the delivery settings map from the server.
+/// Keys: 'campus_delivery_fee', 'hostel_delivery_fee', 'pack_meal_capacity'.
+final deliverySettingsProvider = FutureProvider<Map<String, String>>((ref) async {
+  final client = ref.watch(supabaseClientProvider);
+  final result = await client.rpc('get_delivery_settings');
+  final raw = Map<String, dynamic>.from(result as Map);
+  return raw.map((k, v) => MapEntry(k, v.toString()));
+});
+
+/// Helper to extract the per-vendor delivery fee for a given delivery type.
+double deliveryFeePerVendor(Map<String, String> settings, String deliveryType) {
+  switch (deliveryType) {
+    case 'campus_delivery':
+      return double.tryParse(settings['campus_delivery_fee'] ?? '') ?? 200;
+    case 'hostel_delivery':
+      return double.tryParse(settings['hostel_delivery_fee'] ?? '') ?? 300;
+    default:
+      return 0;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Write notifier
 // ---------------------------------------------------------------------------
 
@@ -166,6 +191,22 @@ class OrderPlacementState {
   final bool budgetWarning;
 
   bool get isSuccess => order != null;
+}
+
+/// Result from [placeMultiVendorOrder] — contains the delivery group info
+/// needed by CommitmentFeeScreen.
+class MultiVendorOrderResult {
+  const MultiVendorOrderResult({
+    required this.groupId,
+    required this.commitmentFeeTotal,
+    required this.deliveryFeePerVendor,
+    required this.vendorCount,
+  });
+
+  final String groupId;
+  final double commitmentFeeTotal;
+  final double deliveryFeePerVendor;
+  final int vendorCount;
 }
 
 /// Handles placing both food orders and Around requests.
@@ -372,6 +413,108 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
 
       state = OrderPlacementState(order: order);
       return order;
+    } catch (e) {
+      state = OrderPlacementState(error: _mapError(e.toString()));
+      return null;
+    }
+  }
+
+  /// Round 7: Places a multi-vendor delivery order via delivery_groups.
+  /// Creates a delivery group parent + one order leg per vendor.
+  /// No wallet deduction at this step — the commitment fee is paid
+  /// separately via [pay_group_commitment_fee].
+  ///
+  /// Returns a [MultiVendorOrderResult] on success, or null on failure.
+  Future<MultiVendorOrderResult?> placeMultiVendorOrder({
+    required String deliveryType,
+    String? deliveryLocation,
+    String? studentNote,
+    DateTime? scheduledFor,
+  }) async {
+    final cart = ref.read(cartProvider);
+    if (cart.isEmpty) return null;
+
+    state = const OrderPlacementState(isLoading: true);
+
+    try {
+      final client = ref.read(supabaseClientProvider);
+
+      // Build per-vendor legs from the cart groups.
+      final legs = <Map<String, dynamic>>[];
+      for (final group in cart.groups.values) {
+        if (group.isEmpty) continue;
+
+        final lineItems = group.items
+            .map((item) => {
+                  'product_id': item.product.id,
+                  'product_name': item.product.name,
+                  'quantity': item.quantity,
+                  'unit_price': item.unitTotal,
+                  'selected_options':
+                      item.selectedOptions.map((o) => o.toJson()).toList(),
+                })
+            .toList();
+
+        // Build pack data from the cart group's packContents.
+        final packs = group.packContents
+            .map((contents) => {
+                  'items': contents.entries
+                      .where((e) => e.value > 0)
+                      .map((e) {
+                        final product = group.items.firstWhere(
+                          (i) => i.product.id == e.key,
+                          orElse: () => group.items.first,
+                        );
+                        return {
+                          'product_id': e.key,
+                          'product_name': product.product.name,
+                          'quantity': e.value,
+                        };
+                      })
+                      .toList(),
+                })
+            .toList();
+
+        legs.add({
+          'vendor_id': group.vendor.id,
+          'source': group.vendor.isUniflex ? 'uniflex' : 'partner',
+          'total_amount': group.totalWithPacks,
+          'estimated_time': scheduledFor != null ? 'Scheduled' : '20–30 min',
+          'line_items': lineItems,
+          'packs': packs,
+          'pack_fee': group.packFee,
+        });
+      }
+
+      final result = await client.rpc(
+        'place_multi_vendor_order',
+        params: {
+          'p_delivery_type': deliveryType,
+          'p_delivery_location': deliveryLocation,
+          'p_student_note': studentNote,
+          if (scheduledFor != null)
+            'p_scheduled_for': scheduledFor.toUtc().toIso8601String(),
+          'p_legs': legs,
+        },
+      ) as Map<String, dynamic>;
+
+      final groupId = result['group_id'] as String;
+      final commitmentFee =
+          (result['commitment_fee_total'] as num?)?.toDouble() ?? 0;
+      final feePerVendor =
+          (result['delivery_fee_per_vendor'] as num?)?.toDouble() ?? 0;
+      final vendorCount = result['vendor_count'] as int? ?? legs.length;
+
+      ref.read(cartProvider.notifier).clear();
+      ref.invalidate(studentOrdersProvider);
+
+      state = const OrderPlacementState();
+      return MultiVendorOrderResult(
+        groupId: groupId,
+        commitmentFeeTotal: commitmentFee,
+        deliveryFeePerVendor: feePerVendor,
+        vendorCount: vendorCount,
+      );
     } catch (e) {
       state = OrderPlacementState(error: _mapError(e.toString()));
       return null;

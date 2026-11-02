@@ -10,10 +10,11 @@ based on their account role. There is no separate web dashboard —
 everything lives in this one codebase. See [ARCHITECTURE.md](ARCHITECTURE.md)
 for how that's structured.
 
-This repository is being built in phases. **Phase 1** (current) wires up
-real Supabase authentication and the Student onboarding flow, plus
-invite-only Rider/Admin login — no ordering/catalog/other feature screens
-yet. See [CHANGELOG.md](CHANGELOG.md) for what's shipped so far.
+This repository is built in phases. All six foundational phases are
+complete (Auth, Ordering, Wallet/Payments, Admin/Kitchen, Rider
+Delivery, Profile/Loyalty), plus seven rounds of post-testing fixes
+and feature work. See [CHANGELOG.md](CHANGELOG.md) for what's shipped
+so far.
 
 ## Prerequisites
 
@@ -69,7 +70,8 @@ flutter test                 # run the test suite
 
 ## Project status
 
-Phased build — see [CHANGELOG.md](CHANGELOG.md) for what each phase adds.
-Do not build feature screens (onboarding, ordering, delivery tracking,
-admin dashboards, etc.) outside of their designated phase; see
+All six core phases (0–6) are shipped. Post-testing rounds 1–7 have
+addressed QA findings, payment/PIN fixes, pack-first ordering,
+multi-vendor delivery, and admin-editable delivery fees. See
+[CHANGELOG.md](CHANGELOG.md) for details and
 [ARCHITECTURE.md](ARCHITECTURE.md) for where new work should live.

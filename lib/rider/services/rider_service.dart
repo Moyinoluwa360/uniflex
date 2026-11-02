@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/models/delivery_group.dart';
 import '../../shared/models/order.dart';
 import '../../shared/services/notifications/notification_inbox_service.dart';
 import '../delivery/delivery_record.dart';
+import '../pool/pool_group.dart';
 import '../pool/pool_order.dart';
 
 /// Pickup location + customer contact for a currently active delivery.
@@ -171,6 +173,169 @@ class RiderService {
     } catch (e) {
       debugPrint('[RiderPool] Realtime stream error: $e');
     }
+  }
+
+  // ── Delivery group pool stream (Round 7) ───────────────────────────
+
+  /// Live stream of delivery groups in the pool (committed but unassigned).
+  Stream<List<PoolGroup>> streamGroupPool() async* {
+    Future<List<PoolGroup>> fetchGroups() async {
+      final rows = await _client
+          .from('delivery_groups')
+          .select()
+          .eq('status', 'commitment_paid')
+          .isFilter('rider_id', null)
+          .order('created_at', ascending: false);
+
+      if (rows.isEmpty) return [];
+
+      final groupIds =
+          rows.map((m) => m['id'] as String).toList();
+
+      // Fetch legs for these groups to get vendor info.
+      final legs = await _client
+          .from('orders')
+          .select('delivery_group_id, vendor_id')
+          .inFilter('delivery_group_id', groupIds);
+
+      // Batch-fetch vendor names.
+      final vendorIds = legs
+          .map((m) => m['vendor_id'] as String?)
+          .whereType<String>()
+          .toSet()
+          .toList();
+      final vendorNames = <String, String>{};
+      if (vendorIds.isNotEmpty) {
+        final vendors = await _client
+            .from('vendors')
+            .select('id, name')
+            .inFilter('id', vendorIds);
+        for (final v in vendors) {
+          vendorNames[v['id'] as String] = v['name'] as String;
+        }
+      }
+
+      return rows.map((m) {
+        final group = DeliveryGroup.fromMap(m);
+        final groupLegs = legs
+            .where((l) => l['delivery_group_id'] == group.id)
+            .toList();
+        final names = groupLegs
+            .map((l) => vendorNames[l['vendor_id']] ?? 'Unknown')
+            .toSet()
+            .toList();
+        return PoolGroup(
+          group: group,
+          vendorNames: names,
+          legCount: groupLegs.length,
+        );
+      }).toList();
+    }
+
+    yield await fetchGroups();
+
+    try {
+      final stream = _client
+          .from('delivery_groups')
+          .stream(primaryKey: ['id'])
+          .order('created_at', ascending: false);
+
+      await for (final _ in stream) {
+        try {
+          yield await fetchGroups();
+        } catch (e) {
+          debugPrint('[RiderGroupPool] Realtime fetch error: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('[RiderGroupPool] Realtime stream error: $e');
+    }
+  }
+
+  /// Streams a single delivery group by ID for live status updates.
+  Stream<DeliveryGroup?> streamGroupDetail(String groupId) async* {
+    Future<DeliveryGroup?> fetch() async {
+      final rows = await _client
+          .from('delivery_groups')
+          .select()
+          .eq('id', groupId)
+          .limit(1);
+      if (rows.isEmpty) return null;
+      return DeliveryGroup.fromMap(rows.first);
+    }
+
+    yield await fetch();
+
+    try {
+      final stream = _client
+          .from('delivery_groups')
+          .stream(primaryKey: ['id']).eq('id', groupId);
+
+      await for (final _ in stream) {
+        try {
+          yield await fetch();
+        } catch (e) {
+          debugPrint('[RiderGroupDetail] Realtime fetch error: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('[RiderGroupDetail] Realtime stream error: $e');
+    }
+  }
+
+  // ── Delivery group actions (Round 7) ──────────────────────────────
+
+  /// Accepts a delivery group from the pool.
+  Future<void> acceptDeliveryGroup(String groupId) async {
+    await _client.rpc(
+        'accept_delivery_group', params: {'p_group_id': groupId});
+  }
+
+  /// Confirms pickup at one vendor stop within a delivery group.
+  Future<void> confirmGroupLegPickup(String orderId) async {
+    await _client.rpc(
+        'confirm_group_leg_pickup', params: {'p_order_id': orderId});
+  }
+
+  /// Verifies delivery of the entire group using the single delivery PIN.
+  Future<void> verifyGroupDelivery(String groupId, String pin) async {
+    await _client.rpc('verify_group_delivery', params: {
+      'p_group_id': groupId,
+      'p_pin': pin.trim().toUpperCase(),
+    });
+  }
+
+  /// Fetches all order legs for a delivery group.
+  Future<List<Order>> fetchGroupLegs(String groupId) async {
+    final rows = await _client
+        .from('orders')
+        .select()
+        .eq('delivery_group_id', groupId)
+        .order('created_at');
+    // Attach vendor names.
+    final vendorIds = rows
+        .map((m) => m['vendor_id'] as String?)
+        .whereType<String>()
+        .toSet()
+        .toList();
+    final namesById = <String, String>{};
+    if (vendorIds.isNotEmpty) {
+      final vendors = await _client
+          .from('vendors')
+          .select('id, name')
+          .inFilter('id', vendorIds);
+      for (final v in vendors) {
+        namesById[v['id'] as String] = v['name'] as String;
+      }
+    }
+    return rows.map((m) {
+      final withVendor = {
+        ...m,
+        if (m['vendor_id'] != null && namesById[m['vendor_id']] != null)
+          'vendors': {'name': namesById[m['vendor_id']]},
+      };
+      return Order.fromMap(withVendor);
+    }).toList();
   }
 
   // ── Active delivery stream ─────────────────────────────────────────

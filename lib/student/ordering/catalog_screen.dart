@@ -11,27 +11,14 @@ import '../../shared/widgets/async/retry_section.dart';
 import '../../shared/widgets/media/app_image.dart';
 import 'cart_provider.dart';
 import 'cart_screen.dart';
+import 'pack_builder_screen.dart';
 import 'product_repository.dart';
 
-/// Maps any product category (including legacy 9-category names) into one
-/// of the three fixed display categories.
-String _normalizeCategory(String raw) {
-  return switch (raw) {
-    'Meals' || 'Drinks' || 'Others' => raw,
-    'Protein Meals' || 'Main' || 'Sides' || 'Snacks' || 'Grills' => 'Meals',
-    'Smoothies' || 'Juices' => 'Drinks',
-    _ => 'Others',
-  };
-}
-
-/// Vendor menu — post-testing fixes, Section 11: every product is its own
-/// independently orderable item with its own quantity stepper, added to
-/// the cart directly from this list. This replaces the old
-/// quantity→protein→extras→drink combo-builder wizard (removed, not kept
-/// alongside it) — Jollof Rice, Chicken, and a drink are each their own
-/// catalog item now, the way a normal food-ordering app works. Drinks
-/// live in their own category section, added the same way as everything
-/// else.
+/// Vendor menu — three sections: Food (pack-first flow), Drinks, Others.
+///
+/// Food items route through [PackBuilderScreen] where the student picks
+/// pack count first, then fills each pack. Drinks and Others are added
+/// directly via inline steppers.
 class CatalogScreen extends ConsumerWidget {
   const CatalogScreen({super.key, required this.vendor});
 
@@ -85,22 +72,17 @@ class CatalogScreen extends ConsumerWidget {
                       width: 72,
                       height: 72,
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.primary
-                            .withValues(alpha: 0.1),
+                        color:
+                            theme.colorScheme.primary.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(
-                        Icons.search_off_outlined,
-                        size: 32,
-                        color: theme.colorScheme.primary,
-                      ),
+                      child: Icon(Icons.search_off_outlined,
+                          size: 32, color: theme.colorScheme.primary),
                     ),
                     const SizedBox(height: AppSpacing.md),
-                    Text(
-                      'No results on this menu',
-                      style: theme.textTheme.titleSmall,
-                      textAlign: TextAlign.center,
-                    ),
+                    Text('No results on this menu',
+                        style: theme.textTheme.titleSmall,
+                        textAlign: TextAlign.center),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
                       'Try another vendor or check back later.',
@@ -116,71 +98,179 @@ class CatalogScreen extends ConsumerWidget {
             );
           }
 
-          // Group into the 3 fixed categories: Meals, Drinks, Others.
-          // Legacy categories from the old 9-category system are mapped
-          // into one of these three.
-          const displayOrder = ['Meals', 'Drinks', 'Others'];
-          final byCategory = <String, List<Product>>{};
-          for (final p in products) {
-            final cat = _normalizeCategory(p.category);
-            byCategory.putIfAbsent(cat, () => []).add(p);
-          }
-          final categories = displayOrder
-              .where((c) => byCategory.containsKey(c))
-              .toList();
+          // Group by section.
+          final foodProducts =
+              products.where((p) => p.section == 'food').toList();
+          final drinkProducts =
+              products.where((p) => p.section == 'drinks').toList();
+          final otherProducts =
+              products.where((p) => p.section == 'others').toList();
 
-          return ListView.builder(
-            padding: const EdgeInsets.only(
-              top: AppSpacing.sm,
-              bottom: 96, // space for the cart FAB
-            ),
-            itemCount: categories.length,
-            itemBuilder: (context, i) {
-              final cat = categories[i];
-              final items = byCategory[cat]!;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.screenGutter,
-                      AppSpacing.md,
-                      AppSpacing.screenGutter,
-                      AppSpacing.sm,
-                    ),
-                    child: Text(cat, style: theme.textTheme.titleSmall),
-                  ),
-                  ...items.map(
-                    (product) => _ProductTile(product: product, vendor: vendor),
-                  ),
-                ],
-              );
-            },
+          return ListView(
+            padding:
+                const EdgeInsets.only(top: AppSpacing.sm, bottom: 96),
+            children: [
+              // ── Food section (pack-first entry point) ──────────
+              if (foodProducts.isNotEmpty) ...[
+                const _SectionHeader(title: 'Food', icon: Icons.restaurant),
+                _FoodSectionCard(
+                  vendor: vendor,
+                  foodProducts: foodProducts,
+                ),
+              ],
+
+              // ── Drinks section ─────────────────────────────────
+              if (drinkProducts.isNotEmpty) ...[
+                const _SectionHeader(title: 'Drinks', icon: Icons.local_cafe),
+                ...drinkProducts.map(
+                  (p) => _ProductTile(product: p, vendor: vendor),
+                ),
+              ],
+
+              // ── Others section ─────────────────────────────────
+              if (otherProducts.isNotEmpty) ...[
+                const _SectionHeader(title: 'Others', icon: Icons.fastfood),
+                ...otherProducts.map(
+                  (p) => _ProductTile(product: p, vendor: vendor),
+                ),
+              ],
+            ],
           );
         },
       ),
-      floatingActionButton: cartState.isEmpty ||
-              (cartState.vendor?.id != vendor.id)
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => CartScreen(vendor: vendor),
+      floatingActionButton: cartState.isEmpty
+              ? null
+              : FloatingActionButton.extended(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const CartScreen(),
+                    ),
+                  ),
+                  backgroundColor: AppColors.orange,
+                  foregroundColor: AppColors.pureWhite,
+                  label: Text(
+                    'View Cart (${cartState.itemCount})',
+                    style: theme.textTheme.labelLarge
+                        ?.copyWith(color: AppColors.pureWhite),
+                  ),
+                  icon: const Icon(Icons.shopping_cart_outlined),
                 ),
-              ),
-              backgroundColor: AppColors.orange,
-              foregroundColor: AppColors.pureWhite,
-              label: Text(
-                'View Cart (${cartState.itemCount})',
-                style: theme.textTheme.labelLarge
-                    ?.copyWith(color: AppColors.pureWhite),
-              ),
-              icon: const Icon(Icons.shopping_cart_outlined),
-            ),
     );
   }
 }
 
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title, required this.icon});
+  final String title;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenGutter,
+        AppSpacing.lg,
+        AppSpacing.screenGutter,
+        AppSpacing.sm,
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: theme.colorScheme.primary),
+          const SizedBox(width: AppSpacing.sm),
+          Text(title, style: theme.textTheme.titleSmall),
+        ],
+      ),
+    );
+  }
+}
+
+/// Card that links to the pack-first food ordering flow.
+class _FoodSectionCard extends ConsumerWidget {
+  const _FoodSectionCard({
+    required this.vendor,
+    required this.foodProducts,
+  });
+
+  final Vendor vendor;
+  final List<Product> foodProducts;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final mealCount =
+        foodProducts.where((p) => p.isMeal).length;
+    final proteinCount =
+        foodProducts.where((p) => p.isProteinTopping).length;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.screenGutter,
+        vertical: AppSpacing.sm,
+      ),
+      child: InkWell(
+        onTap: () {
+          Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => PackBuilderScreen(
+              vendor: vendor,
+              foodProducts: foodProducts,
+            ),
+          ));
+        },
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(
+              color: AppColors.emerald.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppColors.emerald.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                ),
+                child: const Icon(Icons.inventory_2_outlined,
+                    color: AppColors.emerald),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Order Food (Packs)',
+                        style: theme.textTheme.labelLarge),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$mealCount meals, $proteinCount proteins/toppings'
+                      ' · ₦${vendor.packPrice.toStringAsFixed(0)}/pack',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface
+                            .withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right,
+                  color:
+                      theme.colorScheme.onSurface.withValues(alpha: 0.4)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+}
+
+/// Product tile with inline add/stepper — used for Drinks and Others.
 class _ProductTile extends ConsumerWidget {
   const _ProductTile({required this.product, required this.vendor});
 
@@ -191,15 +281,13 @@ class _ProductTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final cart = ref.watch(cartProvider);
-    final wrongVendor = cart.vendor != null && cart.vendor!.id != vendor.id;
-    final index = cart.items.indexWhere((i) => i.product.id == product.id);
-    final quantity = index >= 0 ? cart.items[index].quantity : 0;
+    // Look up this product's quantity within the vendor's group.
+    final vendorGroup = cart.groups[vendor.id];
+    final localIdx = vendorGroup?.items
+        .indexWhere((i) => i.product.id == product.id) ?? -1;
+    final quantity = localIdx >= 0 ? vendorGroup!.items[localIdx].quantity : 0;
 
     void addFirst() {
-      if (wrongVendor) {
-        _confirmClearCart(context, ref);
-        return;
-      }
       ref
           .read(cartProvider.notifier)
           .addItem(CartItem(product: product, quantity: 1), vendor);
@@ -218,7 +306,7 @@ class _ProductTile extends ConsumerWidget {
             height: 64,
             child: AppImage(
               url: product.imageUrl,
-              keywords: 'food,meal,${product.category}',
+              keywords: 'food,meal,${product.section}',
               seed: product.id.hashCode,
               borderRadius: BorderRadius.circular(AppRadius.control - 2),
             ),
@@ -234,27 +322,18 @@ class _ProductTile extends ConsumerWidget {
                   Text(
                     product.description,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                      color: theme.colorScheme.onSurface
+                          .withValues(alpha: 0.55),
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Text(
-                      '₦${product.basePrice.toStringAsFixed(0)}',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    if (product.requiresPack) ...[
-                      const SizedBox(width: AppSpacing.sm),
-                      Icon(Icons.inventory_2_outlined,
-                          size: 13,
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.4)),
-                    ],
-                  ],
+                Text(
+                  '₦${product.basePrice.toStringAsFixed(0)}',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.primary,
+                  ),
                 ),
               ],
             ),
@@ -264,46 +343,47 @@ class _ProductTile extends ConsumerWidget {
               ? _AddButton(onTap: addFirst)
               : _QuantityStepper(
                   quantity: quantity,
-                  onDecrement: () => ref
-                      .read(cartProvider.notifier)
-                      .updateQuantity(index, quantity - 1),
-                  onIncrement: () => ref
-                      .read(cartProvider.notifier)
-                      .updateQuantity(index, quantity + 1),
+                  onDecrement: () {
+                    if (quantity <= 1) {
+                      ref
+                          .read(cartProvider.notifier)
+                          .removeItemFromVendor(vendor.id, localIdx);
+                    } else {
+                      // Compute flat index for updateQuantity.
+                      final cart = ref.read(cartProvider);
+                      int flat = 0;
+                      for (final e in cart.groups.entries) {
+                        if (e.key == vendor.id) {
+                          flat += localIdx;
+                          break;
+                        }
+                        flat += e.value.items.length;
+                      }
+                      ref
+                          .read(cartProvider.notifier)
+                          .updateQuantity(flat, quantity - 1);
+                    }
+                  },
+                  onIncrement: () {
+                    final cart = ref.read(cartProvider);
+                    int flat = 0;
+                    for (final e in cart.groups.entries) {
+                      if (e.key == vendor.id) {
+                        flat += localIdx;
+                        break;
+                      }
+                      flat += e.value.items.length;
+                    }
+                    ref
+                        .read(cartProvider.notifier)
+                        .updateQuantity(flat, quantity + 1);
+                  },
                 ),
         ],
       ),
     );
   }
 
-  Future<void> _confirmClearCart(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Start a new cart?'),
-        content: Text(
-          'Your cart has items from another vendor. Adding "${product.name}" '
-          'will clear it and start a new order from ${vendor.name}.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Clear & Add'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      ref.read(cartProvider.notifier).clear();
-      ref
-          .read(cartProvider.notifier)
-          .addItem(CartItem(product: product, quantity: 1), vendor);
-    }
-  }
 }
 
 class _AddButton extends StatelessWidget {
@@ -327,9 +407,6 @@ class _AddButton extends StatelessWidget {
   }
 }
 
-/// Inline "- qty +" stepper shown once an item is in the cart — the
-/// normal food-ordering-app pattern this section asks for, replacing the
-/// old "tap to open a wizard" flow.
 class _QuantityStepper extends StatelessWidget {
   const _QuantityStepper({
     required this.quantity,

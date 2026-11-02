@@ -174,12 +174,12 @@ class _CartTab extends ConsumerWidget {
                 PrimaryButton(
                   label: 'Proceed to Checkout',
                   icon: Icons.arrow_forward,
-                  onPressed: cart.vendor == null
+                  onPressed: cart.isEmpty
                       ? null
                       : () => Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (_) =>
-                                  CheckoutScreen(vendor: cart.vendor!),
+                                  const CheckoutScreen(),
                             ),
                           ),
                 ),

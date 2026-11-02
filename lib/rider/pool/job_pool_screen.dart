@@ -7,7 +7,9 @@ import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../delivery/active_delivery_screen.dart';
+import '../delivery/group_delivery_screen.dart';
 import '../services/rider_providers.dart';
+import 'pool_group.dart';
 import 'pool_order.dart';
 
 /// Live job pool — shows all unassigned pool-eligible orders.
@@ -19,14 +21,15 @@ class JobPoolScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final poolAsync = ref.watch(jobPoolProvider);
+    final groupPoolAsync = ref.watch(groupPoolProvider);
     final activeOrders =
         ref.watch(activeDeliveriesProvider).valueOrNull ?? [];
+    final groups = groupPoolAsync.valueOrNull ?? [];
 
     return Scaffold(
       appBar: UniflexAppBar(
         title: 'Available Jobs',
         actions: [
-          // Live indicator
           Padding(
             padding: const EdgeInsets.only(right: AppSpacing.md),
             child: Row(
@@ -56,10 +59,13 @@ class JobPoolScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => RetrySection(
           message: 'Could not load jobs. Check your connection.',
-          onRetry: () => ref.invalidate(jobPoolProvider),
+          onRetry: () {
+            ref.invalidate(jobPoolProvider);
+            ref.invalidate(groupPoolProvider);
+          },
         ),
         data: (pool) {
-          if (pool.isEmpty && activeOrders.isEmpty) {
+          if (pool.isEmpty && groups.isEmpty && activeOrders.isEmpty) {
             return Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -97,6 +103,9 @@ class JobPoolScreen extends ConsumerWidget {
           }
 
           final hasActiveBanner = activeOrders.isNotEmpty;
+          // Combined list: active banner + group cards + individual order cards.
+          final bannerCount = hasActiveBanner ? 1 : 0;
+          final totalItems = bannerCount + groups.length + pool.length;
 
           return ListView.builder(
             padding: const EdgeInsets.fromLTRB(
@@ -105,12 +114,16 @@ class JobPoolScreen extends ConsumerWidget {
               AppSpacing.screenGutter,
               AppSpacing.xl,
             ),
-            itemCount: pool.length + (hasActiveBanner ? 1 : 0),
+            itemCount: totalItems,
             itemBuilder: (ctx, i) {
               if (hasActiveBanner && i == 0) {
                 return _ActiveDeliveriesBanner(orders: activeOrders);
               }
-              final poolIndex = hasActiveBanner ? i - 1 : i;
+              final adjusted = i - bannerCount;
+              if (adjusted < groups.length) {
+                return _PoolGroupCard(poolGroup: groups[adjusted]);
+              }
+              final poolIndex = adjusted - groups.length;
               return _PoolOrderCard(poolOrder: pool[poolIndex]);
             },
           );
@@ -389,6 +402,155 @@ class _InfoRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Card for a delivery group in the pool (Round 7 multi-vendor).
+class _PoolGroupCard extends ConsumerStatefulWidget {
+  const _PoolGroupCard({required this.poolGroup});
+
+  final PoolGroup poolGroup;
+
+  @override
+  ConsumerState<_PoolGroupCard> createState() => _PoolGroupCardState();
+}
+
+class _PoolGroupCardState extends ConsumerState<_PoolGroupCard> {
+  bool _isAccepting = false;
+
+  Future<void> _accept() async {
+    setState(() => _isAccepting = true);
+    try {
+      await ref
+          .read(riderServiceProvider)
+          .acceptDeliveryGroup(widget.poolGroup.group.id);
+      if (mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => GroupDeliveryScreen(
+                groupId: widget.poolGroup.group.id),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.toString().contains('Already accepted')
+                  ? 'Already taken by another rider.'
+                  : 'Could not accept: $e',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isAccepting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final pg = widget.poolGroup;
+    final group = pg.group;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: AppSpacing.cardGap),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        side: BorderSide(color: AppColors.emerald.withValues(alpha: 0.4)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.emerald.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                  ),
+                  child: Text(
+                    'Multi-Vendor (${pg.legCount} stops)',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: AppColors.emerald,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  group.shortId,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            _InfoRow(
+              icon: Icons.storefront,
+              label: 'Vendors',
+              value: pg.vendorNames.join(', '),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            _InfoRow(
+              icon: Icons.location_on_outlined,
+              label: 'Deliver to',
+              value: group.deliveryLocation ?? '—',
+            ),
+            if (group.studentNote != null) ...[
+              const SizedBox(height: AppSpacing.sm),
+              _InfoRow(
+                icon: Icons.sticky_note_2_outlined,
+                label: 'Note',
+                value: group.studentNote!,
+              ),
+            ],
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                Text(
+                  switch (group.deliveryType) {
+                    'campus_delivery' => 'Campus',
+                    'hostel_delivery' => 'Hostel',
+                    _ => 'Delivery',
+                  },
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+                const Spacer(),
+                SizedBox(
+                  height: 40,
+                  child: FilledButton(
+                    onPressed: _isAccepting ? null : _accept,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.emerald,
+                    ),
+                    child: _isAccepting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.pureWhite,
+                            ),
+                          )
+                        : const Text('Accept Group'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

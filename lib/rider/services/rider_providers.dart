@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/models/delivery_group.dart';
 import '../../shared/models/order.dart';
 import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/notifications/notification_inbox_service.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
 import '../delivery/delivery_record.dart';
+import '../pool/pool_group.dart';
 import '../pool/pool_order.dart';
 import 'rider_service.dart';
 
@@ -21,6 +23,11 @@ final riderServiceProvider = Provider<RiderService>((ref) {
 /// order accepted by another rider, etc.).
 final jobPoolProvider = StreamProvider<List<PoolOrder>>((ref) {
   return ref.watch(riderServiceProvider).streamJobPool();
+});
+
+/// Live stream of delivery groups in the pool (committed, unassigned).
+final groupPoolProvider = StreamProvider<List<PoolGroup>>((ref) {
+  return ref.watch(riderServiceProvider).streamGroupPool();
 });
 
 /// Streams the rider's active deliveries (out_for_delivery).
@@ -52,4 +59,17 @@ final activeDeliveryDetailProvider =
   final order = orders.where((o) => o.id == orderId).firstOrNull;
   if (order == null) return null;
   return ref.read(riderServiceProvider).fetchActiveDeliveryDetail(order);
+});
+
+/// Live stream of a single delivery group by ID. Used by GroupDeliveryScreen.
+final groupDetailProvider =
+    StreamProvider.family<DeliveryGroup?, String>((ref, groupId) {
+  return ref.watch(riderServiceProvider).streamGroupDetail(groupId);
+});
+
+/// Order legs for a delivery group. Invalidate to re-fetch after
+/// confirming a leg pickup.
+final groupLegsProvider =
+    FutureProvider.family<List<Order>, String>((ref, groupId) async {
+  return ref.read(riderServiceProvider).fetchGroupLegs(groupId);
 });
