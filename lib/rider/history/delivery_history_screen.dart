@@ -100,8 +100,9 @@ class _HistoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final typeLabel = record.orderType == 'around' ? 'Around' : 'Food';
-    final typeColor = record.orderType == 'around'
+    final isErrand = record.orderType == 'around' || record.orderType == 'errand';
+    final typeLabel = isErrand ? 'Errand' : 'Food';
+    final typeColor = isErrand
         ? AppColors.accentViolet
         : AppColors.emerald;
 
@@ -124,7 +125,7 @@ class _HistoryCard extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                record.orderType == 'around'
+                isErrand
                     ? Icons.directions_bike_outlined
                     : Icons.delivery_dining_outlined,
                 color: typeColor,

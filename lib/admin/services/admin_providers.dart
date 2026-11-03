@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../shared/models/around_category.dart';
+import '../../shared/models/errand_category.dart';
 import '../../shared/models/order.dart';
 import '../../shared/models/product.dart';
 import '../../shared/models/advertisement.dart';
@@ -59,11 +59,11 @@ final adminRidersProvider = FutureProvider<List<RiderAccount>>((ref) async {
   return ref.watch(adminServiceProvider).fetchRiders();
 });
 
-/// Post-testing fixes, Section 9: all Around categories (active +
-/// inactive) for the admin management screen under the Manage hub.
-final adminAroundCategoriesProvider =
-    FutureProvider<List<AroundCategoryData>>((ref) async {
-  return ref.watch(adminServiceProvider).fetchAllAroundCategories();
+/// All Errand categories (active + inactive) for the admin management
+/// screen under the Manage hub.
+final adminErrandCategoriesProvider =
+    FutureProvider<List<ErrandCategoryData>>((ref) async {
+  return ref.watch(adminServiceProvider).fetchAllErrandCategories();
 });
 
 /// Phase 10: every referral code Admin has minted, with usage counts.

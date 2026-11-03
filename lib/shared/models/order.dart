@@ -140,7 +140,7 @@ class Order {
   /// the student ordered from.
   final String source;
 
-  /// 'food' | 'around'
+  /// 'food' | 'errand' (legacy: 'around')
   final String type;
 
   final double totalAmount;
@@ -194,7 +194,7 @@ class Order {
 
   // ── Part B: commitment fee + adjustable order ──────────────────────
 
-  /// True once the ₦300 commitment fee has been deducted (partner/around).
+  /// True once the commitment fee has been deducted (partner/errand).
   final bool commitmentFeePaid;
 
   /// The commitment fee amount that was deducted (₦300 normally).
@@ -211,7 +211,8 @@ class Order {
   String get shortId => '#${id.substring(0, 8).toUpperCase()}';
 
   bool get isFood => type == 'food';
-  bool get isAround => type == 'around';
+  bool get isErrand => type == 'errand' || type == 'around';
+  bool get isAround => isErrand;
   bool get isForDelivery => deliveryType == 'delivery' ||
       deliveryType == 'campus_delivery' ||
       deliveryType == 'hostel_delivery';

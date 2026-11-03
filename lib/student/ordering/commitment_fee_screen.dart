@@ -12,6 +12,7 @@ import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/buttons/secondary_button.dart';
 import '../../shared/widgets/pin/pin_entry_sheet.dart';
+import '../../shared/widgets/sheets/acknowledgment_sheet.dart';
 import 'order_confirmation_screen.dart';
 import 'order_repository.dart';
 
@@ -22,28 +23,25 @@ import 'order_repository.dart';
 /// 2. **Single order** (Around/legacy): [order] provided.
 ///    Calls `pay_commitment_fee` RPC.
 class CommitmentFeeScreen extends ConsumerStatefulWidget {
-  /// Delivery group mode (Round 7 multi-vendor flow).
+  /// Delivery group mode (Round 7/8 multi-vendor flow).
   const CommitmentFeeScreen({
     super.key,
     required this.groupId,
     required this.commitmentFeeTotal,
-    required this.deliveryFeePerVendor,
     required this.vendorCount,
   }) : order = null;
 
-  /// Single-order mode (Around requests, legacy partner orders).
+  /// Single-order mode (Errand requests, legacy partner orders).
   const CommitmentFeeScreen.forOrder({
     super.key,
     required this.order,
   })  : groupId = null,
        commitmentFeeTotal = 0,
-       deliveryFeePerVendor = 0,
        vendorCount = 0;
 
   // Delivery group mode params.
   final String? groupId;
   final double commitmentFeeTotal;
-  final double deliveryFeePerVendor;
   final int vendorCount;
 
   // Single-order mode param.
@@ -60,6 +58,7 @@ const _singleOrderCommitmentFee = 300.0;
 
 class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
   bool _isLoading = false;
+  bool _isSubmitting = false;
   String? _error;
 
   double get _fee => widget._isGroupMode
@@ -67,6 +66,26 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
       : _singleOrderCommitmentFee;
 
   Future<void> _pay() async {
+    if (_isSubmitting) return;
+
+    final ok = await showAcknowledgmentSheet(
+      context,
+      message:
+          'This fee is non-refundable and will be deducted from your wallet '
+          'immediately. A rider will be dispatched to source your items.',
+    );
+    if (!ok || !mounted) return;
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      await _doPay();
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Future<void> _doPay() async {
     final hasPin =
         await ref.read(profileServiceProvider).hasTransactionPin();
     if (!mounted) return;
@@ -266,8 +285,8 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
                     ],
                     const SizedBox(height: AppSpacing.sm),
                     Text(
-                      widget.order!.type == 'around'
-                          ? 'Around / Errand request'
+                      widget.order!.isErrand
+                          ? 'Errand request'
                           : 'Partner vendor order',
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: theme.colorScheme.onSurface
@@ -295,9 +314,9 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
                   if (widget._isGroupMode && widget.vendorCount > 1)
                     _FeeRow(
                       label:
-                          'Delivery fee × ${widget.vendorCount} vendors',
+                          'Delivery fee (${widget.vendorCount} vendors)',
                       value:
-                          '₦${widget.deliveryFeePerVendor.toStringAsFixed(0)} each',
+                          '₦${widget.commitmentFeeTotal.toStringAsFixed(0)}',
                       theme: theme,
                       bold: false,
                     ),
@@ -428,9 +447,9 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
                 label:
                     'Pay ₦${fee.toStringAsFixed(0)} and dispatch rider',
                 icon: Icons.send_outlined,
-                isLoading: _isLoading,
+                isLoading: _isLoading || _isSubmitting,
                 onPressed:
-                    (hasSufficientBalance && !_isLoading) ? _pay : null,
+                    (hasSufficientBalance && !_isLoading && !_isSubmitting) ? _pay : null,
               ),
               const SizedBox(height: AppSpacing.sm),
               SecondaryButton(

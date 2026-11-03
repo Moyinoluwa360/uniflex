@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/models/custom_order_item.dart';
+import '../../shared/models/delivery_group.dart';
+import '../../shared/models/delivery_location.dart';
 import '../../shared/models/order.dart';
 import '../../shared/models/order_item.dart';
 import '../../shared/models/vendor.dart';
@@ -90,6 +92,121 @@ Future<List<Order>> _attachVendorNames(
   }).toList();
 }
 
+/// Delivery groups for the signed-in student, newest first, live via
+/// Supabase Realtime. Used by the orders screen to show multi-vendor
+/// checkouts as a single entry.
+final studentDeliveryGroupsProvider =
+    StreamProvider<List<DeliveryGroup>>((ref) {
+  final client = ref.watch(supabaseClientProvider);
+  final user = client.auth.currentUser;
+  if (user == null) return Stream.value(const []);
+  return _streamStudentDeliveryGroups(client, user.id);
+});
+
+Stream<List<DeliveryGroup>> _streamStudentDeliveryGroups(
+  SupabaseClient client,
+  String userId,
+) async* {
+  Future<List<DeliveryGroup>> fetchGroups() async {
+    final rows = await client
+        .from('delivery_groups')
+        .select()
+        .eq('student_id', userId)
+        .order('created_at', ascending: false);
+    return rows.map((m) => DeliveryGroup.fromMap(m)).toList();
+  }
+
+  yield await fetchGroups();
+
+  try {
+    final stream = client
+        .from('delivery_groups')
+        .stream(primaryKey: ['id'])
+        .eq('student_id', userId)
+        .order('created_at', ascending: false);
+
+    await for (final _ in stream) {
+      yield await fetchGroups();
+    }
+  } catch (_) {
+    // Realtime failed; initial data is already showing.
+  }
+}
+
+/// A unified entry for the student orders screen — either a standalone
+/// Order (pickup / errand) or a DeliveryGroup (delivery orders).
+class StudentOrderEntry {
+  const StudentOrderEntry.fromOrder(this.order) : group = null;
+  const StudentOrderEntry.fromGroup(this.group) : order = null;
+
+  final Order? order;
+  final DeliveryGroup? group;
+
+  bool get isGroup => group != null;
+  String get id => isGroup ? group!.id : order!.id;
+  String get shortId => isGroup ? group!.shortId : order!.shortId;
+  DateTime get createdAt => isGroup ? group!.createdAt : order!.createdAt;
+
+  bool get isTerminal =>
+      isGroup ? group!.isTerminal : order!.status.isTerminal;
+
+  bool get isActive => !isTerminal;
+
+  String get statusLabel {
+    if (isGroup) return group!.status.label;
+    return order!.status.label;
+  }
+}
+
+/// A single delivery group by ID, live via Supabase Realtime. Used by
+/// the group tracking screen.
+final groupByIdProvider =
+    StreamProvider.family<DeliveryGroup?, String>((ref, groupId) {
+  final client = ref.watch(supabaseClientProvider);
+  return _streamGroupById(client, groupId);
+});
+
+Stream<DeliveryGroup?> _streamGroupById(
+  SupabaseClient client,
+  String groupId,
+) async* {
+  Future<DeliveryGroup?> fetch() async {
+    final rows = await client
+        .from('delivery_groups')
+        .select()
+        .eq('id', groupId)
+        .limit(1);
+    if (rows.isEmpty) return null;
+    return DeliveryGroup.fromMap(rows.first);
+  }
+
+  yield await fetch();
+
+  try {
+    final stream = client
+        .from('delivery_groups')
+        .stream(primaryKey: ['id'])
+        .eq('id', groupId);
+
+    await for (final _ in stream) {
+      yield await fetch();
+    }
+  } catch (_) {}
+}
+
+/// Order legs belonging to a delivery group, with vendor names attached.
+/// Used by the group tracking screen to show per-vendor breakdowns.
+final groupLegsForStudentProvider =
+    FutureProvider.family<List<Order>, String>((ref, groupId) async {
+  final client = ref.watch(supabaseClientProvider);
+  final rows = await client
+      .from('orders')
+      .select()
+      .eq('delivery_group_id', groupId)
+      .order('created_at');
+  return _attachVendorNames(client, rows);
+});
+
 /// A single order by ID, live via Supabase Realtime, with its line items
 /// populated. Used by the tracking screen — a Kitchen/rider status change
 /// now reaches this screen without the student tapping refresh.
@@ -169,6 +286,28 @@ double deliveryFeePerVendor(Map<String, String> settings, String deliveryType) {
 }
 
 // ---------------------------------------------------------------------------
+// Delivery locations (Round 8 — named locations with prices)
+// ---------------------------------------------------------------------------
+
+/// Active delivery locations from the `delivery_locations` table.
+final deliveryLocationsProvider =
+    FutureProvider<List<DeliveryLocation>>((ref) async {
+  final client = ref.watch(supabaseClientProvider);
+  final result = await client.rpc('get_delivery_locations');
+  final rows = (result as List).cast<Map<String, dynamic>>();
+  return rows.map((m) => DeliveryLocation.fromMap(m)).toList();
+});
+
+/// Pack-bracket calculation: how many brackets a vendor's packs fill.
+/// 0 packs (drinks/others only) → 1×, 1–3 → 1×, 4–6 → 2×, 7–9 → 3×, etc.
+int packBrackets(int foodPacks) =>
+    foodPacks <= 0 ? 1 : ((foodPacks + 2) ~/ 3);
+
+/// Delivery fee for one vendor given the location price and pack count.
+double vendorDeliveryFee(double locationPrice, int foodPacks) =>
+    locationPrice * packBrackets(foodPacks);
+
+// ---------------------------------------------------------------------------
 // Write notifier
 // ---------------------------------------------------------------------------
 
@@ -199,13 +338,11 @@ class MultiVendorOrderResult {
   const MultiVendorOrderResult({
     required this.groupId,
     required this.commitmentFeeTotal,
-    required this.deliveryFeePerVendor,
     required this.vendorCount,
   });
 
   final String groupId;
   final double commitmentFeeTotal;
-  final double deliveryFeePerVendor;
   final int vendorCount;
 }
 
@@ -430,6 +567,8 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
     String? deliveryLocation,
     String? studentNote,
     DateTime? scheduledFor,
+    String? deliveryLocationId,
+    String? locationDetails,
   }) async {
     final cart = ref.read(cartProvider);
     if (cart.isEmpty) return null;
@@ -495,14 +634,16 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
           if (scheduledFor != null)
             'p_scheduled_for': scheduledFor.toUtc().toIso8601String(),
           'p_legs': legs,
+          if (deliveryLocationId != null)
+            'p_delivery_location_id': deliveryLocationId,
+          if (locationDetails != null)
+            'p_location_details': locationDetails,
         },
       ) as Map<String, dynamic>;
 
       final groupId = result['group_id'] as String;
       final commitmentFee =
           (result['commitment_fee_total'] as num?)?.toDouble() ?? 0;
-      final feePerVendor =
-          (result['delivery_fee_per_vendor'] as num?)?.toDouble() ?? 0;
       final vendorCount = result['vendor_count'] as int? ?? legs.length;
 
       ref.read(cartProvider.notifier).clear();
@@ -512,7 +653,6 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
       return MultiVendorOrderResult(
         groupId: groupId,
         commitmentFeeTotal: commitmentFee,
-        deliveryFeePerVendor: feePerVendor,
         vendorCount: vendorCount,
       );
     } catch (e) {
@@ -521,10 +661,10 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
     }
   }
 
-  /// Places an Around request (errand, laundry, hostel transfer, etc.).
+  /// Places an Errand request (laundry, hostel transfer, etc.).
   /// [categoryKey] and [fee] come from the admin-configurable
-  /// `around_categories` table (Section 9) rather than a hardcoded enum.
-  Future<Order?> placeAroundRequest({
+  /// `errand_categories` table rather than a hardcoded enum.
+  Future<Order?> placeErrandRequest({
     required String categoryKey,
     required double fee,
     required String pickupLocation,
@@ -537,7 +677,7 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
       final client = ref.read(supabaseClientProvider);
 
       final result = await client.rpc(
-        'place_around_with_payment',
+        'place_errand_with_payment',
         params: {
           'p_category': categoryKey,
           'p_pickup_location': pickupLocation,
@@ -561,7 +701,7 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
         id: orderId,
         studentId: client.auth.currentUser!.id,
         source: 'uniflex',
-        type: 'around',
+        type: 'errand',
         status: OrderStatus.placed,
         deliveryType: 'delivery',
         totalAmount: fee,
@@ -583,24 +723,26 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
     }
   }
 
-  /// Places an Around request without upfront payment.
-  /// Used by the staged commitment-fee flow — the ₦300 commitment fee
-  /// and the final flat fee are paid via [pay_commitment_fee] and
+  /// Places an Errand request without upfront payment.
+  /// Used by the staged commitment-fee flow — the commitment fee
+  /// and the errand fee are paid via [pay_commitment_fee] and
   /// [pay_final_amount] respectively.
-  Future<Order?> placeAroundRequestStaged({
+  Future<Order?> placeErrandRequestStaged({
     required String categoryKey,
     required double flatFee,
     required String pickupLocation,
     required String dropoffLocation,
     required String itemDescription,
     String? notes,
+    String? deliveryLocationId,
+    String? locationDetails,
   }) async {
     state = const OrderPlacementState(isLoading: true);
     try {
       final client = ref.read(supabaseClientProvider);
 
       final result = await client.rpc(
-        'place_around_order',
+        'place_errand_order',
         params: {
           'p_category': categoryKey,
           'p_pickup_location': pickupLocation,
@@ -608,6 +750,10 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
           'p_item_description': itemDescription,
           'p_flat_fee': flatFee,
           if (notes != null && notes.isNotEmpty) 'p_notes': notes,
+          if (deliveryLocationId != null)
+            'p_delivery_location_id': deliveryLocationId,
+          if (locationDetails != null)
+            'p_location_details': locationDetails,
         },
       ) as Map<String, dynamic>;
 
@@ -617,7 +763,7 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
         id: orderId,
         studentId: client.auth.currentUser!.id,
         source: 'uniflex',
-        type: 'around',
+        type: 'errand',
         status: OrderStatus.placed,
         deliveryType: 'delivery',
         totalAmount: flatFee,

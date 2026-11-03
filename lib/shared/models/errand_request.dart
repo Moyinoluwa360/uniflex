@@ -1,11 +1,11 @@
-/// Details of an Around request, stored in `around_requests` and linked
+/// Details of an Errand request, stored in `errand_requests` and linked
 /// 1-to-1 with an `orders` row (which carries the status and amount).
 ///
-/// [category] is the `around_categories.key` foreign key (post-testing
-/// fixes, Section 9) — a plain string rather than a closed enum, since
-/// Admin can add new categories at any time from the Manage hub.
-class AroundRequest {
-  const AroundRequest({
+/// [category] is the `errand_categories.key` foreign key — a plain string
+/// rather than a closed enum, since Admin can add new categories at any
+/// time from the Manage hub.
+class ErrandRequest {
+  const ErrandRequest({
     required this.id,
     required this.orderId,
     required this.category,
@@ -15,8 +15,8 @@ class AroundRequest {
     required this.estimatedFee,
   });
 
-  factory AroundRequest.fromMap(Map<String, dynamic> map) {
-    return AroundRequest(
+  factory ErrandRequest.fromMap(Map<String, dynamic> map) {
+    return ErrandRequest(
       id: map['id'] as String,
       orderId: map['order_id'] as String,
       category: map['category'] as String,

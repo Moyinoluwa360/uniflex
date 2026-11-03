@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../shared/models/advertisement.dart';
-import '../../shared/models/around_category.dart';
+import '../../shared/models/errand_category.dart';
 import '../../shared/models/vendor.dart';
 import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/notifications/notification_inbox_service.dart';
@@ -13,14 +13,16 @@ import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../../shared/widgets/media/app_image.dart';
 import '../../shared/widgets/navigation/app_bottom_nav_shell.dart';
-import '../around/around_category_providers.dart';
-import '../around/around_screen.dart';
+import '../errand/errand_category_providers.dart';
+import '../errand/errand_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../ordering/cart_provider.dart';
 import '../ordering/cart_screen.dart';
 import '../ordering/catalog_screen.dart';
 import '../ordering/product_repository.dart';
 import '../services/student_providers.dart';
+import 'all_vendors_screen.dart';
+import 'search_screen.dart';
 
 /// Index of the Wallet tab in [StudentShell] — used by the header's
 /// "Top up" affordance to jump straight to it.
@@ -41,7 +43,7 @@ final List<BoxShadow> _cardGlow = [
   ),
 ];
 
-enum _HomeMode { foodDelivery, around }
+enum _HomeMode { foodDelivery, errand }
 
 class StudentHomeScreen extends ConsumerStatefulWidget {
   const StudentHomeScreen({super.key});
@@ -97,15 +99,19 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> {
           ),
           if (isFood) ...[
             const SliverToBoxAdapter(child: _PromoBannerCarousel()),
-            const SliverToBoxAdapter(
+            SliverToBoxAdapter(
               child: _SectionHeader(
                 title: 'Vendors around you',
                 action: 'See all',
+                onAction: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => const AllVendorsScreen()),
+                ),
               ),
             ),
             const SliverToBoxAdapter(child: _VendorList()),
           ] else ...[
-            const SliverToBoxAdapter(child: _AroundServiceGrid()),
+            const SliverToBoxAdapter(child: _ErrandServiceGrid()),
             const SliverToBoxAdapter(child: _RunnersOnline()),
           ],
           const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.xl)),
@@ -313,8 +319,8 @@ class _HomeHeader extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
           // Search bar — dark surface in dark mode, white in light
           GestureDetector(
-            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Search coming soon')),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const SearchScreen()),
             ),
             child: Container(
               height: AppSpacing.controlHeight - 8,
@@ -425,9 +431,10 @@ class _TopUpButton extends StatelessWidget {
 // ── Section header ───────────────────────────────────────────────────────────
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, this.action});
+  const _SectionHeader({required this.title, this.action, this.onAction});
   final String title;
   final String? action;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -444,10 +451,13 @@ class _SectionHeader extends StatelessWidget {
         children: [
           Text(title, style: theme.textTheme.titleMedium),
           if (action != null)
-            Text(
-              action!,
-              style: theme.textTheme.labelMedium
-                  ?.copyWith(color: theme.colorScheme.primary),
+            GestureDetector(
+              onTap: onAction,
+              child: Text(
+                action!,
+                style: theme.textTheme.labelMedium
+                    ?.copyWith(color: theme.colorScheme.primary),
+              ),
             ),
         ],
       ),
@@ -488,10 +498,10 @@ class _ModeToggle extends StatelessWidget {
               onTap: () => onChanged(_HomeMode.foodDelivery),
             ),
             _ToggleTab(
-              label: 'Around',
+              label: 'Errand',
               icon: Icons.explore_outlined,
-              selected: mode == _HomeMode.around,
-              onTap: () => onChanged(_HomeMode.around),
+              selected: mode == _HomeMode.errand,
+              onTap: () => onChanged(_HomeMode.errand),
             ),
           ],
         ),
@@ -539,7 +549,7 @@ class _ToggleTab extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                selected && label == 'Around'
+                selected && label == 'Errand'
                     ? Icons.check_circle
                     : icon,
                 size: 16,
@@ -1099,17 +1109,17 @@ class _Badge extends StatelessWidget {
   }
 }
 
-// ── Around service grid ──────────────────────────────────────────────────────
+// ── Errand service grid ──────────────────────────────────────────────────────
 
-/// Reads categories from the admin-configurable `around_categories` table
-/// (post-testing fixes, Section 9) instead of a hardcoded enum, so
-/// add/edit/remove from the admin Manage hub shows up here immediately.
-class _AroundServiceGrid extends ConsumerWidget {
-  const _AroundServiceGrid();
+/// Reads categories from the admin-configurable `errand_categories` table
+/// instead of a hardcoded enum, so add/edit/remove from the admin Manage
+/// hub shows up here immediately.
+class _ErrandServiceGrid extends ConsumerWidget {
+  const _ErrandServiceGrid();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final categoriesAsync = ref.watch(activeAroundCategoriesProvider);
+    final categoriesAsync = ref.watch(activeErrandCategoriesProvider);
     final theme = Theme.of(context);
 
     return Padding(
@@ -1125,14 +1135,14 @@ class _AroundServiceGrid extends ConsumerWidget {
           child: Center(child: CircularProgressIndicator()),
         ),
         error: (e, _) => RetrySection(
-          message: 'Could not load Around categories.',
-          onRetry: () => ref.invalidate(activeAroundCategoriesProvider),
+          message: 'Could not load errand categories.',
+          onRetry: () => ref.invalidate(activeErrandCategoriesProvider),
           compact: true,
         ),
         data: (categories) {
           if (categories.isEmpty) {
             return Text(
-              'No Around services available right now.',
+              'No errand services available right now.',
               style: theme.textTheme.bodyMedium,
             );
           }
@@ -1145,7 +1155,7 @@ class _AroundServiceGrid extends ConsumerWidget {
             childAspectRatio: 1.5,
             children: [
               for (final category in categories)
-                _AroundServiceCard(category: category),
+                _ErrandServiceCard(category: category),
             ],
           );
         },
@@ -1154,16 +1164,16 @@ class _AroundServiceGrid extends ConsumerWidget {
   }
 }
 
-class _AroundServiceCard extends StatelessWidget {
-  const _AroundServiceCard({required this.category});
-  final AroundCategoryData category;
+class _ErrandServiceCard extends StatelessWidget {
+  const _ErrandServiceCard({required this.category});
+  final ErrandCategoryData category;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return InkWell(
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => AroundScreen(category: category)),
+        MaterialPageRoute(builder: (_) => ErrandScreen(category: category)),
       ),
       borderRadius: BorderRadius.circular(AppRadius.card),
       child: Container(
@@ -1210,7 +1220,7 @@ class _AroundServiceCard extends StatelessWidget {
 
 // ── Rider availability ───────────────────────────────────────────────────────
 
-/// Anonymous availability indicator for Around requests. Deliberately shows
+/// Anonymous availability indicator for Errand requests. Deliberately shows
 /// no individual rider's name or an "online" status tied to a person — just
 /// a dot signalling whether riders are available nearby right now.
 class _RunnersOnline extends ConsumerWidget {
@@ -1221,7 +1231,7 @@ class _RunnersOnline extends ConsumerWidget {
     final theme = Theme.of(context);
     final ridersAvailableAsync = ref.watch(ridersAvailableNearbyProvider);
     final ridersAvailable = ridersAvailableAsync.valueOrNull ?? false;
-    final categories = ref.watch(activeAroundCategoriesProvider).valueOrNull;
+    final categories = ref.watch(activeErrandCategoriesProvider).valueOrNull;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -1280,7 +1290,7 @@ class _RunnersOnline extends ConsumerWidget {
                           );
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) => AroundScreen(category: errand),
+                              builder: (_) => ErrandScreen(category: errand),
                             ),
                           );
                         },

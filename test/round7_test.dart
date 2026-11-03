@@ -335,12 +335,10 @@ void main() {
       const result = MultiVendorOrderResult(
         groupId: 'g1',
         commitmentFeeTotal: 600,
-        deliveryFeePerVendor: 200,
         vendorCount: 3,
       );
       expect(result.groupId, 'g1');
       expect(result.commitmentFeeTotal, 600);
-      expect(result.deliveryFeePerVendor, 200);
       expect(result.vendorCount, 3);
     });
   });

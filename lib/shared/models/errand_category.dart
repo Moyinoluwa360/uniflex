@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 
-/// An Around service category, admin-configurable via the `Manage` hub
-/// (post-testing fixes, Section 9) — replaces the old hardcoded
-/// `AroundCategory` enum. Students only ever see active rows; Admin can
-/// see and edit inactive ones too.
-class AroundCategoryData {
-  const AroundCategoryData({
+/// An Errand service category, admin-configurable via the `Manage` hub.
+/// Students only ever see active rows; Admin can see and edit inactive
+/// ones too.
+class ErrandCategoryData {
+  const ErrandCategoryData({
     required this.id,
     required this.key,
     required this.title,
@@ -17,8 +16,8 @@ class AroundCategoryData {
     required this.sortOrder,
   });
 
-  factory AroundCategoryData.fromMap(Map<String, dynamic> map) {
-    return AroundCategoryData(
+  factory ErrandCategoryData.fromMap(Map<String, dynamic> map) {
+    return ErrandCategoryData(
       id: map['id'] as String,
       key: map['key'] as String,
       title: map['title'] as String,

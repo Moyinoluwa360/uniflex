@@ -12,11 +12,20 @@ import 'checkout_screen.dart';
 /// Cart review screen — shows items grouped by vendor, allows quantity
 /// adjustments and removal, displays the running subtotal, and
 /// leads to checkout.
-class CartScreen extends ConsumerWidget {
+class CartScreen extends ConsumerStatefulWidget {
   const CartScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CartScreen> createState() => _CartScreenState();
+}
+
+class _CartScreenState extends ConsumerState<CartScreen> {
+  /// Which vendor groups are expanded (by vendor ID).
+  late Set<String> _expandedVendors;
+  bool _initialized = false;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cart = ref.watch(cartProvider);
 
@@ -61,6 +70,13 @@ class CartScreen extends ConsumerWidget {
     final vendorGroups = cart.groups.values
         .where((g) => !g.isEmpty)
         .toList();
+    final isMultiVendor = vendorGroups.length > 1;
+
+    // Initialize expanded set once with the first vendor open.
+    if (!_initialized && vendorGroups.isNotEmpty) {
+      _expandedVendors = {vendorGroups.first.vendor.id};
+      _initialized = true;
+    }
 
     return Scaffold(
       appBar: UniflexAppBar(
@@ -82,97 +98,129 @@ class CartScreen extends ConsumerWidget {
         itemCount: vendorGroups.length,
         itemBuilder: (context, gi) {
           final group = vendorGroups[gi];
+          final isExpanded =
+              !isMultiVendor || _expandedVendors.contains(group.vendor.id);
+
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Vendor header
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.screenGutter,
-                  AppSpacing.md,
-                  AppSpacing.screenGutter,
-                  AppSpacing.sm,
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.storefront,
-                        size: 18, color: theme.colorScheme.primary),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        'From ${group.vendor.name}',
-                        style: theme.textTheme.titleSmall,
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => ref
-                          .read(cartProvider.notifier)
-                          .removeVendor(group.vendor.id),
-                      icon: const Icon(Icons.close, size: 18),
-                      tooltip: 'Remove all from ${group.vendor.name}',
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ],
-                ),
-              ),
-
-              // Pack info (if packs exist)
-              if (group.packCount > 0)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.screenGutter,
-                  ),
-                  child: Container(
-                    padding: const EdgeInsets.all(AppSpacing.sm),
-                    decoration: BoxDecoration(
-                      color:
-                          AppColors.emerald.withValues(alpha: 0.08),
-                      borderRadius:
-                          BorderRadius.circular(AppRadius.control),
+              // Vendor header — tappable accordion when multi-vendor.
+              if (isMultiVendor)
+                InkWell(
+                  onTap: () => setState(() {
+                    if (_expandedVendors.contains(group.vendor.id)) {
+                      _expandedVendors.remove(group.vendor.id);
+                    } else {
+                      _expandedVendors.add(group.vendor.id);
+                    }
+                  }),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.screenGutter,
+                      AppSpacing.md,
+                      AppSpacing.screenGutter,
+                      AppSpacing.sm,
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.inventory_2_outlined,
-                            size: 16, color: AppColors.emerald),
+                        Icon(Icons.storefront,
+                            size: 18, color: theme.colorScheme.primary),
                         const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            'From ${group.vendor.name}',
+                            style: theme.textTheme.titleSmall,
+                          ),
+                        ),
                         Text(
-                          '${group.packCount} pack${group.packCount > 1 ? 's' : ''}'
-                          ' · ₦${group.packFee.toStringAsFixed(0)}',
-                          style: theme.textTheme.labelMedium
-                              ?.copyWith(color: AppColors.emerald),
+                          '${group.items.length} item${group.items.length == 1 ? '' : 's'}',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSurface
+                                .withValues(alpha: 0.5),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        AnimatedRotation(
+                          turns: isExpanded ? 0.5 : 0,
+                          duration: const Duration(milliseconds: 200),
+                          child: Icon(
+                            Icons.expand_more,
+                            size: 20,
+                            color: theme.colorScheme.onSurface
+                                .withValues(alpha: 0.5),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => ref
+                              .read(cartProvider.notifier)
+                              .removeVendor(group.vendor.id),
+                          icon: const Icon(Icons.close, size: 18),
+                          tooltip: 'Remove all from ${group.vendor.name}',
+                          visualDensity: VisualDensity.compact,
                         ),
                       ],
                     ),
                   ),
                 ),
 
-              // Items
-              ...group.items.asMap().entries.map((entry) {
-                final localIdx = entry.key;
-                final item = entry.value;
-                return _CartItemTile(
-                  item: item,
-                  onDecrement: () => ref
-                      .read(cartProvider.notifier)
-                      .removeItemFromVendor(
-                          group.vendor.id,
-                          item.quantity <= 1
-                              ? localIdx
-                              : -1), // -1 = update qty
-                  onRemoveOrUpdate: (qty) {
-                    if (qty <= 0) {
-                      ref
-                          .read(cartProvider.notifier)
-                          .removeItemFromVendor(
-                              group.vendor.id, localIdx);
-                    } else {
-                      // Update quantity within this vendor's group.
-                      _updateVendorItemQty(
-                          ref, group.vendor.id, localIdx, qty);
-                    }
-                  },
-                );
-              }),
+              if (isExpanded) ...[
+                // Pack info (if packs exist)
+                if (group.packCount > 0)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.screenGutter,
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.all(AppSpacing.sm),
+                      decoration: BoxDecoration(
+                        color:
+                            AppColors.emerald.withValues(alpha: 0.08),
+                        borderRadius:
+                            BorderRadius.circular(AppRadius.control),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.inventory_2_outlined,
+                              size: 16, color: AppColors.emerald),
+                          const SizedBox(width: AppSpacing.sm),
+                          Text(
+                            '${group.packCount} pack${group.packCount > 1 ? 's' : ''}'
+                            ' · ₦${group.packFee.toStringAsFixed(0)}',
+                            style: theme.textTheme.labelMedium
+                                ?.copyWith(color: AppColors.emerald),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                // Items
+                ...group.items.asMap().entries.map((entry) {
+                  final localIdx = entry.key;
+                  final item = entry.value;
+                  return _CartItemTile(
+                    item: item,
+                    onDecrement: () => ref
+                        .read(cartProvider.notifier)
+                        .removeItemFromVendor(
+                            group.vendor.id,
+                            item.quantity <= 1
+                                ? localIdx
+                                : -1), // -1 = update qty
+                    onRemoveOrUpdate: (qty) {
+                      if (qty <= 0) {
+                        ref
+                            .read(cartProvider.notifier)
+                            .removeItemFromVendor(
+                                group.vendor.id, localIdx);
+                      } else {
+                        _updateVendorItemQty(
+                            ref, group.vendor.id, localIdx, qty);
+                      }
+                    },
+                  );
+                }),
+              ],
 
               if (gi < vendorGroups.length - 1)
                 const Divider(height: AppSpacing.lg),
@@ -231,7 +279,6 @@ class CartScreen extends ConsumerWidget {
 
   void _updateVendorItemQty(
       WidgetRef ref, String vendorId, int localIdx, int qty) {
-    // Calculate the flat index for this vendor's item.
     final cart = ref.read(cartProvider);
     int flatIdx = 0;
     for (final entry in cart.groups.entries) {

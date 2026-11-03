@@ -26,7 +26,8 @@ lib/
                               # bottom nav shell, wordmark, dev placeholder screen,
                               # auth/logout_button.dart
     models/                  # Profile, Vendor, Product, Order, OrderItem, CartItem,
-                              # AroundRequest, WalletTransaction, SavingPlan — shared data
+                              # ErrandRequest, DeliveryLocation, WalletTransaction,
+                              # SavingPlan — shared data
     services/
       supabase/              # The shared SupabaseClient provider
       auth/                  # UserRole enum, AuthService, auth/profile Riverpod providers
@@ -43,12 +44,14 @@ lib/
     router/                  # AuthGate, SplashScreen, RoleRouter (see "Auth" below)
 
   student/                   # Student-only screens and navigation. Root: student_shell.dart
-    home/                    # Home screen (Food Delivery + Around mode toggle, vendor list)
-    ordering/                # Catalog (independent items, no combo-builder), Cart, Checkout
-                              # (PIN gate + pack decision), PackAllocationScreen, Confirmation
+    home/                    # Home screen (Food Delivery + Errand mode toggle, vendor list,
+                              # SearchScreen, AllVendorsScreen)
+    ordering/                # Catalog (accordion sections), Cart (multi-vendor accordion),
+                              # Checkout (location-based fees), PackBuilderScreen (accordion),
+                              # CommitmentFeeScreen, Confirmation
                               # + cart_provider, product_repository, order_repository (realtime)
-    around/                  # AroundScreen (reads categories from around_categories table)
-                              # + around_category_providers.dart (active list, rider availability)
+    errand/                  # ErrandScreen (reads categories from errand_categories table)
+                              # + errand_category_providers.dart (active list, rider availability)
     orders/                  # OrdersScreen (Cart / Preparing / Completed tabs)
     tracking/                # OrderTrackingScreen (status timeline, refreshable)
     wallet/                  # WalletScreen, PaystackCheckoutPage, SavingPlanScreen
@@ -81,19 +84,20 @@ lib/
     menu/                    # MenuManagementScreen, ProductFormScreen — Uniflex catalog CRUD
                               # (+ Requires Pack toggle, Uniflex pack price editor)
     manage/                  # ManageHubScreen — single "Manage" nav entry branching into
-                              # Vendors / Riders / Around Categories (post-testing fixes)
+                              # Vendors / Riders / Errand Categories / Delivery Locations
     vendors/                 # VendorManagementScreen, VendorFormScreen,
                               # VendorProductsScreen — partner vendor CRUD (+ pack price)
     riders/                  # RiderManagementScreen — invite/remove/reactivate riders
                               # (post-testing fixes)
-    around_categories/       # AroundCategoriesScreen, AroundCategoryFormScreen — CRUD for
-                              # the around_categories table (post-testing fixes)
+    errand_categories/       # ErrandCategoriesScreen, ErrandCategoryFormScreen — CRUD for
+                              # the errand_categories table (renamed from around_categories)
+    delivery_locations/      # DeliveryLocationsScreen — CRUD for location-based delivery fees
     profile/                 # AdminProfileScreen — name, email, tier + logout
 
   shared/
     models/                  # Profile, Vendor, Product, Order, OrderItem, CartItem,
-                              # AroundCategory, WalletTransaction, SavingPlan,
-                              # Gift, Achievement (Phase 6)
+                              # ErrandCategory, DeliveryLocation, WalletTransaction,
+                              # SavingPlan, Gift, Achievement (Phase 6)
     services/
       notifications/         # NotificationService — FCM init, token storage, local
                               # notification display (Phase 6); showLocal() is also used
@@ -102,6 +106,7 @@ lib/
       async/                 # RetrySection — reusable "failed to load, tap to retry"
                               # control used by every realtime/live data screen
       pin/                   # showEnterPinSheet / showSetPinSheet — transaction PIN UI
+      sheets/                # acknowledgment_sheet.dart — pre-payment confirmation modal
 
 supabase/
   schema.sql                 # All DDL and seed data (run by hand in Supabase SQL editor)
@@ -267,7 +272,7 @@ Phase 2 additions follow these conventions:
   Corrupted data is silently discarded (fresh cart).
 - `OrderNotifier` (`student/ordering/order_repository.dart`) — `Notifier<OrderPlacementState>`.
   Wraps the two-step Supabase write (insert `orders` row, then insert
-  `order_items` or `around_requests`). After a successful placement it
+  `order_items` or `errand_requests`). After a successful placement it
   clears the cart and invalidates `studentOrdersProvider`.
 - `vendorProductsProvider` uses `FutureProvider.family` (a one-shot
   catalog read is fine — the menu doesn't need to be live). `orderByIdProvider`
@@ -309,7 +314,7 @@ underlying Realtime event — one write, three shells update.
 Two more gaps fixed in the same pass:
 
 - **`update_order_status` had no transition guards.** Any admin call could
-  set a delivery order (food delivery or Around) straight to
+  set a delivery order (food delivery or errand) straight to
   `out_for_delivery`/`completed`, bypassing the rider PIN gate entirely.
   It's now hardened so those two statuses are only reachable through the
   existing rider workflow (`accept_order` → `confirm_pickup` →
@@ -379,18 +384,19 @@ directly, so there's one place that knows every key the app depends on.
 | Phase (indicative)              | Lives in |
 |----------------------------------|----------|
 | Onboarding & Auth ✅ (Phase 1)   | `shared/auth/`, `shared/router/auth_gate.dart` + `splash_screen.dart`, `shared/services/{auth,otp,profile,supabase}/` |
-| Student ordering flow ✅ (Phase 2)| `student/ordering/`, `student/around/`, `student/orders/`, `student/tracking/`, `student/wallet/`, `shared/models/{vendor,product,order,order_item,cart_item,around_request}.dart`, `shared/services/wallet/` |
+| Student ordering flow ✅ (Phase 2)| `student/ordering/`, `student/errand/` (was `around/`), `student/orders/`, `student/tracking/`, `student/wallet/`, `shared/models/{vendor,product,order,order_item,cart_item,errand_request}.dart`, `shared/services/wallet/` |
 | Wallet & payments ✅ (Phase 3)   | `student/wallet/`, `shared/services/{wallet,saving_plan}/`, `shared/models/{wallet_transaction,saving_plan}.dart`, `supabase/functions/{verify-paystack-payment,create-virtual-account}/` |
 | Admin & kitchen ✅ (Phase 4)     | `admin/` (all subfolders), `shared/services/` (wallet already shared), schema.sql Phase 4 block |
 | Rider delivery flow              | `rider/jobs/`, `rider/navigation/`, `rider/earnings/` |
 | Push notifications (Firebase)    | `shared/services/notifications/` |
 | Maps / live tracking             | `shared/services/maps/`, consumed from `student/tracking/` and `rider/navigation/` |
-| Post-testing fixes ✅ (first Android QA pass) | `admin/manage/`, `admin/riders/`, `admin/around_categories/`, `student/ordering/pack_allocation_screen.dart`, `shared/widgets/{async,pin}/`, `shared/models/around_category.dart`, `supabase/functions/admin-create-rider/`, schema.sql "POST-TESTING FIXES & CHANGES" block |
+| Post-testing fixes ✅ (first Android QA pass) | `admin/manage/`, `admin/riders/`, `admin/errand_categories/` (was `around_categories/`), `student/ordering/pack_allocation_screen.dart`, `shared/widgets/{async,pin}/`, `shared/models/errand_category.dart`, `supabase/functions/admin-create-rider/`, schema.sql "POST-TESTING FIXES & CHANGES" block |
 | Round 2 post-testing fixes ✅ (second QA pass) | `admin/analytics/`, `admin/admin_shell.dart` (4 tabs), `admin/manage/manage_hub_screen.dart` (expanded), `student/ordering/cart_provider.dart` (persistence), category normalization in `catalog_screen.dart`/`menu_management_screen.dart`/`product_form_screen.dart` |
 | Round 3 ✅ (commitment fee + adjustable orders) | `student/ordering/commitment_fee_screen.dart`, `student/ordering/adjust_order_screen.dart`, `order_item_flags` table, `being_sourced`/`awaiting_final_payment` statuses, `pay_commitment_fee`/`confirm_sourced_items`/`pay_final_amount` RPCs |
 | Round 4 ✅ (registration fixes + ordering overhaul) | `place_partner_food_order` RPC, `order_custom_items` table, admin referral codes (`referral_codes`/`referral_code_uses`), confirm password field, optional matric, phone normalization, partner checkout routing, notes field on orders |
 | Round 5 ✅ (PIN / payment root-cause fix) | All PIN functions + `pay_commitment_fee` re-created with `search_path = public, extensions`; `showSetPinSheet` rewritten with current-PIN detection; comprehensive `_mapError` coverage |
 | Round 7 ✅ (pack-first, multi-vendor, delivery groups) | `delivery_groups`/`delivery_settings` tables, `place_multi_vendor_order`/`pay_group_commitment_fee`/`accept_delivery_group`/`verify_group_delivery` RPCs, `PackBuilderScreen`, multi-vendor `CartState`, `GroupDeliveryScreen`, `DeliverySettingsScreen`, `deliveryFeePerVendor` helper |
+| Round 8 ✅ (locations, errands, unified orders, UI polish) | `delivery_locations` table + RPCs, location-based fees replacing `delivery_settings`, errand rename (around→errand across ~22 files), unified order identity via `delivery_groups`, accordion UI (catalog/pack builder/cart), `acknowledgment_sheet.dart`, double-tap guards, `SearchScreen`, `AllVendorsScreen`, `DeliveryLocationsScreen` |
 
 Update this table as phases land so it stays a reliable map of the repo.
 
@@ -416,8 +422,8 @@ reads/writes) is a hardening step deferred to a later phase.
 **"Manage" hub (post-testing fixes):** the `super_admin` bottom nav is
 now **Dashboard / Orders / Manage / Analytics** (4 tabs, down from 6 in
 Round 1). Menu Management, Scheduled Orders, and Profile & Settings moved
-into `ManageHubScreen` entries alongside Vendors, Riders, Around
-Categories, Referral Codes, and Advertisements. Kitchen staff see only 1
+into `ManageHubScreen` entries alongside Vendors, Riders, Errand
+Categories, Delivery Locations, Referral Codes, and Advertisements. Kitchen staff see only 1
 tab (Orders). New admin capabilities should add a hub entry, not a new
 bottom-nav tab.
 
@@ -488,8 +494,8 @@ Riders see the pool of available orders on `JobPoolScreen`, which watches
    delivery orders this now also requires `transferred_to_rider_at is not
    null`, set only by the admin "Transfer to Rider" action above; see
    "Order status sync").
-3. Batch-fetches vendor rows (partner food) and `around_requests` rows
-   (around orders) to build `PoolOrder` objects with pre-resolved pickup
+3. Batch-fetches vendor rows (partner food) and `errand_requests` rows
+   (errand orders) to build `PoolOrder` objects with pre-resolved pickup
    info.
 
 When a rider taps **Accept**, `RiderService.acceptOrder()` calls the
@@ -508,7 +514,7 @@ contact) — shown on `OrderTrackingScreen`.
 
 ## Delivery workflow and PIN gate (Phase 5)
 
-Every delivery-type order (food delivery + around) receives a unique
+Every delivery-type order (food delivery + errand) receives a unique
 4-char alphanumeric PIN, auto-generated by the `_generate_delivery_pin`
 `BEFORE INSERT` trigger. The PIN:
 - Is stored in `orders.delivery_pin` from the moment the order is placed.
@@ -552,7 +558,7 @@ configured, and calls happen only within the lifecycle of
 ## Transaction PIN (post-testing fixes)
 
 A 4-digit PIN, separate from the account password, gates every order
-payment (food checkout and Around). Storage follows the same pattern as
+payment (food checkout and errand). Storage follows the same pattern as
 `wallet_transactions`: a dedicated `transaction_pins` table with **no**
 client SELECT/INSERT/UPDATE policy at all — every read/write goes through
 a SECURITY DEFINER RPC keyed off `auth.uid()`:
@@ -565,10 +571,10 @@ a SECURITY DEFINER RPC keyed off `auth.uid()`:
 
 New students set a PIN as part of Step Two onboarding
 (`CompleteProfileScreen`). Existing accounts have none; `CheckoutScreen`
-and `AroundScreen` both call `has_transaction_pin()` before confirming and
+and `ErrandScreen` both call `has_transaction_pin()` before confirming and
 show `showSetPinSheet` first if it's false, then always
 `showEnterPinSheet`. The PIN itself is enforced **server-side**:
-`place_food_order_with_payment` and `place_around_with_payment` both take
+`place_food_order_with_payment` and `place_errand_with_payment` both take
 a `p_pin` param and raise `INVALID_PIN` via `verify_transaction_pin`
 before touching the wallet — a client bug can't skip the check.
 
@@ -626,11 +632,14 @@ the rider to the whole group. `GroupDeliveryScreen` shows per-vendor pickup
 stops; the rider confirms each leg individually, then delivers with a single
 PIN at the customer's door.
 
-**Delivery fees** are admin-editable via `delivery_settings` (key-value
-table, accessed by `get_delivery_settings` RPC). `deliveryFeePerVendor()`
-helper extracts the fee for a given delivery type, defaulting to ₦200
-(campus) / ₦300 (hostel). The commitment fee = sum of per-vendor delivery
-fees.
+**Delivery fees** are location-based as of Round 8. The `delivery_locations`
+table stores named locations (e.g. "Engineering Hostel" ₦300, "Main Campus"
+₦300) with a base price each. The student selects a location at checkout;
+per-vendor fee = `location.price × packBrackets(foodPacks)` where
+`packBrackets(n) = n <= 0 ? 1 : ((n + 2) ~/ 3)` — i.e. 1–3 packs = 1×,
+4–6 = 2×, 7–9 = 3×, etc. A vendor with zero food packs (drinks only) still
+pays 1× the base price. The commitment fee = sum of all per-vendor delivery
+fees. The old `delivery_settings` key-value table is superseded.
 
 ## Vendor menu structure (Round 7)
 
@@ -721,29 +730,29 @@ are all untouched. (A hard delete was deliberately avoided:
 `delivery_records.rider_id` is `on delete cascade`, so deleting the auth
 user would have silently wiped the rider's delivery history.)
 
-## Around categories (post-testing fixes, Section 9)
+## Errand categories (post-testing fixes Section 9, renamed Round 8)
 
-The five Around categories used to be a hardcoded `AroundCategory` enum.
-They're now rows in an `around_categories` table (`key`, `title`,
+The five Errand categories (formerly "Around") used to be a hardcoded enum.
+They're now rows in an `errand_categories` table (`key`, `title`,
 `subtitle`, `description`, `icon_name`, `flat_fee`, `is_active`,
-`sort_order`), managed from `AroundCategoriesScreen` under the Manage hub.
-`around_requests.category` is a foreign key into `around_categories.key`
+`sort_order`), managed from `ErrandCategoriesScreen` under the Manage hub.
+`errand_requests.category` is a foreign key into `errand_categories.key`
 instead of a fixed `CHECK` constraint, so adding a category needs no
 schema change. Students only ever see `is_active = true` rows
-(`activeAroundCategoriesProvider`); `AroundScreen` takes an
-`AroundCategoryData` instead of an enum value.
+(`activeErrandCategoriesProvider`); `ErrandScreen` takes an
+`ErrandCategoryData` instead of an enum value.
 
 `icon_name` is one of a small fixed set mapped to `IconData` in
-`AroundCategoryData.iconFor()` (`shared/models/around_category.dart`) —
+`ErrandCategoryData.iconFor()` (`shared/models/errand_category.dart`) —
 add a new admin-selectable icon there if a future category needs one not
 already listed.
 
 ## Anonymous rider availability (post-testing fixes, Section 10)
 
-The Around tab used to show an individual rider's name and an
-"is online" badge tied to that person (e.g. "Emeka A. · Campus rider").
-It's now a single anonymous signal: a green/grey dot plus "Riders
-available nearby" / "No riders available right now", backed by
+The Errand tab (formerly "Around") used to show an individual rider's name
+and an "is online" badge tied to that person. It's now a single anonymous
+signal: a green/grey dot plus "Riders available nearby" / "No riders
+available right now", backed by
 `any_riders_available()` (`SECURITY DEFINER`, checks whether any
 `role = 'rider' and rider_is_online and is_active` row exists) — no name
 or per-rider status ever leaves the server.

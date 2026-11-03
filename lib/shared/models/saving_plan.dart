@@ -5,7 +5,7 @@
 /// self-set budget for the current [period]. The [spent] counter is
 /// reset lazily the next time a payment is processed after the period
 /// boundary passes (handled inside the `place_food_order_with_payment`
-/// and `place_around_with_payment` Postgres RPCs).
+/// and `place_errand_with_payment` Postgres RPCs).
 class SavingPlan {
   const SavingPlan({
     required this.id,

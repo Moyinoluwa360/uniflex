@@ -56,7 +56,7 @@ class RiderService {
 
   /// Live stream of pool-eligible unassigned orders. Re-emits on every
   /// change to the `orders` table (via Supabase Realtime). Each emission
-  /// includes pre-fetched vendor / around-request info so the pool card
+  /// includes pre-fetched vendor / errand-request info so the pool card
   /// can render without additional round trips.
   Stream<List<PoolOrder>> streamJobPool() async* {
     // Helper: fetch pool-eligible orders via a one-shot REST query, then
@@ -82,7 +82,7 @@ class RiderService {
             // partner/around orders enter the pool only after the commitment
             // fee is paid (status transitions from 'placed' to 'being_sourced').
             || (source == 'partner' && status == 'being_sourced' && deliveryTypes.contains(deliveryType))
-            || (type == 'around' && status == 'being_sourced');
+            || ((type == 'around' || type == 'errand') && status == 'being_sourced');
       }).toList();
 
       if (pool.isEmpty) return [];
@@ -105,20 +105,20 @@ class RiderService {
         }
       }
 
-      // Batch-fetch around_request pickup locations for 'around' orders.
-      final aroundOrderIds = pool
-          .where((m) => m['type'] == 'around')
+      // Batch-fetch errand_request pickup locations for errand orders.
+      final errandOrderIds = pool
+          .where((m) => m['type'] == 'around' || m['type'] == 'errand')
           .map((m) => m['id'] as String)
           .toList();
 
-      final aroundById = <String, Map<String, dynamic>>{};
-      if (aroundOrderIds.isNotEmpty) {
-        final arounds = await _client
-            .from('around_requests')
+      final errandById = <String, Map<String, dynamic>>{};
+      if (errandOrderIds.isNotEmpty) {
+        final errands = await _client
+            .from('errand_requests')
             .select('order_id, pickup_location, item_description')
-            .inFilter('order_id', aroundOrderIds);
-        for (final a in arounds) {
-          aroundById[a['order_id'] as String] = a;
+            .inFilter('order_id', errandOrderIds);
+        for (final a in errands) {
+          errandById[a['order_id'] as String] = a;
         }
       }
 
@@ -128,11 +128,11 @@ class RiderService {
         String? pickupAddress;
         String orderTypeLabel;
 
-        if (order.isAround) {
-          final around = aroundById[order.id];
+        if (order.isErrand) {
+          final errand = errandById[order.id];
           pickupName = 'Customer Pickup Point';
-          pickupAddress = around?['pickup_location'] as String?;
-          orderTypeLabel = 'Around';
+          pickupAddress = errand?['pickup_location'] as String?;
+          orderTypeLabel = 'Errand';
         } else if (order.source == 'partner') {
           final vendor = vendorsById[order.vendorId ?? ''];
           pickupName = vendor?['name'] as String? ?? 'Partner Vendor';
@@ -378,9 +378,9 @@ class RiderService {
     String pickupName = 'Uniflex Kitchen';
     String? pickupAddress;
 
-    if (order.isAround) {
+    if (order.isErrand) {
       final data = await _client
-          .from('around_requests')
+          .from('errand_requests')
           .select('pickup_location')
           .eq('order_id', order.id)
           .single();
@@ -449,10 +449,10 @@ class RiderService {
     return _notifications.messageCustomer(orderId: orderId, message: message);
   }
 
-  // ── Sourcing flow (partner / around orders) ────────────────────────
+  // ── Sourcing flow (partner / errand orders) ────────────────────────
 
   /// Flags an item as unavailable while sourcing. The DB records the flag
-  /// and sends the student a notification. [orderItemId] is null for around
+  /// and sends the student a notification. [orderItemId] is null for errand
   /// requests (which have no line items).
   Future<void> flagItemUnavailable({
     required String orderId,

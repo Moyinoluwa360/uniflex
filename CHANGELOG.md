@@ -2,6 +2,88 @@
 
 All notable changes to this project are documented here, phase by phase.
 
+## Round 8 — Unified orders, location-based fees, UI polish, bug fixes (2026-11-02)
+
+### Summary
+
+Six workstreams: (A) unified order identity — delivery orders display as a
+single entry via `delivery_groups` instead of per-vendor legs; (B) delivery
+locations replace old campus/hostel fee types — named locations with
+pack-bracket pricing; (C) Around → Errand rename across all 22 files;
+(D) acknowledgment sheets before payment + double-tap guards; (E) accordion
+UI for vendor page, pack builder, and cart; (F) bug fixes for search,
+mark-all-read, and see-all vendors.
+
+### Added
+
+- **`delivery_locations` table** — named delivery destinations with base
+  prices (seeded: Engineering Hostel ₦300, Queen Esther Hall ₦200, etc.).
+  Admin CRUD via `upsert_delivery_location` / `delete_delivery_location` RPCs.
+- **`DeliveryLocation` model** (`shared/models/delivery_location.dart`).
+- **`deliveryLocationsProvider`** — fetches active locations via
+  `get_delivery_locations()` RPC.
+- **`packBrackets(int)` / `vendorDeliveryFee(double, int)`** — pack-bracket
+  fee calculation: `location.price × ceil(packs / 3)`, zero packs = 1×.
+- **`search_products` RPC** — server-side product search (ILIKE, joined with
+  vendor name, limited to 50 results).
+- **`SearchScreen`** (`student/home/search_screen.dart`) — full-screen search
+  with 300ms debounce, replaces "Search coming soon" snackbar.
+- **`AllVendorsScreen`** (`student/home/all_vendors_screen.dart`) — lists all
+  active vendors, "See all" now navigable from home.
+- **`acknowledgment_sheet.dart`** (`shared/widgets/sheets/`) — modal
+  bottom sheet with message + Continue button, shown before delivery checkout,
+  commitment fee payment, and errand confirmation.
+- **`StudentOrderEntry` union type** — unified display for delivery groups and
+  standalone orders in the student orders list.
+- **`OrderTrackingScreen.forGroup`** — group tracking with status timeline
+  and per-vendor leg breakdown.
+- **16 unit tests** (`test/round8_test.dart`) — pack brackets, vendor delivery
+  fee, worked example, DeliveryLocation model.
+
+### Changed
+
+- **Around → Errand rename** — 22 files: `around_categories` → `errand_categories`,
+  `around_requests` → `errand_requests`, all model/provider/screen class names
+  and labels updated. Home toggle "Around" → "Errand".
+- **Checkout screen** — delivery uses named locations dropdown + compulsory
+  "Location details" field instead of campus/hostel toggle. Fee calculated
+  per-vendor using pack brackets.
+- **Admin delivery settings** — CRUD for `delivery_locations` table replaces
+  the old key-value `delivery_settings` screen.
+- **Commitment fee screen** — removed `deliveryFeePerVendor` param (fee now
+  server-computed with pack brackets). Fee breakdown shows total with vendor
+  count.
+- **Errand screen** — optional delivery location dropdown for drop-off area.
+- **Catalog screen** — Drinks and Others sections now expandable accordions
+  (collapsed by default). Food section unchanged.
+- **Pack builder screen** — Meals and Proteins/Toppings now expandable
+  accordions (collapsed by default).
+- **Cart screen** — single vendor: flat list (no header). Multiple vendors:
+  expandable sections, first open by default.
+- **Student home screen** — search bar navigates to `SearchScreen`. "See all"
+  navigates to `AllVendorsScreen`. `_SectionHeader` gained `onAction` callback.
+- **Notifications screen** — mark-all-read now invalidates provider after
+  completion (was silently not refreshing).
+- **Double-tap guards** — `_isSubmitting` flag added to checkout, commitment
+  fee, and errand submit handlers.
+- **Student orders screen** — queries `delivery_groups` for delivery orders
+  and standalone `orders` for pickup/errands, presenting unified entries.
+
+### SQL Migration
+
+- `supabase/round8_migration.sql` — idempotent, run once in Supabase SQL
+  Editor. Creates `delivery_locations` table + RPCs, renames around →
+  errand tables, adds `delivery_location_id`/`location_details` to
+  `delivery_groups` and `orders`, updates `place_multi_vendor_order` with
+  pack-bracket fee calculation, adds `search_products` RPC.
+
+### Tests
+
+- 16 new Round 8 unit tests (all passing).
+- 23 existing Round 7 unit tests still passing.
+
+---
+
 ## Round 7 Hotfix — Empty vendor menus, pack builder UI (2026-11-02)
 
 ### Root cause

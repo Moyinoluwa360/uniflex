@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../shared/models/around_category.dart';
+import '../../shared/models/errand_category.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
@@ -9,21 +9,21 @@ import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../services/admin_providers.dart';
 
-/// Add or edit an Around category (post-testing fixes, Section 9).
-/// [category] is null when adding a new one. Returns `true` via
-/// `Navigator.pop` on save so the caller can refresh.
-class AroundCategoryFormScreen extends ConsumerStatefulWidget {
-  const AroundCategoryFormScreen({super.key, this.category});
+/// Add or edit an Errand category. [category] is null when adding a new
+/// one. Returns `true` via `Navigator.pop` on save so the caller can
+/// refresh.
+class ErrandCategoryFormScreen extends ConsumerStatefulWidget {
+  const ErrandCategoryFormScreen({super.key, this.category});
 
-  final AroundCategoryData? category;
+  final ErrandCategoryData? category;
 
   @override
-  ConsumerState<AroundCategoryFormScreen> createState() =>
-      _AroundCategoryFormScreenState();
+  ConsumerState<ErrandCategoryFormScreen> createState() =>
+      _ErrandCategoryFormScreenState();
 }
 
-class _AroundCategoryFormScreenState
-    extends ConsumerState<AroundCategoryFormScreen> {
+class _ErrandCategoryFormScreenState
+    extends ConsumerState<ErrandCategoryFormScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _titleCtrl;
   late final TextEditingController _subtitleCtrl;
@@ -43,7 +43,7 @@ class _AroundCategoryFormScreenState
     _descriptionCtrl = TextEditingController(text: c?.description ?? '');
     _feeCtrl = TextEditingController(text: c != null ? c.flatFee.toStringAsFixed(0) : '');
     _sortOrderCtrl = TextEditingController(text: '${c?.sortOrder ?? 0}');
-    _iconName = c?.iconName ?? AroundCategoryData.availableIconNames.first;
+    _iconName = c?.iconName ?? ErrandCategoryData.availableIconNames.first;
     _isActive = c?.isActive ?? true;
   }
 
@@ -58,7 +58,7 @@ class _AroundCategoryFormScreenState
   }
 
   /// Slugifies the title into a stable `key` for a brand-new category —
-  /// existing categories never change their key (around_requests
+  /// existing categories never change their key (errand_requests
   /// reference it via foreign key).
   String _slugify(String title) {
     final base = title
@@ -74,7 +74,7 @@ class _AroundCategoryFormScreenState
     setState(() => _isSaving = true);
 
     try {
-      await ref.read(adminServiceProvider).upsertAroundCategory(
+      await ref.read(adminServiceProvider).upsertErrandCategory(
             id: widget.category?.id,
             key: widget.category?.key ?? _slugify(_titleCtrl.text.trim()),
             title: _titleCtrl.text.trim(),
@@ -85,7 +85,7 @@ class _AroundCategoryFormScreenState
             isActive: _isActive,
             sortOrder: int.tryParse(_sortOrderCtrl.text.trim()) ?? 0,
           );
-      ref.invalidate(adminAroundCategoriesProvider);
+      ref.invalidate(adminErrandCategoriesProvider);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
@@ -148,13 +148,13 @@ class _AroundCategoryFormScreenState
                   ),
                 ),
                 items: [
-                  for (final name in AroundCategoryData.availableIconNames)
+                  for (final name in ErrandCategoryData.availableIconNames)
                     DropdownMenuItem(
                       value: name,
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(AroundCategoryData.iconFor(name), size: 18),
+                          Icon(ErrandCategoryData.iconFor(name), size: 18),
                           const SizedBox(width: AppSpacing.sm),
                           Text(name),
                         ],
@@ -193,7 +193,7 @@ class _AroundCategoryFormScreenState
                         Text(
                           _isActive
                               ? 'Visible to students'
-                              : 'Hidden from the student Around tab',
+                              : 'Hidden from the student Errand tab',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                           ),

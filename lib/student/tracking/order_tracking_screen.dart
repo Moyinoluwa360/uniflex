@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../shared/models/custom_order_item.dart';
+import '../../shared/models/delivery_group.dart';
 import '../../shared/models/order.dart';
 import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
@@ -18,15 +19,23 @@ import '../ordering/adjust_order_screen.dart';
 import '../ordering/order_repository.dart';
 
 /// Live order tracking — shows the current order status as a vertical
-/// step timeline, refreshable. The data source is [orderByIdProvider]
-/// (a FutureProvider) so swapping it for a Supabase realtime stream in
-/// Phase 3 leaves the UI unchanged.
+/// step timeline, refreshable. Supports both individual orders and
+/// delivery groups (multi-vendor checkouts shown as one entry).
 class OrderTrackingScreen extends ConsumerStatefulWidget {
-  const OrderTrackingScreen({super.key, required this.order});
+  const OrderTrackingScreen({super.key, required this.order})
+      : group = null;
 
-  /// Seed with the order at the point of navigation; refreshes from DB
-  /// on every rebuild / manual refresh.
-  final Order order;
+  /// Track a delivery group (multi-vendor delivery order).
+  const OrderTrackingScreen.forGroup({super.key, required DeliveryGroup this.group})
+      : order = null;
+
+  /// Seed order for standalone tracking. Null when tracking a group.
+  final Order? order;
+
+  /// Seed group for delivery-group tracking. Null for standalone orders.
+  final DeliveryGroup? group;
+
+  bool get isGroup => group != null;
 
   @override
   ConsumerState<OrderTrackingScreen> createState() =>
@@ -114,9 +123,20 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     };
   }
 
+  Color _groupStatusColor(DeliveryGroupStatus s) {
+    return switch (s) {
+      DeliveryGroupStatus.placed => AppColors.info,
+      DeliveryGroupStatus.commitmentPaid => AppColors.warning,
+      DeliveryGroupStatus.awaitingFinalPayment => AppColors.warning,
+      DeliveryGroupStatus.outForDelivery => AppColors.orange,
+      DeliveryGroupStatus.completed => AppColors.emerald,
+      DeliveryGroupStatus.cancelled => AppColors.error,
+    };
+  }
+
   List<_Step> _buildSteps(Order o) {
-    // Partner/around orders use the sourcing flow.
-    if (o.source == 'partner' || o.type == 'around') {
+    // Partner/errand orders use the sourcing flow.
+    if (o.source == 'partner' || o.isErrand) {
       return const [
         _Step(status: OrderStatus.placed, label: 'Order Placed'),
         _Step(
@@ -125,16 +145,6 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
         _Step(
             status: OrderStatus.awaitingFinalPayment,
             label: 'Awaiting Final Payment'),
-        _Step(status: OrderStatus.outForDelivery, label: 'Out for Delivery'),
-        _Step(status: OrderStatus.completed, label: 'Delivered'),
-      ];
-    }
-
-    if (o.isAround) {
-      return const [
-        _Step(status: OrderStatus.placed, label: 'Request Placed'),
-        _Step(status: OrderStatus.preparing, label: 'Rider on the Way'),
-        _Step(status: OrderStatus.ready, label: 'Item Picked Up'),
         _Step(status: OrderStatus.outForDelivery, label: 'Out for Delivery'),
         _Step(status: OrderStatus.completed, label: 'Delivered'),
       ];
@@ -161,16 +171,27 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.isGroup) return _buildGroupTracking(context);
+    return _buildOrderTracking(context);
+  }
+
+  // ── Group tracking ──────────────────────────────────────────────────
+
+  Widget _buildGroupTracking(BuildContext context) {
     final theme = Theme.of(context);
-    final liveAsync = ref.watch(orderByIdProvider(widget.order.id));
+    final seed = widget.group!;
+    final liveAsync = ref.watch(groupByIdProvider(seed.id));
 
     return Scaffold(
       appBar: UniflexAppBar(
-        title: 'Track Order ${widget.order.shortId}',
+        title: 'Track Order ${seed.shortId}',
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () => ref.invalidate(orderByIdProvider(widget.order.id)),
+            onPressed: () {
+              ref.invalidate(groupByIdProvider(seed.id));
+              ref.invalidate(groupLegsForStudentProvider(seed.id));
+            },
             tooltip: 'Refresh',
           ),
         ],
@@ -179,10 +200,155 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => RetrySection(
           message: 'Could not load this order.',
-          onRetry: () => ref.invalidate(orderByIdProvider(widget.order.id)),
+          onRetry: () => ref.invalidate(groupByIdProvider(seed.id)),
+        ),
+        data: (liveGroup) {
+          final g = liveGroup ?? seed;
+          final color = _groupStatusColor(g.status);
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(AppSpacing.screenGutter),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header card
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(AppRadius.card),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        g.shortId,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Delivery Order',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.6),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.sm,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.15),
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.pill),
+                        ),
+                        child: Text(
+                          g.status.label,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: color,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: AppSpacing.lg),
+                Text('Order progress', style: theme.textTheme.titleSmall),
+                const SizedBox(height: AppSpacing.md),
+
+                // Group status timeline
+                _GroupStatusTimeline(status: g.status),
+
+                const SizedBox(height: AppSpacing.xl),
+
+                // Delivery PIN
+                if (g.deliveryPin != null && !g.isTerminal) ...[
+                  _TrackingPinCard(pin: g.deliveryPin!),
+                  const SizedBox(height: AppSpacing.xl),
+                ],
+
+                // Delivery location
+                if (g.deliveryLocation != null) ...[
+                  Text('Delivery to', style: theme.textTheme.titleSmall),
+                  const SizedBox(height: AppSpacing.sm),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.location_on_outlined,
+                        size: 18,
+                        color: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          g.deliveryLocation!,
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                ],
+
+                // Fee summary
+                Text('Fee', style: theme.textTheme.titleSmall),
+                const SizedBox(height: 4),
+                Text(
+                  '₦${g.commitmentFeeTotal.toStringAsFixed(0)} delivery fee',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+
+                const SizedBox(height: AppSpacing.xl),
+
+                // Per-vendor breakdown
+                Text('Vendor breakdown',
+                    style: theme.textTheme.titleSmall),
+                const SizedBox(height: AppSpacing.md),
+                _GroupLegsSection(groupId: g.id),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ── Standalone order tracking ──────────────────────────────────────
+
+  Widget _buildOrderTracking(BuildContext context) {
+    final theme = Theme.of(context);
+    final liveAsync = ref.watch(orderByIdProvider(widget.order!.id));
+
+    return Scaffold(
+      appBar: UniflexAppBar(
+        title: 'Track Order ${widget.order!.shortId}',
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () =>
+                ref.invalidate(orderByIdProvider(widget.order!.id)),
+            tooltip: 'Refresh',
+          ),
+        ],
+      ),
+      body: liveAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => RetrySection(
+          message: 'Could not load this order.',
+          onRetry: () => ref.invalidate(orderByIdProvider(widget.order!.id)),
         ),
         data: (liveOrder) {
-          final o = liveOrder ?? widget.order;
+          final o = liveOrder ?? widget.order!;
           final steps = _buildSteps(o);
 
           return SingleChildScrollView(
@@ -423,9 +589,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                   ),
                 ],
 
-                // Assigned rider's contact — shown once one is assigned
-                // (post-testing fixes, Section 12: the student previously
-                // had no way to see who was delivering their order).
+                // Assigned rider's contact
                 if (o.riderId != null) ...[
                   Consumer(
                     builder: (context, ref, _) {
@@ -462,8 +626,6 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                                   ],
                                 ),
                               ),
-                              // Tap to dial — the rider already has a call
-                              // button for the student, so make it mutual.
                               if (phone != null)
                                 OutlinedButton.icon(
                                   icon: const Icon(Icons.phone_outlined,
@@ -494,8 +656,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
 
                 const SizedBox(height: AppSpacing.xl),
 
-                // Delivery PIN — shown when a rider has been assigned and
-                // the order is out for delivery or still pending pickup.
+                // Delivery PIN
                 if (o.isForDelivery &&
                     o.deliveryPin != null &&
                     !o.status.isTerminal) ...[
@@ -615,6 +776,237 @@ class _StatusTimeline extends StatelessWidget {
           ],
         );
       }),
+    );
+  }
+}
+
+/// Delivery-group status timeline with fixed steps matching the
+/// DeliveryGroupStatus lifecycle.
+class _GroupStatusTimeline extends StatelessWidget {
+  const _GroupStatusTimeline({required this.status});
+
+  final DeliveryGroupStatus status;
+
+  static const _steps = [
+    (status: DeliveryGroupStatus.placed, label: 'Order Placed'),
+    (status: DeliveryGroupStatus.commitmentPaid, label: 'Being Prepared'),
+    (status: DeliveryGroupStatus.outForDelivery, label: 'Out for Delivery'),
+    (status: DeliveryGroupStatus.completed, label: 'Delivered'),
+  ];
+
+  int _currentIndex() {
+    // Map the actual status to the closest step index.
+    return switch (status) {
+      DeliveryGroupStatus.placed => 0,
+      DeliveryGroupStatus.commitmentPaid => 1,
+      DeliveryGroupStatus.awaitingFinalPayment => 1, // still "being prepared"
+      DeliveryGroupStatus.outForDelivery => 2,
+      DeliveryGroupStatus.completed => 3,
+      DeliveryGroupStatus.cancelled => -1,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final current = _currentIndex();
+
+    if (status == DeliveryGroupStatus.cancelled) {
+      return Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: AppColors.error.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(AppRadius.card),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.cancel_outlined, color: AppColors.error, size: 20),
+            const SizedBox(width: AppSpacing.sm),
+            Text(
+              'Order Cancelled',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: AppColors.error,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: List.generate(_steps.length, (i) {
+        final step = _steps[i];
+        final done = i <= current;
+        final isCurrent = i == current;
+        final isLast = i == _steps.length - 1;
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 36,
+              child: Column(
+                children: [
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: done
+                          ? AppColors.emerald
+                          : theme.colorScheme.surfaceContainerHighest,
+                      border: isCurrent
+                          ? Border.all(color: AppColors.emerald, width: 2)
+                          : null,
+                    ),
+                    child: done
+                        ? const Icon(Icons.check,
+                            color: AppColors.pureWhite, size: 16)
+                        : null,
+                  ),
+                  if (!isLast)
+                    Container(
+                      width: 2,
+                      height: 36,
+                      color: done
+                          ? AppColors.emerald.withValues(alpha: 0.4)
+                          : theme.colorScheme.outline,
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                step.label,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight:
+                      isCurrent ? FontWeight.w600 : FontWeight.w400,
+                  color: done
+                      ? theme.colorScheme.onSurface
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                ),
+              ),
+            ),
+          ],
+        );
+      }),
+    );
+  }
+}
+
+/// Expandable per-vendor leg breakdown within a delivery group.
+class _GroupLegsSection extends ConsumerWidget {
+  const _GroupLegsSection({required this.groupId});
+
+  final String groupId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final legsAsync = ref.watch(groupLegsForStudentProvider(groupId));
+
+    return legsAsync.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      ),
+      error: (_, __) => Text(
+        'Could not load order details.',
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.error,
+        ),
+      ),
+      data: (legs) {
+        if (legs.isEmpty) {
+          return Text(
+            'No vendor orders found.',
+            style: theme.textTheme.bodySmall,
+          );
+        }
+
+        return Column(
+          children: [
+            for (final leg in legs) _LegCard(leg: leg),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _LegCard extends StatelessWidget {
+  const _LegCard({required this.leg});
+
+  final Order leg;
+
+  Color _statusColor(OrderStatus s) {
+    return switch (s) {
+      OrderStatus.placed => AppColors.info,
+      OrderStatus.preparing => AppColors.warning,
+      OrderStatus.ready || OrderStatus.readyForPickup => AppColors.emerald,
+      OrderStatus.outForDelivery => AppColors.orange,
+      OrderStatus.completed => AppColors.emerald,
+      OrderStatus.cancelled => AppColors.error,
+      OrderStatus.beingSourced => AppColors.orange,
+      OrderStatus.awaitingFinalPayment => AppColors.warning,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = _statusColor(leg.status);
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  leg.vendorName ?? 'Vendor',
+                  style: theme.textTheme.labelLarge,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '₦${leg.totalAmount.toStringAsFixed(0)}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sm,
+              vertical: 3,
+            ),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+            ),
+            child: Text(
+              leg.status.label,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

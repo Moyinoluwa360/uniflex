@@ -1,26 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../shared/models/around_category.dart';
+import '../../shared/models/errand_category.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../services/admin_providers.dart';
-import 'around_category_form_screen.dart';
+import 'errand_category_form_screen.dart';
 
-/// Admin management of Around service categories (post-testing fixes,
-/// Section 9) — add/edit/remove the categories the Student-facing Around
-/// flow reads dynamically, instead of a hardcoded set.
-class AroundCategoriesScreen extends ConsumerWidget {
-  const AroundCategoriesScreen({super.key});
+/// Admin management of Errand service categories — add/edit/remove the
+/// categories the Student-facing Errand flow reads dynamically.
+class ErrandCategoriesScreen extends ConsumerWidget {
+  const ErrandCategoriesScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final categoriesAsync = ref.watch(adminAroundCategoriesProvider);
+    final categoriesAsync = ref.watch(adminErrandCategoriesProvider);
 
     return Scaffold(
-      appBar: const UniflexAppBar(title: 'Around Categories'),
+      appBar: const UniflexAppBar(title: 'Errand Categories'),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openForm(context, ref, null),
         icon: const Icon(Icons.add),
@@ -30,7 +29,7 @@ class AroundCategoriesScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => RetrySection(
           message: 'Could not load categories.',
-          onRetry: () => ref.invalidate(adminAroundCategoriesProvider),
+          onRetry: () => ref.invalidate(adminErrandCategoriesProvider),
         ),
         data: (categories) {
           if (categories.isEmpty) {
@@ -64,21 +63,21 @@ class AroundCategoriesScreen extends ConsumerWidget {
   Future<void> _openForm(
     BuildContext context,
     WidgetRef ref,
-    AroundCategoryData? category,
+    ErrandCategoryData? category,
   ) async {
     await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => AroundCategoryFormScreen(category: category),
+        builder: (_) => ErrandCategoryFormScreen(category: category),
       ),
     );
   }
 
   Future<void> _toggleActive(
     WidgetRef ref,
-    AroundCategoryData category,
+    ErrandCategoryData category,
     bool active,
   ) async {
-    await ref.read(adminServiceProvider).upsertAroundCategory(
+    await ref.read(adminServiceProvider).upsertErrandCategory(
           id: category.id,
           title: category.title,
           subtitle: category.subtitle,
@@ -88,13 +87,13 @@ class AroundCategoriesScreen extends ConsumerWidget {
           isActive: active,
           sortOrder: category.sortOrder,
         );
-    ref.invalidate(adminAroundCategoriesProvider);
+    ref.invalidate(adminErrandCategoriesProvider);
   }
 
   Future<void> _confirmDelete(
     BuildContext context,
     WidgetRef ref,
-    AroundCategoryData category,
+    ErrandCategoryData category,
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -120,8 +119,8 @@ class AroundCategoriesScreen extends ConsumerWidget {
     );
     if (confirmed != true) return;
     try {
-      await ref.read(adminServiceProvider).deleteAroundCategory(category.id);
-      ref.invalidate(adminAroundCategoriesProvider);
+      await ref.read(adminServiceProvider).deleteErrandCategory(category.id);
+      ref.invalidate(adminErrandCategoriesProvider);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -140,7 +139,7 @@ class _CategoryCard extends StatelessWidget {
     required this.onToggle,
   });
 
-  final AroundCategoryData category;
+  final ErrandCategoryData category;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final ValueChanged<bool> onToggle;

@@ -233,7 +233,7 @@ class _PoolOrderCardState extends ConsumerState<_PoolOrderCard> {
     final order = po.order;
 
     final badgeColor = switch (po.orderTypeLabel) {
-      'Around' => AppColors.accentViolet,
+      'Errand' => AppColors.accentViolet,
       'Partner Food' => AppColors.info,
       _ => theme.colorScheme.primary,
     };
@@ -297,8 +297,8 @@ class _PoolOrderCardState extends ConsumerState<_PoolOrderCard> {
               value: order.deliveryLocation ?? '—',
             ),
 
-            // ── Around item description ───────────────────────────────
-            if (order.isAround && order.notes != null) ...[
+            // ── Errand item description ───────────────────────────────
+            if (order.isErrand && order.notes != null) ...[
               const SizedBox(height: AppSpacing.sm),
               _InfoRow(
                 icon: Icons.description_outlined,
@@ -308,7 +308,7 @@ class _PoolOrderCardState extends ConsumerState<_PoolOrderCard> {
             ],
 
             // ── Student note ─────────────────────────────────────────
-            if (!order.isAround && order.notes != null) ...[
+            if (!order.isErrand && order.notes != null) ...[
               const SizedBox(height: AppSpacing.sm),
               _InfoRow(
                 icon: Icons.sticky_note_2_outlined,

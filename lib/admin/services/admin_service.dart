@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/models/advertisement.dart';
-import '../../shared/models/around_category.dart';
+import '../../shared/models/errand_category.dart';
 import '../../shared/models/order.dart';
 import '../../shared/models/order_item.dart';
 import '../../shared/models/product.dart';
@@ -462,23 +462,23 @@ class AdminService {
     }
   }
 
-  // ── Around categories (post-testing fixes, Section 9) ───────────────────
+  // ── Errand categories ───────────────────────────────────────────────
 
-  /// All Around categories, active and inactive, for the admin management
+  /// All Errand categories, active and inactive, for the admin management
   /// screen. Students only ever see the active ones (see
-  /// activeAroundCategoriesProvider).
-  Future<List<AroundCategoryData>> fetchAllAroundCategories() async {
+  /// activeErrandCategoriesProvider).
+  Future<List<ErrandCategoryData>> fetchAllErrandCategories() async {
     final data = await _client
-        .from('around_categories')
+        .from('errand_categories')
         .select()
         .order('sort_order');
-    return data.map((m) => AroundCategoryData.fromMap(m)).toList();
+    return data.map((m) => ErrandCategoryData.fromMap(m)).toList();
   }
 
   /// Insert a new category (id == null) or update an existing one. [key]
-  /// is only used on insert — it's the stable identifier `around_requests`
+  /// is only used on insert — it's the stable identifier `errand_requests`
   /// rows reference, so it's never edited afterwards.
-  Future<void> upsertAroundCategory({
+  Future<void> upsertErrandCategory({
     String? id,
     String? key,
     required String title,
@@ -499,19 +499,19 @@ class AdminService {
       'sort_order': sortOrder,
     };
     if (id != null) {
-      await _client.from('around_categories').update(map).eq('id', id);
+      await _client.from('errand_categories').update(map).eq('id', id);
     } else {
-      await _client.from('around_categories').insert({
+      await _client.from('errand_categories').insert({
         ...map,
         'key': key,
       });
     }
   }
 
-  /// Hard-delete a category. Blocked by the `around_requests` foreign key
+  /// Hard-delete a category. Blocked by the `errand_requests` foreign key
   /// if any past request used it — deactivate instead in that case.
-  Future<void> deleteAroundCategory(String id) async {
-    await _client.from('around_categories').delete().eq('id', id);
+  Future<void> deleteErrandCategory(String id) async {
+    await _client.from('errand_categories').delete().eq('id', id);
   }
 
   // ── Referral codes (Phase 10) ─────────────────────────────────────────

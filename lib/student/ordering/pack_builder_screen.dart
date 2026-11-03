@@ -44,6 +44,9 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
   late List<Product> _meals;
   late List<Product> _proteins;
 
+  /// Which subsection is expanded: 'meals', 'proteins', or null.
+  String? _expandedSubsection;
+
   @override
   void initState() {
     super.initState();
@@ -276,13 +279,22 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
               ),
             ),
 
-          // ── Product list (Meals then Proteins) ─────────────────
+          // ── Product list (accordion: Meals, Proteins) ─────────
           Expanded(
             child: ListView(
               padding: const EdgeInsets.only(bottom: 120),
               children: [
-                if (_meals.isNotEmpty) ...[
-                  const _SubsectionHeader(title: 'Meals'),
+                if (_meals.isNotEmpty)
+                  _PackAccordionHeader(
+                    title: 'Meals',
+                    itemCount: _meals.length,
+                    isExpanded: _expandedSubsection == 'meals',
+                    onTap: () => setState(() {
+                      _expandedSubsection =
+                          _expandedSubsection == 'meals' ? null : 'meals';
+                    }),
+                  ),
+                if (_expandedSubsection == 'meals')
                   ..._meals.map((p) => _PackProductTile(
                         product: p,
                         quantity:
@@ -292,9 +304,19 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
                         onChanged: (qty) =>
                             _setItemQty(_activePack, p.id, qty),
                       )),
-                ],
-                if (_proteins.isNotEmpty) ...[
-                  const _SubsectionHeader(title: 'Proteins / Toppings'),
+                if (_proteins.isNotEmpty)
+                  _PackAccordionHeader(
+                    title: 'Proteins / Toppings',
+                    itemCount: _proteins.length,
+                    isExpanded: _expandedSubsection == 'proteins',
+                    onTap: () => setState(() {
+                      _expandedSubsection =
+                          _expandedSubsection == 'proteins'
+                              ? null
+                              : 'proteins';
+                    }),
+                  ),
+                if (_expandedSubsection == 'proteins')
                   ..._proteins.map((p) => _PackProductTile(
                         product: p,
                         quantity:
@@ -304,7 +326,6 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
                         onChanged: (qty) =>
                             _setItemQty(_activePack, p.id, qty),
                       )),
-                ],
               ],
             ),
           ),
@@ -356,21 +377,57 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
   }
 }
 
-class _SubsectionHeader extends StatelessWidget {
-  const _SubsectionHeader({required this.title});
+class _PackAccordionHeader extends StatelessWidget {
+  const _PackAccordionHeader({
+    required this.title,
+    required this.itemCount,
+    required this.isExpanded,
+    required this.onTap,
+  });
+
   final String title;
+  final int itemCount;
+  final bool isExpanded;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.screenGutter,
-        AppSpacing.md,
-        AppSpacing.screenGutter,
-        AppSpacing.xs,
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.screenGutter,
+          AppSpacing.md,
+          AppSpacing.screenGutter,
+          AppSpacing.xs,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(title, style: theme.textTheme.labelLarge),
+            ),
+            Text(
+              '$itemCount',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color:
+                    theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            AnimatedRotation(
+              turns: isExpanded ? 0.5 : 0,
+              duration: const Duration(milliseconds: 200),
+              child: Icon(
+                Icons.expand_more,
+                size: 20,
+                color:
+                    theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
+            ),
+          ],
+        ),
       ),
-      child: Text(title, style: theme.textTheme.labelLarge),
     );
   }
 }

@@ -1,5 +1,5 @@
 /// A custom item added by a rider during the sourcing phase of a
-/// partner/around order. Must be approved or rejected by the student
+/// partner/errand order. Must be approved or rejected by the student
 /// before the rider includes it in the final total.
 class CustomOrderItem {
   const CustomOrderItem({

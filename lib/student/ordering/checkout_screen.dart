@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/models/delivery_location.dart';
 import '../../shared/models/order.dart';
 import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
@@ -11,17 +12,18 @@ import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../../shared/widgets/navigation/app_bottom_nav_shell.dart';
 import '../../shared/widgets/pin/pin_entry_sheet.dart';
+import '../../shared/widgets/sheets/acknowledgment_sheet.dart';
 import 'cart_provider.dart';
 import 'commitment_fee_screen.dart';
 import 'order_confirmation_screen.dart';
 import 'order_repository.dart';
 
-/// Round 7 checkout screen — multi-vendor aware.
+/// Round 8 checkout screen — multi-vendor aware, location-based fees.
 ///
 /// Pickup is only offered when every vendor in the cart is Uniflex.
-/// Delivery creates a delivery_group with per-vendor legs, then
-/// routes to CommitmentFeeScreen to pay the commitment fee
-/// (= sum of per-vendor delivery fees from admin settings).
+/// Delivery uses a named location from `delivery_locations` table;
+/// the fee is calculated per vendor using pack brackets:
+///   fee = location.price × ceil(packs / 3)  (0 packs = 1×).
 ///
 /// Pickup for Uniflex orders uses the existing [placeFoodOrder] RPC
 /// (full payment upfront with PIN).
@@ -35,19 +37,17 @@ class CheckoutScreen extends ConsumerStatefulWidget {
 }
 
 class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
-  String _deliveryType = 'campus_delivery';
-  final _locationController = TextEditingController();
+  bool _isPickup = false;
+  DeliveryLocation? _selectedLocation;
+  final _locationDetailsController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   DateTime? _scheduledFor;
   final _notesController = TextEditingController();
-
-  bool get _needsLocation =>
-      _deliveryType == 'campus_delivery' ||
-      _deliveryType == 'hostel_delivery';
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
-    _locationController.dispose();
+    _locationDetailsController.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -133,17 +133,47 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 
   Future<void> _confirmOrder() async {
-    if (_needsLocation) {
-      if (!_formKey.currentState!.validate()) return;
+    if (_isSubmitting) return;
+    if (!_formKey.currentState!.validate()) return;
+
+    // Delivery requires a selected location.
+    if (!_isPickup && _selectedLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a delivery location.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
     }
 
+    // Acknowledgment for delivery orders.
+    if (!_isPickup) {
+      final ok = await showAcknowledgmentSheet(
+        context,
+        message:
+            "You're paying the delivery fee only. Your food is paid for "
+            "after the rider confirms your order. We'll notify you when "
+            "it's time to pay.",
+      );
+      if (!ok || !mounted) return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      await _doConfirmOrder();
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Future<void> _doConfirmOrder() async {
     final cart = ref.read(cartProvider);
-    final isPickup = _deliveryType == 'pickup';
     final notes = _notesController.text.trim();
 
-    if (isPickup) {
+    if (_isPickup) {
       // Pickup is only available for Uniflex-only carts (enforced by UI).
-      // Use existing single-vendor full-payment flow.
       final vendor = cart.vendor;
       if (vendor == null) return;
 
@@ -173,7 +203,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
       final order = await ref.read(orderNotifierProvider.notifier).placeFoodOrder(
             vendor: vendor,
-            deliveryType: _deliveryType,
+            deliveryType: 'pickup',
             pin: pin,
             packs: packs,
             packFee: group?.packFee ?? 0,
@@ -186,13 +216,18 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       _handleSingleOrderResult(order);
     } else {
       // Delivery: multi-vendor flow via delivery_groups.
+      final loc = _selectedLocation!;
+      final details = _locationDetailsController.text.trim();
+
       final result = await ref
           .read(orderNotifierProvider.notifier)
           .placeMultiVendorOrder(
-            deliveryType: _deliveryType,
-            deliveryLocation: _locationController.text.trim(),
+            deliveryType: 'delivery',
+            deliveryLocation: loc.name,
             studentNote: notes.isEmpty ? null : notes,
             scheduledFor: _scheduledFor,
+            deliveryLocationId: loc.id,
+            locationDetails: details.isEmpty ? null : details,
           );
 
       if (!mounted) return;
@@ -214,7 +249,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           builder: (_) => CommitmentFeeScreen(
             groupId: result.groupId,
             commitmentFeeTotal: result.commitmentFeeTotal,
-            deliveryFeePerVendor: result.deliveryFeePerVendor,
             vendorCount: result.vendorCount,
           ),
         ),
@@ -277,42 +311,29 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final cart = ref.watch(cartProvider);
     final orderState = ref.watch(orderNotifierProvider);
     final balanceAsync = ref.watch(walletBalanceProvider);
-    final settingsAsync = ref.watch(deliverySettingsProvider);
+    final locationsAsync = ref.watch(deliveryLocationsProvider);
 
     final isUniflexOnly = cart.isUniflexOnly;
-    final isPickup = _deliveryType == 'pickup';
-
-    // Delivery fee per vendor from settings.
-    final feePerVendor = settingsAsync.when(
-      data: (s) => deliveryFeePerVendor(s, _deliveryType),
-      loading: () => _deliveryType == 'hostel_delivery' ? 300.0 : 200.0,
-      error: (_, __) => _deliveryType == 'hostel_delivery' ? 300.0 : 200.0,
-    );
-    final vendorCount = cart.vendorCount;
-    final totalDeliveryFee = isPickup ? 0.0 : feePerVendor * vendorCount;
-
-    final total = cart.subtotal + cart.totalPackFee + totalDeliveryFee;
-    final balance = balanceAsync.valueOrNull ?? 0.0;
-
-    // For pickup (Uniflex, full payment): need sufficient balance.
-    // For delivery (commitment fee only): balance check is on the next screen.
-    final hasSufficientBalance = isPickup ? balance >= total : true;
-
-    // Campus/hostel fee labels from settings.
-    final campusFee = settingsAsync.when(
-      data: (s) => deliveryFeePerVendor(s, 'campus_delivery'),
-      loading: () => 200.0,
-      error: (_, __) => 200.0,
-    );
-    final hostelFee = settingsAsync.when(
-      data: (s) => deliveryFeePerVendor(s, 'hostel_delivery'),
-      loading: () => 300.0,
-      error: (_, __) => 300.0,
-    );
 
     final vendorGroups = cart.groups.values
         .where((g) => !g.isEmpty)
         .toList();
+
+    // Calculate delivery fee per vendor using pack brackets.
+    final locationPrice = _selectedLocation?.price ?? 0;
+    double totalDeliveryFee = 0;
+    if (!_isPickup && _selectedLocation != null) {
+      for (final g in vendorGroups) {
+        totalDeliveryFee += vendorDeliveryFee(locationPrice, g.packCount);
+      }
+    }
+
+    final balance = balanceAsync.valueOrNull ?? 0.0;
+
+    // For pickup (Uniflex, full payment): need sufficient balance.
+    // For delivery (commitment fee only): balance check is on the next screen.
+    final hasSufficientBalance =
+        _isPickup ? balance >= (cart.subtotal + cart.totalPackFee) : true;
 
     return Scaffold(
       appBar: const UniflexAppBar(title: 'Checkout'),
@@ -337,7 +358,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   children: [
                     for (int vi = 0; vi < vendorGroups.length; vi++) ...[
                       if (vi > 0) const Divider(height: AppSpacing.md),
-                      // Vendor name header.
                       Row(
                         children: [
                           Icon(Icons.storefront,
@@ -350,7 +370,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         ],
                       ),
                       const SizedBox(height: AppSpacing.xs),
-                      // Items for this vendor.
                       ...vendorGroups[vi].items.map(
                         (item) => Padding(
                           padding:
@@ -393,7 +412,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                           ),
                         ),
                       ),
-                      // Pack fee line for this vendor.
                       if (vendorGroups[vi].packFee > 0)
                         Padding(
                           padding:
@@ -440,84 +458,101 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               Text('How would you like to receive it?',
                   style: theme.textTheme.titleSmall),
               const SizedBox(height: AppSpacing.sm),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      // Pickup only for Uniflex-only carts.
-                      if (isUniflexOnly)
-                        Expanded(
-                          child: _FulfillmentChoice(
-                            label: 'Pickup',
-                            icon: Icons.storefront_outlined,
-                            subtitle: 'Free',
-                            selected: isPickup,
-                            onTap: () =>
-                                setState(() => _deliveryType = 'pickup'),
-                          ),
-                        ),
-                      if (isUniflexOnly)
-                        const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: _FulfillmentChoice(
-                          label: 'Campus',
-                          icon: Icons.directions_walk_outlined,
-                          subtitle: vendorCount > 1
-                              ? '₦${campusFee.toStringAsFixed(0)}/vendor'
-                              : '+₦${campusFee.toStringAsFixed(0)}',
-                          selected: _deliveryType == 'campus_delivery',
-                          onTap: () => setState(
-                              () => _deliveryType = 'campus_delivery'),
-                        ),
+                  if (isUniflexOnly) ...[
+                    Expanded(
+                      child: _FulfillmentChoice(
+                        label: 'Pickup',
+                        icon: Icons.storefront_outlined,
+                        subtitle: 'Free',
+                        selected: _isPickup,
+                        onTap: () => setState(() => _isPickup = true),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  _FulfillmentChoice(
-                    label: 'Hostel Room Delivery',
-                    icon: Icons.hotel_outlined,
-                    subtitle: vendorCount > 1
-                        ? '₦${hostelFee.toStringAsFixed(0)}/vendor'
-                        : '+₦${hostelFee.toStringAsFixed(0)}',
-                    selected: _deliveryType == 'hostel_delivery',
-                    onTap: () =>
-                        setState(() => _deliveryType = 'hostel_delivery'),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                  ],
+                  Expanded(
+                    child: _FulfillmentChoice(
+                      label: 'Delivery',
+                      icon: Icons.delivery_dining_outlined,
+                      subtitle: _selectedLocation != null
+                          ? '₦${_selectedLocation!.price.toStringAsFixed(0)}/bracket'
+                          : 'Select location',
+                      selected: !_isPickup,
+                      onTap: () => setState(() => _isPickup = false),
+                    ),
                   ),
                 ],
               ),
 
-              // ── Delivery location ────────────────────────────────────
-              if (_needsLocation) ...[
+              // ── Delivery location dropdown ──────────────────────────
+              if (!_isPickup) ...[
                 const SizedBox(height: AppSpacing.lg),
-                Text(
-                  _deliveryType == 'hostel_delivery'
-                      ? 'Hostel & room number'
-                      : 'Delivery location',
-                  style: theme.textTheme.titleSmall,
-                ),
+                Text('Delivery location',
+                    style: theme.textTheme.titleSmall),
                 const SizedBox(height: AppSpacing.sm),
+                locationsAsync.when(
+                  loading: () => const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(AppSpacing.md),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                  error: (_, __) => Text(
+                    'Could not load locations.',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: AppColors.error),
+                  ),
+                  data: (locations) => DropdownButtonFormField<String>(
+                    value: _selectedLocation?.id,
+                    decoration: const InputDecoration(
+                      labelText: 'Where should we deliver?',
+                    ),
+                    items: [
+                      for (final loc in locations)
+                        DropdownMenuItem(
+                          value: loc.id,
+                          child: Text(
+                            '${loc.name}  (₦${loc.price.toStringAsFixed(0)})',
+                          ),
+                        ),
+                    ],
+                    onChanged: (id) {
+                      if (id == null) return;
+                      final locations =
+                          ref.read(deliveryLocationsProvider).valueOrNull ?? [];
+                      final loc = locations.firstWhere((l) => l.id == id);
+                      setState(() => _selectedLocation = loc);
+                    },
+                    validator: (v) =>
+                        v == null ? 'Select a delivery location' : null,
+                  ),
+                ),
+
+                const SizedBox(height: AppSpacing.md),
                 AppTextField(
-                  controller: _locationController,
-                  hint: _deliveryType == 'hostel_delivery'
-                      ? 'e.g. Elijah Hall, Room 204'
-                      : 'e.g. Faculty of Science building entrance',
+                  controller: _locationDetailsController,
+                  label: 'Location details',
+                  hint: 'e.g. Room 204, Elijah Hall',
                   validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Enter a delivery location'
+                      ? 'Describe exactly where to deliver'
                       : null,
                 ),
               ],
 
-              // ── Schedule ─────────────────────────────────────────────
-              const SizedBox(height: AppSpacing.lg),
-              Text('When?', style: theme.textTheme.titleSmall),
-              const SizedBox(height: AppSpacing.sm),
-              _ScheduleRow(
-                scheduledFor: _scheduledFor,
-                onPickSchedule: _pickSchedule,
-                onClear: () => setState(() => _scheduledFor = null),
-                theme: theme,
-              ),
+              // ── Schedule (pickup only) ──────────────────────────────
+              if (_isPickup) ...[
+                const SizedBox(height: AppSpacing.lg),
+                Text('When?', style: theme.textTheme.titleSmall),
+                const SizedBox(height: AppSpacing.sm),
+                _ScheduleRow(
+                  scheduledFor: _scheduledFor,
+                  onPickSchedule: _pickSchedule,
+                  onClear: () => setState(() => _scheduledFor = null),
+                  theme: theme,
+                ),
+              ],
 
               // ── Notes ────────────────────────────────────────────────
               const SizedBox(height: AppSpacing.lg),
@@ -548,23 +583,22 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       bold: false,
                       theme: theme,
                     ),
-                    if (!isPickup && totalDeliveryFee > 0) ...[
-                      // Show per-vendor delivery fee breakdown.
-                      for (final group in vendorGroups)
+                    if (!_isPickup && _selectedLocation != null) ...[
+                      for (final g in vendorGroups)
                         _TotalRow(
-                          label:
-                              'Delivery (${group.vendor.name})',
+                          label: 'Delivery (${g.vendor.name})',
                           value:
-                              '+₦${feePerVendor.toStringAsFixed(0)}',
+                              '+₦${vendorDeliveryFee(locationPrice, g.packCount).toStringAsFixed(0)}',
                           bold: false,
                           theme: theme,
                         ),
                     ],
                     const Divider(height: AppSpacing.md),
-                    if (isPickup)
+                    if (_isPickup)
                       _TotalRow(
                         label: 'Total',
-                        value: '₦${total.toStringAsFixed(0)}',
+                        value:
+                            '₦${(cart.subtotal + cart.totalPackFee).toStringAsFixed(0)}',
                         bold: true,
                         theme: theme,
                       )
@@ -586,8 +620,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       ),
                     ],
                     const Divider(height: AppSpacing.md),
-                    // Wallet balance row (only relevant for pickup).
-                    if (isPickup)
+                    if (_isPickup)
                       balanceAsync.when(
                         data: (b) => _TotalRow(
                           label: 'Wallet balance',
@@ -611,7 +644,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               ),
 
               // Insufficient balance message (pickup only).
-              if (isPickup &&
+              if (_isPickup &&
                   !hasSufficientBalance &&
                   balanceAsync.hasValue) ...[
                 const SizedBox(height: AppSpacing.sm),
@@ -681,12 +714,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               AppSpacing.md,
         ),
         child: PrimaryButton(
-          label: isPickup
-              ? 'Confirm Order  ₦${total.toStringAsFixed(0)}'
+          label: _isPickup
+              ? 'Confirm Order  ₦${(cart.subtotal + cart.totalPackFee).toStringAsFixed(0)}'
               : 'Place Order (₦${totalDeliveryFee.toStringAsFixed(0)} delivery fee)',
-          icon: isPickup ? Icons.lock_outline : Icons.shopping_cart_checkout,
-          isLoading: orderState.isLoading,
-          onPressed: hasSufficientBalance
+          icon: _isPickup ? Icons.lock_outline : Icons.shopping_cart_checkout,
+          isLoading: orderState.isLoading || _isSubmitting,
+          onPressed: (hasSufficientBalance && !_isSubmitting)
               ? _confirmOrder
               : null,
         ),

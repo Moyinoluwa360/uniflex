@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../advertisements/advertisements_screen.dart';
-import '../around_categories/around_categories_screen.dart';
+import '../errand_categories/errand_categories_screen.dart';
 import '../delivery_settings/delivery_settings_screen.dart';
 import '../menu/menu_management_screen.dart';
 import '../profile/admin_profile_screen.dart';
@@ -13,7 +13,7 @@ import '../scheduled/admin_scheduled_orders_screen.dart';
 import '../vendors/vendor_management_screen.dart';
 
 /// The "Manage" bottom-nav tab — a single hub that branches into every
-/// admin management area. Menu, Vendors, Riders, Around Categories,
+/// admin management area. Menu, Vendors, Riders, Errand Categories,
 /// Referral Codes, Advertisements, Scheduled Orders, and Profile all
 /// live here instead of cluttering the bottom nav bar.
 class ManageHubScreen extends StatelessWidget {
@@ -49,9 +49,9 @@ class ManageHubScreen extends StatelessWidget {
           SizedBox(height: AppSpacing.cardGap),
           _ManageEntry(
             icon: Icons.explore_outlined,
-            title: 'Around Categories',
+            title: 'Errand Categories',
             subtitle: 'The service categories students can request',
-            screen: AroundCategoriesScreen(),
+            screen: ErrandCategoriesScreen(),
           ),
           SizedBox(height: AppSpacing.cardGap),
           _ManageEntry(
@@ -70,8 +70,8 @@ class ManageHubScreen extends StatelessWidget {
           SizedBox(height: AppSpacing.cardGap),
           _ManageEntry(
             icon: Icons.local_shipping_outlined,
-            title: 'Delivery Fees',
-            subtitle: 'Campus and hostel delivery fee settings',
+            title: 'Delivery Locations',
+            subtitle: 'Named locations and delivery pricing',
             screen: DeliverySettingsScreen(),
           ),
           SizedBox(height: AppSpacing.cardGap),

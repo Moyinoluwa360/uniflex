@@ -113,7 +113,7 @@ class _CompleteProfileScreenState
 
       // Best-effort — if this fails, the checkout-time PIN gate will
       // prompt the student to set one the next time they try to confirm
-      // an order (see CheckoutScreen/AroundScreen), so onboarding itself
+      // an order (see CheckoutScreen/ErrandScreen), so onboarding itself
       // never blocks on it.
       try {
         await ref

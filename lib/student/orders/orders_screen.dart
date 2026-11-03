@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/models/delivery_group.dart';
 import '../../shared/models/order.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
@@ -16,8 +17,8 @@ import '../tracking/order_tracking_screen.dart';
 ///   Preparing — orders with an active status (placed → ready/out-for-delivery).
 ///   Completed — completed and cancelled orders.
 ///
-/// Status updates are reflected immediately: pulling down on the active
-/// tab or tapping a "Track" button refreshes the live data.
+/// Delivery orders appear as a single entry per delivery group (not per
+/// vendor leg). Pickup and errand orders appear as individual entries.
 class OrdersScreen extends ConsumerWidget {
   const OrdersScreen({super.key});
 
@@ -197,26 +198,21 @@ class _CartTab extends ConsumerWidget {
 class _ActiveOrdersTab extends ConsumerWidget {
   const _ActiveOrdersTab();
 
-  static const _activeStatuses = {
-    OrderStatus.placed,
-    OrderStatus.preparing,
-    OrderStatus.ready,
-    OrderStatus.outForDelivery,
-    OrderStatus.readyForPickup,
-    // Part B: partner/around orders stay "active" during sourcing flow.
-    OrderStatus.beingSourced,
-    OrderStatus.awaitingFinalPayment,
-  };
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ordersAsync = ref.watch(studentOrdersProvider);
-    return _OrderList(
+    final groupsAsync = ref.watch(studentDeliveryGroupsProvider);
+
+    return _UnifiedOrderList(
       ordersAsync: ordersAsync,
-      filter: (o) => _activeStatuses.contains(o.status),
+      groupsAsync: groupsAsync,
+      filter: (entry) => entry.isActive,
       emptyMessage: 'No active orders',
       emptySubtitle: 'Orders being prepared will appear here.',
-      onRefresh: () => ref.refresh(studentOrdersProvider.future),
+      onRefresh: () async {
+        ref.invalidate(studentOrdersProvider);
+        ref.invalidate(studentDeliveryGroupsProvider);
+      },
     );
   }
 }
@@ -229,23 +225,28 @@ class _CompletedOrdersTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ordersAsync = ref.watch(studentOrdersProvider);
-    return _OrderList(
+    final groupsAsync = ref.watch(studentDeliveryGroupsProvider);
+
+    return _UnifiedOrderList(
       ordersAsync: ordersAsync,
-      filter: (o) =>
-          o.status == OrderStatus.completed ||
-          o.status == OrderStatus.cancelled,
+      groupsAsync: groupsAsync,
+      filter: (entry) => entry.isTerminal,
       emptyMessage: 'No completed orders yet',
       emptySubtitle: 'Your order history will appear here.',
-      onRefresh: () => ref.refresh(studentOrdersProvider.future),
+      onRefresh: () async {
+        ref.invalidate(studentOrdersProvider);
+        ref.invalidate(studentDeliveryGroupsProvider);
+      },
     );
   }
 }
 
-// ── Shared list widget ────────────────────────────────────────────────────────
+// ── Unified list widget ─────────────────────────────────────────────────────
 
-class _OrderList extends ConsumerWidget {
-  const _OrderList({
+class _UnifiedOrderList extends ConsumerWidget {
+  const _UnifiedOrderList({
     required this.ordersAsync,
+    required this.groupsAsync,
     required this.filter,
     required this.emptyMessage,
     required this.emptySubtitle,
@@ -253,7 +254,8 @@ class _OrderList extends ConsumerWidget {
   });
 
   final AsyncValue<List<Order>> ordersAsync;
-  final bool Function(Order) filter;
+  final AsyncValue<List<DeliveryGroup>> groupsAsync;
+  final bool Function(StudentOrderEntry) filter;
   final String emptyMessage;
   final String emptySubtitle;
   final Future<void> Function() onRefresh;
@@ -262,73 +264,105 @@ class _OrderList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
 
-    return ordersAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => RetrySection(
+    // Wait for both to load.
+    if (ordersAsync.isLoading || groupsAsync.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (ordersAsync.hasError) {
+      return RetrySection(
         message: 'Could not load orders.',
-        onRetry: () => ref.invalidate(studentOrdersProvider),
-      ),
-      data: (orders) {
-        final filtered = orders.where(filter).toList();
+        onRetry: () {
+          ref.invalidate(studentOrdersProvider);
+          ref.invalidate(studentDeliveryGroupsProvider);
+        },
+      );
+    }
 
-        if (filtered.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.xl),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 88,
-                    height: 88,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary
-                          .withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.receipt_long_outlined,
-                      size: 36,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Text(emptyMessage, style: theme.textTheme.titleMedium),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    emptySubtitle,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface
-                          .withValues(alpha: 0.55),
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+    final orders = ordersAsync.valueOrNull ?? [];
+    final groups = groupsAsync.valueOrNull ?? [];
+
+    // Build unified entries:
+    // - Standalone orders: orders with no delivery_group_id (pickup, errand)
+    // - Delivery groups: one entry per group (replaces per-vendor legs)
+    final deliveryGroupIds =
+        groups.map((g) => g.id).toSet();
+    final standaloneOrders = orders
+        .where((o) => o.deliveryGroupId == null ||
+            !deliveryGroupIds.contains(o.deliveryGroupId))
+        .map((o) => StudentOrderEntry.fromOrder(o));
+    final groupEntries =
+        groups.map((g) => StudentOrderEntry.fromGroup(g));
+
+    final all = [...standaloneOrders, ...groupEntries]
+        .where(filter)
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    if (all.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary
+                      .withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.receipt_long_outlined,
+                  size: 36,
+                  color: theme.colorScheme.primary,
+                ),
               ),
-            ),
-          );
-        }
-
-        return RefreshIndicator(
-          onRefresh: onRefresh,
-          child: ListView.separated(
-            padding: const EdgeInsets.all(AppSpacing.screenGutter),
-            itemCount: filtered.length,
-            separatorBuilder: (_, __) =>
-                const SizedBox(height: AppSpacing.cardGap),
-            itemBuilder: (context, i) => _OrderCard(order: filtered[i]),
+              const SizedBox(height: AppSpacing.md),
+              Text(emptyMessage, style: theme.textTheme.titleMedium),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                emptySubtitle,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface
+                      .withValues(alpha: 0.55),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
-        );
-      },
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(AppSpacing.screenGutter),
+        itemCount: all.length,
+        separatorBuilder: (_, __) =>
+            const SizedBox(height: AppSpacing.cardGap),
+        itemBuilder: (context, i) {
+          final entry = all[i];
+          if (entry.isGroup) {
+            return _GroupCard(group: entry.group!);
+          }
+          return _OrderCard(order: entry.order!);
+        },
+      ),
     );
   }
 }
+
+// ── Order card (standalone: pickup / errand) ────────────────────────────────
 
 class _OrderCard extends StatelessWidget {
   const _OrderCard({required this.order});
   final Order order;
 
-  Color _statusColor(BuildContext context, OrderStatus s) {
+  Color _statusColor(OrderStatus s) {
     return switch (s) {
       OrderStatus.placed => AppColors.info,
       OrderStatus.preparing => AppColors.warning,
@@ -344,7 +378,7 @@ class _OrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = _statusColor(context, order.status);
+    final color = _statusColor(order.status);
 
     return Container(
       decoration: BoxDecoration(
@@ -400,7 +434,7 @@ class _OrderCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    order.isAround ? order.type.toUpperCase() : 'Food Delivery',
+                    order.isErrand ? 'ERRAND' : 'Food Delivery',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                     ),
@@ -416,6 +450,127 @@ class _OrderCard extends StatelessWidget {
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => OrderTrackingScreen(order: order),
+                    ),
+                  ),
+                  icon: const Icon(Icons.location_on_outlined, size: 18),
+                  label: const Text('Track Order'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.emerald,
+                    foregroundColor: AppColors.pureWhite,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.lg,
+                      vertical: AppSpacing.sm + 2,
+                    ),
+                    minimumSize: const Size(120, 44),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Group card (delivery orders) ─────────────────────────────────────────────
+
+class _GroupCard extends StatelessWidget {
+  const _GroupCard({required this.group});
+  final DeliveryGroup group;
+
+  Color _statusColor(DeliveryGroupStatus s) {
+    return switch (s) {
+      DeliveryGroupStatus.placed => AppColors.info,
+      DeliveryGroupStatus.commitmentPaid => AppColors.warning,
+      DeliveryGroupStatus.awaitingFinalPayment => AppColors.warning,
+      DeliveryGroupStatus.outForDelivery => AppColors.orange,
+      DeliveryGroupStatus.completed => AppColors.emerald,
+      DeliveryGroupStatus.cancelled => AppColors.error,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = _statusColor(group.status);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.cardTheme.color,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: theme.dividerColor),
+      ),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                group.shortId,
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                '• Delivery',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: 3,
+                ),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                ),
+                child: Text(
+                  group.status.label,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Food Delivery',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  if (group.deliveryLocation != null)
+                    Text(
+                      group.deliveryLocation!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  Text(
+                    '₦${group.commitmentFeeTotal.toStringAsFixed(0)} fee',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ],
+              ),
+              if (!group.isTerminal)
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          OrderTrackingScreen.forGroup(group: group),
                     ),
                   ),
                   icon: const Icon(Icons.location_on_outlined, size: 18),

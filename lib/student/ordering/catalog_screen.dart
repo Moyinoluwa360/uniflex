@@ -21,14 +21,23 @@ import 'product_repository.dart';
 /// Food items route through [PackBuilderScreen] where the student picks
 /// pack count first, then fills each pack. Drinks and Others are added
 /// directly via inline steppers.
-class CatalogScreen extends ConsumerWidget {
+class CatalogScreen extends ConsumerStatefulWidget {
   const CatalogScreen({super.key, required this.vendor});
 
   final Vendor vendor;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CatalogScreen> createState() => _CatalogScreenState();
+}
+
+class _CatalogScreenState extends ConsumerState<CatalogScreen> {
+  /// Which non-food section is expanded: 'drinks', 'others', or null.
+  String? _expandedSection;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final vendor = widget.vendor;
     final productsAsync = ref.watch(vendorProductsProvider(vendor.id));
     final cartState = ref.watch(cartProvider);
 
@@ -140,27 +149,47 @@ class CatalogScreen extends ConsumerWidget {
                   message: 'No food items available right now.',
                 ),
 
-              // ── Drinks section ─────────────────────────────────
-              const _SectionHeader(title: 'Drinks', icon: Icons.local_cafe),
-              if (drinkProducts.isNotEmpty)
-                ...drinkProducts.map(
-                  (p) => _ProductTile(product: p, vendor: vendor),
-                )
-              else
-                const _EmptySectionMessage(
-                  message: 'No drinks available right now.',
-                ),
+              // ── Drinks accordion ──────────────────────────────
+              _AccordionHeader(
+                title: 'Drinks',
+                icon: Icons.local_cafe,
+                itemCount: drinkProducts.length,
+                isExpanded: _expandedSection == 'drinks',
+                onTap: () => setState(() {
+                  _expandedSection =
+                      _expandedSection == 'drinks' ? null : 'drinks';
+                }),
+              ),
+              if (_expandedSection == 'drinks')
+                if (drinkProducts.isNotEmpty)
+                  ...drinkProducts.map(
+                    (p) => _ProductTile(product: p, vendor: vendor),
+                  )
+                else
+                  const _EmptySectionMessage(
+                    message: 'No drinks available right now.',
+                  ),
 
-              // ── Others section ─────────────────────────────────
-              const _SectionHeader(title: 'Others', icon: Icons.fastfood),
-              if (otherProducts.isNotEmpty)
-                ...otherProducts.map(
-                  (p) => _ProductTile(product: p, vendor: vendor),
-                )
-              else
-                const _EmptySectionMessage(
-                  message: 'No other items available right now.',
-                ),
+              // ── Others accordion ──────────────────────────────
+              _AccordionHeader(
+                title: 'Others',
+                icon: Icons.fastfood,
+                itemCount: otherProducts.length,
+                isExpanded: _expandedSection == 'others',
+                onTap: () => setState(() {
+                  _expandedSection =
+                      _expandedSection == 'others' ? null : 'others';
+                }),
+              ),
+              if (_expandedSection == 'others')
+                if (otherProducts.isNotEmpty)
+                  ...otherProducts.map(
+                    (p) => _ProductTile(product: p, vendor: vendor),
+                  )
+                else
+                  const _EmptySectionMessage(
+                    message: 'No other items available right now.',
+                  ),
             ],
           );
         },
@@ -207,6 +236,65 @@ class _SectionHeader extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           Text(title, style: theme.textTheme.titleSmall),
         ],
+      ),
+    );
+  }
+}
+
+class _AccordionHeader extends StatelessWidget {
+  const _AccordionHeader({
+    required this.title,
+    required this.icon,
+    required this.itemCount,
+    required this.isExpanded,
+    required this.onTap,
+  });
+
+  final String title;
+  final IconData icon;
+  final int itemCount;
+  final bool isExpanded;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.screenGutter,
+          AppSpacing.lg,
+          AppSpacing.screenGutter,
+          AppSpacing.sm,
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: theme.colorScheme.primary),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(title, style: theme.textTheme.titleSmall),
+            ),
+            Text(
+              '$itemCount item${itemCount == 1 ? '' : 's'}',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color:
+                    theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            AnimatedRotation(
+              turns: isExpanded ? 0.5 : 0,
+              duration: const Duration(milliseconds: 200),
+              child: Icon(
+                Icons.expand_more,
+                size: 20,
+                color:
+                    theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
