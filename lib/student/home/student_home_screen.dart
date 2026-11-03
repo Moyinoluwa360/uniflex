@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../shared/models/advertisement.dart';
-import '../../shared/models/errand_category.dart';
+import '../../shared/models/order.dart';
 import '../../shared/models/vendor.dart';
 import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/notifications/notification_inbox_service.dart';
@@ -13,14 +13,15 @@ import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../../shared/widgets/media/app_image.dart';
 import '../../shared/widgets/navigation/app_bottom_nav_shell.dart';
-import '../errand/errand_category_providers.dart';
-import '../errand/errand_screen.dart';
+import '../errand/create_errand_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../ordering/cart_provider.dart';
 import '../ordering/cart_screen.dart';
 import '../ordering/catalog_screen.dart';
+import '../ordering/order_repository.dart';
 import '../ordering/product_repository.dart';
 import '../services/student_providers.dart';
+import '../tracking/errand_tracking_screen.dart';
 import 'all_vendors_screen.dart';
 import 'search_screen.dart';
 
@@ -111,8 +112,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> {
             ),
             const SliverToBoxAdapter(child: _VendorList()),
           ] else ...[
-            const SliverToBoxAdapter(child: _ErrandServiceGrid()),
-            const SliverToBoxAdapter(child: _RunnersOnline()),
+            const SliverToBoxAdapter(child: _ErrandSection()),
           ],
           const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.xl)),
         ],
@@ -1109,71 +1109,123 @@ class _Badge extends StatelessWidget {
   }
 }
 
-// ── Errand service grid ──────────────────────────────────────────────────────
+// ── Errand section ───────────────────────────────────────────────────────────
 
-/// Reads categories from the admin-configurable `errand_categories` table
-/// instead of a hardcoded enum, so add/edit/remove from the admin Manage
-/// hub shows up here immediately.
-class _ErrandServiceGrid extends ConsumerWidget {
-  const _ErrandServiceGrid();
+/// Shows State A (no active errands) or State B (active errand cards).
+/// Active = type errand + status not terminal.
+class _ErrandSection extends ConsumerWidget {
+  const _ErrandSection();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final categoriesAsync = ref.watch(activeErrandCategoriesProvider);
     final theme = Theme.of(context);
+    final ordersAsync = ref.watch(studentOrdersProvider);
+    final activeErrands = (ordersAsync.valueOrNull ?? const <Order>[])
+        .where((o) => o.isErrand && !o.status.isTerminal)
+        .toList();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.screenGutter,
-        AppSpacing.md,
+        AppSpacing.lg,
         AppSpacing.screenGutter,
         0,
       ),
-      child: categoriesAsync.when(
-        loading: () => const Padding(
-          padding: EdgeInsets.all(AppSpacing.lg),
-          child: Center(child: CircularProgressIndicator()),
-        ),
-        error: (e, _) => RetrySection(
-          message: 'Could not load errand categories.',
-          onRetry: () => ref.invalidate(activeErrandCategoriesProvider),
-          compact: true,
-        ),
-        data: (categories) {
-          if (categories.isEmpty) {
-            return Text(
-              'No errand services available right now.',
-              style: theme.textTheme.bodyMedium,
-            );
-          }
-          return GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisSpacing: AppSpacing.cardGap,
-            mainAxisSpacing: AppSpacing.cardGap,
-            childAspectRatio: 1.5,
-            children: [
-              for (final category in categories)
-                _ErrandServiceCard(category: category),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (activeErrands.isEmpty) ...[
+            const SizedBox(height: AppSpacing.xl),
+            Center(
+              child: Column(
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: AppColors.emerald.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.explore_outlined,
+                        size: 36, color: AppColors.emerald),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    'No active errands',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Need something done? Send a rider.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                ],
+              ),
+            ),
+          ] else ...[
+            Text('Active errands', style: theme.textTheme.titleSmall),
+            const SizedBox(height: AppSpacing.sm),
+            for (final order in activeErrands) ...[
+              _ErrandOrderCard(order: order),
+              const SizedBox(height: AppSpacing.sm),
             ],
-          );
-        },
+            const SizedBox(height: AppSpacing.md),
+          ],
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.emerald,
+              foregroundColor: AppColors.pureWhite,
+              minimumSize: const Size(double.infinity, AppSpacing.controlHeight),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.control),
+              ),
+            ),
+            icon: const Icon(Icons.add, size: 20),
+            label: const Text('Create errand'),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const CreateErrandScreen(),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _ErrandServiceCard extends StatelessWidget {
-  const _ErrandServiceCard({required this.category});
-  final ErrandCategoryData category;
+class _ErrandOrderCard extends StatelessWidget {
+  const _ErrandOrderCard({required this.order});
+  final Order order;
+
+  Color _statusColor(OrderStatus s) => switch (s) {
+        OrderStatus.placed => AppColors.info,
+        OrderStatus.beingSourced => AppColors.warning,
+        OrderStatus.outForDelivery => AppColors.orange,
+        _ => AppColors.info,
+      };
+
+  String _statusLabel(OrderStatus s) => switch (s) {
+        OrderStatus.placed => 'Errand placed',
+        OrderStatus.beingSourced => 'Rider assigned',
+        OrderStatus.outForDelivery => 'On the way',
+        _ => s.label,
+      };
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final statusColor = _statusColor(order.status);
+
     return InkWell(
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ErrandScreen(category: category)),
+        MaterialPageRoute(
+          builder: (_) => ErrandTrackingScreen(order: order),
+        ),
       ),
       borderRadius: BorderRadius.circular(AppRadius.card),
       child: Container(
@@ -1183,123 +1235,52 @@ class _ErrandServiceCard extends StatelessWidget {
           border: Border.all(color: theme.dividerColor),
         ),
         padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
             Container(
-              width: 36,
-              height: 36,
-              alignment: Alignment.center,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(AppRadius.control - 4),
+                color: AppColors.emerald.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(AppRadius.control - 2),
               ),
-              child: Icon(category.icon,
-                  color: theme.colorScheme.primary, size: 20),
+              child: const Icon(Icons.explore_outlined,
+                  size: 22, color: AppColors.emerald),
             ),
-            const Spacer(),
-            Text(category.title,
-                style: theme.textTheme.titleSmall,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 2),
-            Text(
-              category.subtitle,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    order.shortId,
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                    ),
+                    child: Text(
+                      _statusLabel(order.status),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: statusColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
+            Icon(Icons.chevron_right,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.4)),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ── Rider availability ───────────────────────────────────────────────────────
-
-/// Anonymous availability indicator for Errand requests. Deliberately shows
-/// no individual rider's name or an "online" status tied to a person — just
-/// a dot signalling whether riders are available nearby right now.
-class _RunnersOnline extends ConsumerWidget {
-  const _RunnersOnline();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final ridersAvailableAsync = ref.watch(ridersAvailableNearbyProvider);
-    final ridersAvailable = ridersAvailableAsync.valueOrNull ?? false;
-    final categories = ref.watch(activeErrandCategoriesProvider).valueOrNull;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.screenGutter,
-        AppSpacing.md,
-        AppSpacing.screenGutter,
-        0,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Rider availability', style: theme.textTheme.titleMedium),
-          const SizedBox(height: AppSpacing.sm),
-          Container(
-            decoration: BoxDecoration(
-              color: theme.cardTheme.color,
-              borderRadius: BorderRadius.circular(AppRadius.card),
-              border: Border.all(color: theme.dividerColor),
-            ),
-            padding: const EdgeInsets.all(AppSpacing.md),
-            child: Row(
-              children: [
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: ridersAvailable
-                        ? AppColors.emerald
-                        : theme.colorScheme.onSurface.withValues(alpha: 0.25),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Text(
-                    ridersAvailable
-                        ? 'Riders available nearby'
-                        : 'No riders available right now',
-                    style: theme.textTheme.titleSmall,
-                  ),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.emerald,
-                    foregroundColor: AppColors.pureWhite,
-                    minimumSize: const Size(0, 40),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                  ),
-                  onPressed: (categories == null || categories.isEmpty)
-                      ? null
-                      : () {
-                          final errand = categories.firstWhere(
-                            (c) => c.key == 'errand',
-                            orElse: () => categories.first,
-                          );
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => ErrandScreen(category: errand),
-                            ),
-                          );
-                        },
-                  child: const Text('Request'),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

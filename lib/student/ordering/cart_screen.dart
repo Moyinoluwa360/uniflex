@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/accordions/app_accordion_card.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/media/app_image.dart';
@@ -101,130 +102,99 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           final isExpanded =
               !isMultiVendor || _expandedVendors.contains(group.vendor.id);
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Vendor header — tappable accordion when multi-vendor.
-              if (isMultiVendor)
-                InkWell(
-                  onTap: () => setState(() {
-                    if (_expandedVendors.contains(group.vendor.id)) {
-                      _expandedVendors.remove(group.vendor.id);
-                    } else {
-                      _expandedVendors.add(group.vendor.id);
-                    }
-                  }),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.screenGutter,
-                      AppSpacing.md,
-                      AppSpacing.screenGutter,
-                      AppSpacing.sm,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.storefront,
-                            size: 18, color: theme.colorScheme.primary),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: Text(
-                            'From ${group.vendor.name}',
-                            style: theme.textTheme.titleSmall,
-                          ),
-                        ),
-                        Text(
-                          '${group.items.length} item${group.items.length == 1 ? '' : 's'}',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.5),
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.xs),
-                        AnimatedRotation(
-                          turns: isExpanded ? 0.5 : 0,
-                          duration: const Duration(milliseconds: 200),
-                          child: Icon(
-                            Icons.expand_more,
-                            size: 20,
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.5),
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => ref
-                              .read(cartProvider.notifier)
-                              .removeVendor(group.vendor.id),
-                          icon: const Icon(Icons.close, size: 18),
-                          tooltip: 'Remove all from ${group.vendor.name}',
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+          // Single vendor: flat list with no accordion.
+          if (!isMultiVendor) {
+            return _VendorItemList(
+              group: group,
+              onItemUpdate: (localIdx, qty) {
+                if (qty <= 0) {
+                  ref
+                      .read(cartProvider.notifier)
+                      .removeItemFromVendor(group.vendor.id, localIdx);
+                } else {
+                  _updateVendorItemQty(ref, group.vendor.id, localIdx, qty);
+                }
+              },
+            );
+          }
 
-              if (isExpanded) ...[
-                // Pack info (if packs exist)
-                if (group.packCount > 0)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.screenGutter,
+          // Multi-vendor: AppAccordionCard per vendor.
+          final vendorSubtotal = group.totalWithPacks;
+
+          return AppAccordionCard(
+            leading: SizedBox(
+              width: 40,
+              height: 40,
+              child: AppImage(
+                url: group.vendor.imageUrl,
+                keywords: 'restaurant,food',
+                seed: group.vendor.id.hashCode,
+                borderRadius: BorderRadius.circular(10),
+                icon: Icons.storefront_outlined,
+              ),
+            ),
+            title: group.vendor.name,
+            subtitle:
+                '${group.items.length} item${group.items.length == 1 ? '' : 's'}'
+                ' · ₦${vendorSubtotal.toStringAsFixed(0)}',
+            isExpanded: isExpanded,
+            onTap: () => setState(() {
+              if (_expandedVendors.contains(group.vendor.id)) {
+                _expandedVendors.remove(group.vendor.id);
+              } else {
+                // Only one vendor open at a time.
+                _expandedVendors = {group.vendor.id};
+              }
+            }),
+            trailingAction: IconButton(
+              icon: const Icon(Icons.close_rounded, size: 18),
+              tooltip: 'Remove ${group.vendor.name} from cart',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              onPressed: () async {
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: Text('Remove ${group.vendor.name}?'),
+                    content: Text(
+                      'This removes all ${group.items.length} '
+                      'item${group.items.length == 1 ? '' : 's'} '
+                      'from ${group.vendor.name}.',
                     ),
-                    child: Container(
-                      padding: const EdgeInsets.all(AppSpacing.sm),
-                      decoration: BoxDecoration(
-                        color:
-                            AppColors.emerald.withValues(alpha: 0.08),
-                        borderRadius:
-                            BorderRadius.circular(AppRadius.control),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancel'),
                       ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.inventory_2_outlined,
-                              size: 16, color: AppColors.emerald),
-                          const SizedBox(width: AppSpacing.sm),
-                          Text(
-                            '${group.packCount} pack${group.packCount > 1 ? 's' : ''}'
-                            ' · ₦${group.packFee.toStringAsFixed(0)}',
-                            style: theme.textTheme.labelMedium
-                                ?.copyWith(color: AppColors.emerald),
-                          ),
-                        ],
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: Text(
+                          'Remove',
+                          style: TextStyle(color: AppColors.error),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-
-                // Items
-                ...group.items.asMap().entries.map((entry) {
-                  final localIdx = entry.key;
-                  final item = entry.value;
-                  return _CartItemTile(
-                    item: item,
-                    onDecrement: () => ref
-                        .read(cartProvider.notifier)
-                        .removeItemFromVendor(
-                            group.vendor.id,
-                            item.quantity <= 1
-                                ? localIdx
-                                : -1), // -1 = update qty
-                    onRemoveOrUpdate: (qty) {
-                      if (qty <= 0) {
-                        ref
-                            .read(cartProvider.notifier)
-                            .removeItemFromVendor(
-                                group.vendor.id, localIdx);
-                      } else {
-                        _updateVendorItemQty(
-                            ref, group.vendor.id, localIdx, qty);
-                      }
-                    },
-                  );
-                }),
-              ],
-
-              if (gi < vendorGroups.length - 1)
-                const Divider(height: AppSpacing.lg),
-            ],
+                );
+                if (ok == true) {
+                  ref
+                      .read(cartProvider.notifier)
+                      .removeVendor(group.vendor.id);
+                }
+              },
+            ),
+            child: _VendorItemList(
+              group: group,
+              onItemUpdate: (localIdx, qty) {
+                if (qty <= 0) {
+                  ref
+                      .read(cartProvider.notifier)
+                      .removeItemFromVendor(group.vendor.id, localIdx);
+                } else {
+                  _updateVendorItemQty(ref, group.vendor.id, localIdx, qty);
+                }
+              },
+            ),
           );
         },
       ),
@@ -289,6 +259,70 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       flatIdx += entry.value.items.length;
     }
     ref.read(cartProvider.notifier).updateQuantity(flatIdx, qty);
+  }
+}
+
+/// Pack info banner + item list for a single vendor group.
+/// Used both as a direct list child (single-vendor) and as the accordion
+/// content (multi-vendor).
+class _VendorItemList extends ConsumerWidget {
+  const _VendorItemList({
+    required this.group,
+    required this.onItemUpdate,
+  });
+
+  final VendorCartGroup group;
+  final void Function(int localIdx, int qty) onItemUpdate;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (group.packCount > 0)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.screenGutter,
+              AppSpacing.sm,
+              AppSpacing.screenGutter,
+              0,
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: AppColors.emerald.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(AppRadius.control),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.inventory_2_outlined,
+                      size: 16, color: AppColors.emerald),
+                  const SizedBox(width: AppSpacing.sm),
+                  Text(
+                    '${group.packCount} pack${group.packCount > 1 ? 's' : ''}'
+                    ' · ₦${group.packFee.toStringAsFixed(0)}',
+                    style: Theme.of(context)
+                        .textTheme
+                        .labelMedium
+                        ?.copyWith(color: AppColors.emerald),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ...group.items.asMap().entries.map((entry) {
+          final localIdx = entry.key;
+          final item = entry.value;
+          return _CartItemTile(
+            item: item,
+            onDecrement: () => onItemUpdate(
+                localIdx, item.quantity <= 1 ? 0 : item.quantity - 1),
+            onRemoveOrUpdate: (qty) => onItemUpdate(localIdx, qty),
+          );
+        }),
+      ],
+    );
   }
 }
 

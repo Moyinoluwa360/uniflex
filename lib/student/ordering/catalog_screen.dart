@@ -8,6 +8,7 @@ import '../../shared/models/product.dart';
 import '../../shared/models/vendor.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/accordions/app_accordion_card.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../../shared/widgets/media/app_image.dart';
@@ -150,46 +151,58 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                 ),
 
               // ── Drinks accordion ──────────────────────────────
-              _AccordionHeader(
+              AppAccordionCard(
+                leading: buildAccordionLeadingIcon(
+                  context: context,
+                  icon: Icons.local_cafe_outlined,
+                ),
                 title: 'Drinks',
-                icon: Icons.local_cafe,
-                itemCount: drinkProducts.length,
+                subtitle:
+                    '${drinkProducts.length} item${drinkProducts.length == 1 ? '' : 's'}',
                 isExpanded: _expandedSection == 'drinks',
                 onTap: () => setState(() {
                   _expandedSection =
                       _expandedSection == 'drinks' ? null : 'drinks';
                 }),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: drinkProducts.isNotEmpty
+                      ? drinkProducts
+                          .map((p) => _ProductTile(product: p, vendor: vendor))
+                          .toList()
+                      : const [
+                          _EmptySectionMessage(
+                              message: 'No drinks available right now.'),
+                        ],
+                ),
               ),
-              if (_expandedSection == 'drinks')
-                if (drinkProducts.isNotEmpty)
-                  ...drinkProducts.map(
-                    (p) => _ProductTile(product: p, vendor: vendor),
-                  )
-                else
-                  const _EmptySectionMessage(
-                    message: 'No drinks available right now.',
-                  ),
 
               // ── Others accordion ──────────────────────────────
-              _AccordionHeader(
+              AppAccordionCard(
+                leading: buildAccordionLeadingIcon(
+                  context: context,
+                  icon: Icons.category_outlined,
+                ),
                 title: 'Others',
-                icon: Icons.fastfood,
-                itemCount: otherProducts.length,
+                subtitle:
+                    '${otherProducts.length} item${otherProducts.length == 1 ? '' : 's'}',
                 isExpanded: _expandedSection == 'others',
                 onTap: () => setState(() {
                   _expandedSection =
                       _expandedSection == 'others' ? null : 'others';
                 }),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: otherProducts.isNotEmpty
+                      ? otherProducts
+                          .map((p) => _ProductTile(product: p, vendor: vendor))
+                          .toList()
+                      : const [
+                          _EmptySectionMessage(
+                              message: 'No other items available right now.'),
+                        ],
+                ),
               ),
-              if (_expandedSection == 'others')
-                if (otherProducts.isNotEmpty)
-                  ...otherProducts.map(
-                    (p) => _ProductTile(product: p, vendor: vendor),
-                  )
-                else
-                  const _EmptySectionMessage(
-                    message: 'No other items available right now.',
-                  ),
             ],
           );
         },
@@ -236,65 +249,6 @@ class _SectionHeader extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           Text(title, style: theme.textTheme.titleSmall),
         ],
-      ),
-    );
-  }
-}
-
-class _AccordionHeader extends StatelessWidget {
-  const _AccordionHeader({
-    required this.title,
-    required this.icon,
-    required this.itemCount,
-    required this.isExpanded,
-    required this.onTap,
-  });
-
-  final String title;
-  final IconData icon;
-  final int itemCount;
-  final bool isExpanded;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.screenGutter,
-          AppSpacing.lg,
-          AppSpacing.screenGutter,
-          AppSpacing.sm,
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 18, color: theme.colorScheme.primary),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Text(title, style: theme.textTheme.titleSmall),
-            ),
-            Text(
-              '$itemCount item${itemCount == 1 ? '' : 's'}',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color:
-                    theme.colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.xs),
-            AnimatedRotation(
-              turns: isExpanded ? 0.5 : 0,
-              duration: const Duration(milliseconds: 200),
-              child: Icon(
-                Icons.expand_more,
-                size: 20,
-                color:
-                    theme.colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

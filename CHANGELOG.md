@@ -77,6 +77,53 @@ mark-all-read, and see-all vendors.
   `delivery_groups` and `orders`, updates `place_multi_vendor_order` with
   pack-bracket fee calculation, adds `search_products` RPC.
 
+## Round 8 Fixes — Errand page rebuild, AppAccordionCard, Create errand form (2026-11-03)
+
+### Added
+
+- **`AppAccordionCard`** (`shared/widgets/accordions/app_accordion_card.dart`) —
+  shared accordion widget with emerald border when open, `AnimatedSize` 200ms
+  content reveal, animated chevron rotation, and `buildAccordionLeadingIcon`
+  helper. Replaces three separate inline accordion implementations.
+- **`CreateErrandScreen`** (`student/errand/create_errand_screen.dart`) —
+  standalone full-screen errand form: category dropdown (from
+  `activeErrandCategoriesProvider`, no preselection), required description
+  field, optional pickup/drop-off/location-details fields, pay button enabled
+  only when category + description filled. No "non-refundable" wording.
+- **`ErrandTrackingScreen`** (`student/tracking/errand_tracking_screen.dart`) —
+  simplified tracking for errand orders: 4-step timeline (placed → rider
+  assigned → on the way → done), rider name + Call + WhatsApp buttons once
+  assigned, delivery PIN, fee display. No sourcing/final-payment steps.
+
+### Changed
+
+- **Student home screen (Errand mode)** — replaced category grid and rider
+  availability widget with `_ErrandSection`: State A (no active errands —
+  centred icon + copy + Create errand button) and State B (active errand cards
+  + button). Category tiles never appear on the home screen.
+- **Catalog screen** — Drinks and Others now use `AppAccordionCard`.
+- **Pack builder screen** — Meals and Proteins/Toppings now use `AppAccordionCard`.
+- **Cart screen** — multi-vendor groups now use `AppAccordionCard` with vendor
+  image leading, vendor subtotal in subtitle, and remove confirmation dialog.
+- **Commitment fee screen** — errand orders show errand-specific wording
+  (no "non-refundable" copy anywhere in the errand payment flow).
+
+### Removed
+
+- `_ErrandServiceGrid`, `_ErrandServiceCard`, `_RunnersOnline` from
+  `student_home_screen.dart`.
+- `ridersAvailableNearbyProvider` from `errand_category_providers.dart`
+  (was only used by `_RunnersOnline`).
+
+### SQL (run manually)
+
+```sql
+-- Seed "Others" errand category (sort_order 6, after Moving Items)
+INSERT INTO errand_categories (key, title, subtitle, description, icon_name, flat_fee, is_active, sort_order)
+VALUES ('others', 'Others', 'Something else', 'For errands that don''t fit the other categories.', 'explore', 800, true, 6)
+ON CONFLICT (key) DO NOTHING;
+```
+
 ### Tests
 
 - 16 new Round 8 unit tests (all passing).

@@ -7,6 +7,7 @@ import '../../shared/models/product.dart';
 import '../../shared/models/vendor.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/accordions/app_accordion_card.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/media/app_image.dart';
@@ -285,29 +286,43 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
               padding: const EdgeInsets.only(bottom: 120),
               children: [
                 if (_meals.isNotEmpty)
-                  _PackAccordionHeader(
+                  AppAccordionCard(
+                    leading: buildAccordionLeadingIcon(
+                      context: context,
+                      icon: Icons.dinner_dining_outlined,
+                    ),
                     title: 'Meals',
-                    itemCount: _meals.length,
+                    subtitle:
+                        '${_meals.length} item${_meals.length == 1 ? '' : 's'}',
                     isExpanded: _expandedSubsection == 'meals',
                     onTap: () => setState(() {
                       _expandedSubsection =
                           _expandedSubsection == 'meals' ? null : 'meals';
                     }),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: _meals
+                          .map((p) => _PackProductTile(
+                                product: p,
+                                quantity:
+                                    _packContents[_activePack][p.id] ?? 0,
+                                spoonsUsed: spoons,
+                                isMeal: true,
+                                onChanged: (qty) =>
+                                    _setItemQty(_activePack, p.id, qty),
+                              ))
+                          .toList(),
+                    ),
                   ),
-                if (_expandedSubsection == 'meals')
-                  ..._meals.map((p) => _PackProductTile(
-                        product: p,
-                        quantity:
-                            _packContents[_activePack][p.id] ?? 0,
-                        spoonsUsed: spoons,
-                        isMeal: true,
-                        onChanged: (qty) =>
-                            _setItemQty(_activePack, p.id, qty),
-                      )),
                 if (_proteins.isNotEmpty)
-                  _PackAccordionHeader(
+                  AppAccordionCard(
+                    leading: buildAccordionLeadingIcon(
+                      context: context,
+                      icon: Icons.egg_alt_outlined,
+                    ),
                     title: 'Proteins / Toppings',
-                    itemCount: _proteins.length,
+                    subtitle:
+                        '${_proteins.length} item${_proteins.length == 1 ? '' : 's'}',
                     isExpanded: _expandedSubsection == 'proteins',
                     onTap: () => setState(() {
                       _expandedSubsection =
@@ -315,17 +330,21 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
                               ? null
                               : 'proteins';
                     }),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: _proteins
+                          .map((p) => _PackProductTile(
+                                product: p,
+                                quantity:
+                                    _packContents[_activePack][p.id] ?? 0,
+                                spoonsUsed: spoons,
+                                isMeal: false,
+                                onChanged: (qty) =>
+                                    _setItemQty(_activePack, p.id, qty),
+                              ))
+                          .toList(),
+                    ),
                   ),
-                if (_expandedSubsection == 'proteins')
-                  ..._proteins.map((p) => _PackProductTile(
-                        product: p,
-                        quantity:
-                            _packContents[_activePack][p.id] ?? 0,
-                        spoonsUsed: spoons,
-                        isMeal: false,
-                        onChanged: (qty) =>
-                            _setItemQty(_activePack, p.id, qty),
-                      )),
               ],
             ),
           ),
@@ -371,61 +390,6 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
                 ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PackAccordionHeader extends StatelessWidget {
-  const _PackAccordionHeader({
-    required this.title,
-    required this.itemCount,
-    required this.isExpanded,
-    required this.onTap,
-  });
-
-  final String title;
-  final int itemCount;
-  final bool isExpanded;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.screenGutter,
-          AppSpacing.md,
-          AppSpacing.screenGutter,
-          AppSpacing.xs,
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(title, style: theme.textTheme.labelLarge),
-            ),
-            Text(
-              '$itemCount',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color:
-                    theme.colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.xs),
-            AnimatedRotation(
-              turns: isExpanded ? 0.5 : 0,
-              duration: const Duration(milliseconds: 200),
-              child: Icon(
-                Icons.expand_more,
-                size: 20,
-                color:
-                    theme.colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
-            ),
-          ],
         ),
       ),
     );

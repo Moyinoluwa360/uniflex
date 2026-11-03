@@ -65,15 +65,19 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
       ? widget.commitmentFeeTotal
       : _singleOrderCommitmentFee;
 
+  bool get _isErrand =>
+      !widget._isGroupMode && (widget.order?.isErrand ?? false);
+
   Future<void> _pay() async {
     if (_isSubmitting) return;
 
-    final ok = await showAcknowledgmentSheet(
-      context,
-      message:
-          'This fee is non-refundable and will be deducted from your wallet '
-          'immediately. A rider will be dispatched to source your items.',
-    );
+    final msg = _isErrand
+        ? "You're paying the errand fee. A rider will be assigned to "
+            'handle your request.'
+        : 'This fee is non-refundable and will be deducted from your wallet '
+            'immediately. A rider will be dispatched to source your items.';
+
+    final ok = await showAcknowledgmentSheet(context, message: msg);
     if (!ok || !mounted) return;
 
     setState(() => _isSubmitting = true);
@@ -238,9 +242,12 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
                           ? 'A commitment fee covers the delivery cost and dispatches a rider. '
                             'The rider will source your items and confirm the final cost before delivery. '
                             'This fee is non-refundable.'
-                          : 'A ₦${fee.toStringAsFixed(0)} commitment fee is required to dispatch a rider. '
-                            'The rider will source your items and confirm the final cost before delivery. '
-                            'This fee is non-refundable.',
+                          : _isErrand
+                              ? 'This fee covers the cost of the errand. '
+                                'Your rider will call you to confirm the details.'
+                              : 'A ₦${fee.toStringAsFixed(0)} commitment fee is required to dispatch a rider. '
+                                'The rider will source your items and confirm the final cost before delivery. '
+                                'This fee is non-refundable.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: AppColors.info,
                       ),
@@ -330,8 +337,10 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    'This covers the rider going to source your items. '
-                    'You will pay the actual food cost separately once the rider confirms what is available.',
+                    _isErrand
+                        ? 'This covers the rider completing your errand request.'
+                        : 'This covers the rider going to source your items. '
+                          'You will pay the actual food cost separately once the rider confirms what is available.',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurface
                           .withValues(alpha: 0.5),
