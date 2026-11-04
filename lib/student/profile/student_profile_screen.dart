@@ -3,11 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/services/auth/auth_providers.dart';
+import '../../shared/services/support/support_chat_service.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/pin/pin_entry_sheet.dart';
 import '../services/student_providers.dart';
+import '../support/support_chat_screen.dart';
 import 'badges_screen.dart';
 import 'gift_screen.dart';
 import 'membership_card_screen.dart';
@@ -314,6 +316,24 @@ class StudentProfileScreen extends ConsumerWidget {
                     const SizedBox(height: AppSpacing.sm),
                     _SectionCard(
                       children: [
+                        // Help & Support — badge shows when admin replies.
+                        Consumer(
+                          builder: (context, ref, _) {
+                            final unread = ref
+                                    .watch(myConversationProvider)
+                                    .valueOrNull
+                                    ?.studentUnreadCount ??
+                                0;
+                            return _MenuRowBadged(
+                              icon: Icons.support_agent_outlined,
+                              label: 'Help & Support',
+                              badgeCount: unread,
+                              onTap: () => _push(
+                                  context, const SupportChatScreen()),
+                              theme: theme,
+                            );
+                          },
+                        ),
                         _MenuRow(
                           icon: Icons.settings_outlined,
                           label: 'Preferences',
@@ -513,6 +533,58 @@ class _MenuRow extends StatelessWidget {
         ),
         if (showDivider)
           Divider(height: 1, color: theme.dividerColor),
+      ],
+    );
+  }
+}
+
+/// Like [_MenuRow] but shows a numeric badge on the icon when [badgeCount] > 0.
+class _MenuRowBadged extends StatelessWidget {
+  const _MenuRowBadged({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    required this.theme,
+    this.badgeCount = 0,
+  });
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final ThemeData theme;
+  final int badgeCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+            child: Row(
+              children: [
+                Badge(
+                  isLabelVisible: badgeCount > 0,
+                  label: Text('$badgeCount'),
+                  child: Icon(
+                    icon,
+                    size: 20,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(label, style: theme.textTheme.bodyMedium),
+                ),
+                Icon(Icons.chevron_right,
+                    size: 18,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
+              ],
+            ),
+          ),
+        ),
+        Divider(height: 1, color: theme.dividerColor),
       ],
     );
   }

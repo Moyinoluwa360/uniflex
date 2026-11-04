@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+// ignore_for_file: use_build_context_synchronously
+
 /// Handles Firebase Cloud Messaging initialisation and local notification
 /// display. Call [NotificationService.init] once from main() after Firebase
 /// has been initialised.
@@ -13,11 +15,19 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 ///   2. Gets the FCM token and stores it in `profiles.fcm_token` via RPC.
 ///   3. Configures flutter_local_notifications for foreground messages.
 ///   4. Listens for token refreshes and updates the DB.
+///   5. Handles notification taps (background + terminated) and stores the
+///      payload in [_pendingNavigation] for the active shell to consume.
+///   6. Clears the FCM token on sign-out so a logged-out device stops
+///      receiving pushes for the previous user.
 class NotificationService {
   NotificationService._();
 
   static final _messaging = FirebaseMessaging.instance;
   static final _localNotifications = FlutterLocalNotificationsPlugin();
+
+  /// Payload from the most recent notification tap. Consumed once by the
+  /// shell's initState via [consumePendingNavigation].
+  static Map<String, dynamic>? _pendingNavigation;
 
   static const _androidChannel = AndroidNotificationChannel(
     'uniflex_high',
@@ -51,17 +61,57 @@ class NotificationService {
               AndroidFlutterLocalNotificationsPlugin>()
           ?.createNotificationChannel(_androidChannel);
 
-      // Store token in DB
+      // Store token in DB.
       final token = await _messaging.getToken();
       if (token != null) await _storeToken(token);
 
-      // Update token on refresh
+      // Update token on refresh.
       _messaging.onTokenRefresh.listen(_storeToken);
 
-      // Show notification when app is in foreground
+      // Show local notification when app is in foreground.
       FirebaseMessaging.onMessage.listen(_showLocalNotification);
+
+      // Tap from background (app suspended but not killed).
+      FirebaseMessaging.onMessageOpenedApp.listen(_handleTap);
+
+      // Tap from terminated state (cold start).
+      final initial = await _messaging.getInitialMessage();
+      if (initial != null) _handleTap(initial);
+
+      // Clear FCM token when user signs out so this device stops receiving
+      // pushes for the previous user's account.
+      Supabase.instance.client.auth.onAuthStateChange.listen((event) {
+        if (event.event == AuthChangeEvent.signedOut) {
+          _clearToken();
+        }
+      });
     } catch (e) {
       debugPrint('[NotificationService] init error: $e');
+    }
+  }
+
+  /// Returns and clears any pending navigation payload from a notification tap.
+  /// Call once from the shell's initState (via postFrameCallback).
+  static Map<String, dynamic>? consumePendingNavigation() {
+    final nav = _pendingNavigation;
+    _pendingNavigation = null;
+    return nav;
+  }
+
+  static void _handleTap(RemoteMessage message) {
+    if (message.data.isNotEmpty) {
+      _pendingNavigation = Map<String, dynamic>.from(message.data);
+    }
+  }
+
+  static Future<void> _clearToken() async {
+    try {
+      final client = Supabase.instance.client;
+      if (client.auth.currentUser == null) return;
+      // Set token to null so this device no longer receives pushes.
+      await client.rpc('store_fcm_token', params: {'p_token': null});
+    } catch (e) {
+      debugPrint('[NotificationService] clear token error: $e');
     }
   }
 

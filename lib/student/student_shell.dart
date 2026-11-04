@@ -8,6 +8,7 @@ import 'home/student_home_screen.dart';
 import 'ordering/order_repository.dart';
 import 'orders/orders_screen.dart';
 import 'profile/student_profile_screen.dart';
+import 'support/support_chat_screen.dart';
 import 'wallet/wallet_screen.dart';
 
 /// Root of the Student experience. Phase 2 adds Orders and Wallet tabs.
@@ -19,8 +20,27 @@ import 'wallet/wallet_screen.dart';
 /// order Ready — without waiting on an FCM push round-trip. This only
 /// fires while the app is open; background push still depends on FCM
 /// being fully configured (see Phase 6 notes).
-class StudentShell extends ConsumerWidget {
+class StudentShell extends ConsumerStatefulWidget {
   const StudentShell({super.key});
+
+  @override
+  ConsumerState<StudentShell> createState() => _StudentShellState();
+}
+
+class _StudentShellState extends ConsumerState<StudentShell> {
+  @override
+  void initState() {
+    super.initState();
+    // Handle push notification tap that opened the app.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final nav = NotificationService.consumePendingNavigation();
+      if (nav?['type'] == 'support' && mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const SupportChatScreen()),
+        );
+      }
+    });
+  }
 
   String? _statusChangeMessage(Order order) {
     return switch (order.status) {
@@ -36,7 +56,7 @@ class StudentShell extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     ref.listen<AsyncValue<List<Order>>>(studentOrdersProvider,
         (previous, next) {
       final prevOrders = previous?.valueOrNull;

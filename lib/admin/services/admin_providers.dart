@@ -91,3 +91,18 @@ final adminAnalyticsProvider =
     FutureProvider<Map<String, dynamic>>((ref) async {
   return ref.watch(adminServiceProvider).getAnalytics();
 });
+
+/// Live stream of all non-terminal delivery groups (multi-vendor checkouts),
+/// with vendor names and leg count. Used by the Deliveries tab.
+final adminDeliveryGroupsProvider =
+    StreamProvider<List<AdminDeliveryGroupRow>>((ref) {
+  return ref.watch(adminServiceProvider).streamAllDeliveryGroups();
+});
+
+/// Live stream of all non-terminal errand orders, enriched with
+/// errand_requests pickup + item data. Used by the Errands tab.
+final adminErrandOrdersProvider =
+    StreamProvider<List<AdminErrandRow>>((ref) {
+  return ref.watch(adminServiceProvider).streamErrandOrders();
+});
+

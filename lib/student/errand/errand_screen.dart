@@ -7,9 +7,11 @@ import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
+import '../../shared/services/auth/auth_providers.dart';
+import '../../shared/widgets/pin/pin_entry_sheet.dart';
 import '../../shared/widgets/sheets/acknowledgment_sheet.dart';
-import '../ordering/commitment_fee_screen.dart';
 import '../ordering/order_repository.dart';
+import 'errand_confirmation_screen.dart';
 
 /// Errand request flow — the student sets a pickup point, drop-off
 /// point, and a text description of what needs fetching. The flow skips
@@ -72,32 +74,48 @@ class _ErrandScreenState extends ConsumerState<ErrandScreen> {
     final ok = await showAcknowledgmentSheet(
       context,
       message:
-          "You're paying the errand fee. Your rider will call you to "
-          'sort out the details.',
+          "You're paying the errand fee (₦${widget.category.flatFee.toStringAsFixed(0)}). "
+          'Your rider will call you to sort out the details.',
     );
     if (!ok || !mounted) return;
 
-    setState(() => _isSubmitting = true);
+    // Check / set PIN before collecting it.
+    final hasPin =
+        await ref.read(profileServiceProvider).hasTransactionPin();
+    if (!mounted) return;
 
+    if (!hasPin) {
+      final didSet = await showSetPinSheet(context, ref);
+      if (!mounted || !didSet) return;
+    }
+
+    final pin = await showEnterPinSheet(
+      context,
+      title: 'Confirm errand fee',
+    );
+    if (pin == null || !mounted) return;
+
+    setState(() => _isSubmitting = true);
     try {
-      await _doConfirm();
+      await _doConfirm(pin);
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
-  Future<void> _doConfirm() async {
+  Future<void> _doConfirm(String pin) async {
     final loc = _selectedLocation;
     final details = _locationDetailsController.text.trim();
 
     final order = await ref
         .read(orderNotifierProvider.notifier)
-        .placeErrandRequestStaged(
+        .placeErrandRequest(
           categoryKey: widget.category.key,
-          flatFee: widget.category.flatFee,
+          fee: widget.category.flatFee,
           pickupLocation: _pickupController.text.trim(),
           dropoffLocation: _dropoffController.text.trim(),
           itemDescription: _descriptionController.text.trim(),
+          pin: pin,
           deliveryLocationId: loc?.id,
           locationDetails: details.isEmpty ? null : details,
         );
@@ -118,7 +136,7 @@ class _ErrandScreenState extends ConsumerState<ErrandScreen> {
 
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (_) => CommitmentFeeScreen.forOrder(order: order),
+        builder: (_) => ErrandConfirmationScreen(order: order),
       ),
     );
   }

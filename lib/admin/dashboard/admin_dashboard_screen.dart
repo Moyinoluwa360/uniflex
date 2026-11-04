@@ -213,7 +213,7 @@ class _StatusBreakdown extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final rows = [
-      ('Scheduled (Placed)', byStatus['placed'] as int? ?? 0, AppColors.orange),
+      ('Placed', byStatus['placed'] as int? ?? 0, AppColors.orange),
       ('Preparing', byStatus['preparing'] as int? ?? 0, theme.colorScheme.primary),
       ('Ready', byStatus['ready'] as int? ?? 0, AppColors.emerald),
       ('Completed today', byStatus['completed'] as int? ?? 0, AppColors.accentViolet),

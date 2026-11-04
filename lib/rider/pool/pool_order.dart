@@ -22,6 +22,6 @@ class PoolOrder {
   final String? pickupAddress;
 
   /// Short label for the order source shown as a badge on the pool card.
-  /// "Uniflex Food" | "Partner Food" | "Around"
+  /// "Uniflex Food" | "Partner Food" | "Errand"
   final String orderTypeLabel;
 }

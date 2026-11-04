@@ -10,6 +10,7 @@ import '../../shared/widgets/buttons/primary_button.dart';
 import '../ordering/cart_provider.dart';
 import '../ordering/checkout_screen.dart';
 import '../ordering/order_repository.dart';
+import '../tracking/errand_tracking_screen.dart';
 import '../tracking/order_tracking_screen.dart';
 
 /// Orders screen — three tabs:
@@ -358,9 +359,16 @@ class _UnifiedOrderList extends ConsumerWidget {
 
 // ── Order card (standalone: pickup / errand) ────────────────────────────────
 
-class _OrderCard extends StatelessWidget {
+class _OrderCard extends ConsumerStatefulWidget {
   const _OrderCard({required this.order});
   final Order order;
+
+  @override
+  ConsumerState<_OrderCard> createState() => _OrderCardState();
+}
+
+class _OrderCardState extends ConsumerState<_OrderCard> {
+  bool _isCancelling = false;
 
   Color _statusColor(OrderStatus s) {
     return switch (s) {
@@ -375,10 +383,51 @@ class _OrderCard extends StatelessWidget {
     };
   }
 
+  Future<void> _cancel() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel order?'),
+        content: const Text(
+            'Are you sure you want to cancel this order? '
+            'No fees will be automatically refunded.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep order'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Cancel order',
+                style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isCancelling = true);
+    try {
+      await cancelOrder(ref, widget.order.id);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(mapCancelError(e.toString())),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isCancelling = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final order = widget.order;
     final color = _statusColor(order.status);
+    final canCancel = !order.status.isTerminal && order.riderId == null;
 
     return Container(
       decoration: BoxDecoration(
@@ -445,25 +494,46 @@ class _OrderCard extends StatelessWidget {
                   ),
                 ],
               ),
-              if (!order.status.isTerminal)
-                FilledButton.icon(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => OrderTrackingScreen(order: order),
+              Row(
+                children: [
+                  if (canCancel)
+                    TextButton(
+                      onPressed: _isCancelling ? null : _cancel,
+                      style: TextButton.styleFrom(
+                          foregroundColor: AppColors.error),
+                      child: _isCancelling
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Cancel'),
                     ),
-                  ),
-                  icon: const Icon(Icons.location_on_outlined, size: 18),
-                  label: const Text('Track Order'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.emerald,
-                    foregroundColor: AppColors.pureWhite,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.lg,
-                      vertical: AppSpacing.sm + 2,
+                  if (!order.status.isTerminal) ...[
+                    if (canCancel) const SizedBox(width: 4),
+                    FilledButton.icon(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => order.isErrand
+                              ? ErrandTrackingScreen(order: order)
+                              : OrderTrackingScreen(order: order),
+                        ),
+                      ),
+                      icon: const Icon(Icons.location_on_outlined, size: 18),
+                      label: const Text('Track'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.emerald,
+                        foregroundColor: AppColors.pureWhite,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md,
+                          vertical: AppSpacing.sm + 2,
+                        ),
+                        minimumSize: const Size(80, 44),
+                      ),
                     ),
-                    minimumSize: const Size(120, 44),
-                  ),
-                ),
+                  ],
+                ],
+              ),
             ],
           ),
         ],
@@ -474,9 +544,16 @@ class _OrderCard extends StatelessWidget {
 
 // ── Group card (delivery orders) ─────────────────────────────────────────────
 
-class _GroupCard extends StatelessWidget {
+class _GroupCard extends ConsumerStatefulWidget {
   const _GroupCard({required this.group});
   final DeliveryGroup group;
+
+  @override
+  ConsumerState<_GroupCard> createState() => _GroupCardState();
+}
+
+class _GroupCardState extends ConsumerState<_GroupCard> {
+  bool _isCancelling = false;
 
   Color _statusColor(DeliveryGroupStatus s) {
     return switch (s) {
@@ -489,10 +566,51 @@ class _GroupCard extends StatelessWidget {
     };
   }
 
+  Future<void> _cancel() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel order?'),
+        content: const Text(
+            'Are you sure you want to cancel this delivery order? '
+            'No fees will be automatically refunded.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep order'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Cancel order',
+                style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isCancelling = true);
+    try {
+      await cancelDeliveryGroup(ref, widget.group.id);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(mapCancelError(e.toString())),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isCancelling = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final group = widget.group;
     final color = _statusColor(group.status);
+    final canCancel = !group.isTerminal && group.riderId == null;
 
     return Container(
       decoration: BoxDecoration(
@@ -565,26 +683,45 @@ class _GroupCard extends StatelessWidget {
                   ),
                 ],
               ),
-              if (!group.isTerminal)
-                FilledButton.icon(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          OrderTrackingScreen.forGroup(group: group),
+              Row(
+                children: [
+                  if (canCancel)
+                    TextButton(
+                      onPressed: _isCancelling ? null : _cancel,
+                      style: TextButton.styleFrom(
+                          foregroundColor: AppColors.error),
+                      child: _isCancelling
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Cancel'),
                     ),
-                  ),
-                  icon: const Icon(Icons.location_on_outlined, size: 18),
-                  label: const Text('Track Order'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.emerald,
-                    foregroundColor: AppColors.pureWhite,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.lg,
-                      vertical: AppSpacing.sm + 2,
+                  if (!group.isTerminal) ...[
+                    if (canCancel) const SizedBox(width: 4),
+                    FilledButton.icon(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              OrderTrackingScreen.forGroup(group: group),
+                        ),
+                      ),
+                      icon: const Icon(Icons.location_on_outlined, size: 18),
+                      label: const Text('Track'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.emerald,
+                        foregroundColor: AppColors.pureWhite,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md,
+                          vertical: AppSpacing.sm + 2,
+                        ),
+                        minimumSize: const Size(80, 44),
+                      ),
                     ),
-                    minimumSize: const Size(120, 44),
-                  ),
-                ),
+                  ],
+                ],
+              ),
             ],
           ),
         ],

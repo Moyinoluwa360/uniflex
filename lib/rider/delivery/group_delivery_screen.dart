@@ -305,8 +305,7 @@ class _GroupDeliveryScreenState extends ConsumerState<GroupDeliveryScreen> {
           Text(
             '${legs.length} vendor ${legs.length == 1 ? 'stop' : 'stops'} · '
             '${switch (group.deliveryType) {
-              'campus_delivery' => 'Campus delivery',
-              'hostel_delivery' => 'Hostel delivery',
+              'pickup' => 'Pickup',
               _ => 'Delivery',
             }}',
             style: theme.textTheme.bodySmall?.copyWith(

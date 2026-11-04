@@ -75,14 +75,21 @@ class RiderService {
         final source = m['source'] as String;
         final type = m['type'] as String;
         final deliveryType = m['delivery_type'] as String?;
+        // 'delivery' covers all named-location orders (Round 8+).
+        // Keep campus_delivery/hostel_delivery for backward compat with any
+        // pre-migration partner orders still in the DB.
         const deliveryTypes = ['delivery', 'campus_delivery', 'hostel_delivery'];
         final transferredToRiderAt = m['transferred_to_rider_at'];
+        // Legacy around orders used being_sourced after commitment fee.
+        final commitmentFeePaid = m['commitment_fee_paid'] as bool? ?? false;
         return (source == 'uniflex' && status == 'ready' && transferredToRiderAt != null
                 && deliveryTypes.contains(deliveryType))
-            // partner/around orders enter the pool only after the commitment
-            // fee is paid (status transitions from 'placed' to 'being_sourced').
+            // Partner food: pool-eligible once commitment fee paid (being_sourced).
             || (source == 'partner' && status == 'being_sourced' && deliveryTypes.contains(deliveryType))
-            || ((type == 'around' || type == 'errand') && status == 'being_sourced');
+            // Errand orders (Round 8+): fee paid upfront, status stays 'placed'.
+            || (type == 'errand' && status == 'placed' && commitmentFeePaid)
+            // Legacy around orders used being_sourced — keep for backward compat.
+            || (type == 'around' && status == 'being_sourced');
       }).toList();
 
       if (pool.isEmpty) return [];

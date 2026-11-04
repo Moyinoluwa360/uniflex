@@ -17,6 +17,7 @@ import '../../shared/widgets/async/retry_section.dart';
 import '../../shared/widgets/pin/pin_entry_sheet.dart';
 import '../ordering/adjust_order_screen.dart';
 import '../ordering/order_repository.dart';
+import '../support/support_chat_screen.dart';
 
 /// Live order tracking — shows the current order status as a vertical
 /// step timeline, refreshable. Supports both individual orders and
@@ -315,6 +316,25 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                     style: theme.textTheme.titleSmall),
                 const SizedBox(height: AppSpacing.md),
                 _GroupLegsSection(groupId: g.id),
+
+                const SizedBox(height: AppSpacing.xl),
+
+                // ── Get help with this order ─────────────────────────────
+                if (!g.isTerminal)
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.support_agent_outlined, size: 18),
+                    label: const Text('Get help with this order'),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => SupportChatScreen(
+                          initialOrderId: g.id,
+                          initialOrderLabel: '#${g.shortId} · Delivery',
+                        ),
+                      ),
+                    ),
+                  ),
+
+                const SizedBox(height: AppSpacing.xl),
               ],
             ),
           );
@@ -672,6 +692,26 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                     color: theme.colorScheme.primary,
                   ),
                 ),
+
+                const SizedBox(height: AppSpacing.xl),
+
+                // ── Get help with this order ─────────────────────────────
+                if (!o.status.isTerminal)
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.support_agent_outlined, size: 18),
+                    label: const Text('Get help with this order'),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => SupportChatScreen(
+                          initialOrderId: o.id,
+                          initialOrderLabel:
+                              '#${o.shortId} · ${o.status.label}',
+                        ),
+                      ),
+                    ),
+                  ),
+
+                const SizedBox(height: AppSpacing.xl),
               ],
             ),
           );

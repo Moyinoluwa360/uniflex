@@ -2,6 +2,153 @@
 
 All notable changes to this project are documented here, phase by phase.
 
+## Support Chat (2026-11-04)
+
+### Added
+
+- **Student ↔ Admin support chat** — live two-way messaging between students and
+  the admin team. One conversation per student; admins share a single inbox.
+  - **`supabase/support_chat.sql`** — `support_conversations` and
+    `support_messages` tables; RLS (students see own, admins see all, no client
+    writes); Realtime publication; RPCs: `send_support_message`,
+    `mark_support_read`, `resolve_support_conversation`,
+    `get_support_unread_total`; optional pg_net trigger for push.
+  - **`supabase/functions/support-notify/index.ts`** — push dispatcher called
+    after new messages; student → all admins, admin → that student; clears stale
+    FCM tokens on delivery failure.
+  - **`lib/shared/models/support_conversation.dart`** — `SupportConversation`
+    model (one per student; open/resolved status; unread counts for both sides).
+  - **`lib/shared/models/support_message.dart`** — `SupportMessage` model
+    (sender_role, sender_name snapshot, optional order_id).
+  - **`lib/shared/services/support/support_chat_service.dart`** —
+    `SupportChatService` with Realtime-backed streams; Riverpod providers:
+    `myConversationProvider`, `allConversationsProvider`,
+    `conversationMessagesProvider`, `adminSupportUnreadProvider`.
+  - **`lib/student/support/support_chat_screen.dart`** — Student chat screen:
+    chat bubbles, date separators, resolved banner, removable order chip for
+    "get help with this order" flow, rate-limit and retry error display,
+    double-tap-guarded send button.
+  - **`lib/admin/support/admin_support_inbox_screen.dart`** — Admin inbox: all
+    conversations; filter chips Open/Resolved/All; name/preview search; unread
+    badges; sorted newest-first; live Realtime updates.
+  - **`lib/admin/support/admin_support_chat_screen.dart`** — Admin chat view:
+    student name + phone in header; "Mark resolved" with confirmation; each
+    admin message shows their own name on the bubble; order chip display.
+  - **`test/support/chat_widgets_test.dart`** — 23 unit tests covering models,
+    unread count logic, filters, date separators, message ordering, content
+    validation; all passing.
+  - **`supabase/support_chat_test.sql`** — SQL test script (runs in a rolled-back
+    transaction): tests CHECK constraints, unique constraint, unread arithmetic,
+    conversation reopen, rate-limit counter, `ON DELETE SET NULL` for order_id.
+
+### Changed
+
+- **`lib/student/profile/student_profile_screen.dart`** — Added "Help & Support"
+  row in the More section with a live unread badge from `myConversationProvider`.
+- **`lib/admin/manage/manage_hub_screen.dart`** — Added "Support" entry with
+  unread badge from `adminSupportUnreadProvider`.
+- **`lib/admin/admin_shell.dart`** — Added `badgeCounts` to pass support unread
+  count to the Manage bottom-nav badge; push tap routing to `AdminSupportInboxScreen`.
+- **`lib/student/student_shell.dart`** — Added push tap routing to
+  `SupportChatScreen` on support notifications.
+- **`lib/student/tracking/order_tracking_screen.dart`** — Added "Get help with
+  this order" `OutlinedButton` in both standalone and group tracking views (only
+  shown for non-terminal orders); pre-fills the order chip in the chat.
+- **`lib/shared/widgets/navigation/app_bottom_nav_shell.dart`** — Added optional
+  `badgeCounts: List<int>?` parameter; non-zero counts render a `Badge` on the
+  corresponding `BottomNavigationBarItem` icon.
+- **`lib/shared/services/notifications/notification_service.dart`** — Added push
+  tap handlers (`onMessageOpenedApp`, `getInitialMessage`), `consumePendingNavigation()`;
+  clears FCM token from DB on `AuthChangeEvent.signedOut`.
+- **`supabase/functions/send-notification/index.ts`** — Added UNREGISTERED token
+  cleanup: when FCM returns `UNREGISTERED`, the stale `fcm_token` is set to NULL
+  in `profiles`.
+
+---
+
+## Round 9 — Admin & Rider Audit, Phase B (2026-11-04)
+
+### Added
+
+- **`lib/admin/orders/admin_orders_screen.dart`** — New tabbed order management
+  screen (Food | Deliveries | Errands). Super admin sees all three tabs. Kitchen
+  staff still see only the Food tab (same kitchen queue content, no tab bar).
+  - Food tab: re-uses `KitchenQueueBody` extracted from `kitchen_queue_screen.dart`.
+  - Deliveries tab: streams all non-terminal `delivery_groups` via
+    `adminDeliveryGroupsProvider`; filter chips (All / Waiting / With Rider);
+    each card shows vendor stops, delivery location, rider status; Cancel button
+    with optional reason → calls `admin_cancel_delivery_group` RPC.
+  - Errands tab: streams non-terminal errand orders via `adminErrandOrdersProvider`;
+    filter chips (All / Open / In Progress); each card shows category, pickup,
+    drop-off, item description, rider status; Cancel button → calls
+    `admin_cancel_order` RPC.
+- **`KitchenQueueBody`** extracted from `KitchenQueueScreen` — reusable body-only
+  widget so the kitchen queue list can be embedded in any tab without nested scaffolds.
+- **`AdminDeliveryGroupRow` / `AdminErrandRow`** model classes in
+  `admin_service.dart` — carry enriched data for the admin order cards.
+- **`streamAllDeliveryGroups()` / `streamErrandOrders()`** in `AdminService` —
+  live Realtime-backed streams for the two new tabs; each enriches the rows with
+  vendor names or errand request details in a single batch query.
+- **`adminCancelOrder()` / `adminCancelDeliveryGroup()`** in `AdminService` —
+  wrappers for the `admin_cancel_order` and `admin_cancel_delivery_group` RPCs
+  written in Phase A.
+- **`adminDeliveryGroupsProvider` / `adminErrandOrdersProvider`** in
+  `admin_providers.dart`.
+
+### Fixed
+
+- **Analytics double-count** (`admin_service.dart:getAnalytics()`): the month
+  orders query now filters `delivery_group_id IS NULL` so delivery group legs
+  are not counted multiple times. A separate `delivery_groups` query adds group
+  counts + revenue so multi-vendor checkouts register as one order each.
+  `ordersThisMonth` is now `standalone_orders + delivery_groups`.
+- **Admin shell** (`admin_shell.dart`): super_admin Orders tab now points to
+  `AdminOrdersScreen` instead of `KitchenQueueScreen`.
+- **Dashboard label** (`admin_dashboard_screen.dart`): `"Scheduled (Placed)"`
+  → `"Placed"` in the Kitchen Stages breakdown.
+
+---
+
+## Round 9 — Admin & Rider Audit, Phase A (2026-11-03)
+
+### Fixed
+
+- **Rider pool — errand filter** (`rider/services/rider_service.dart`): client-side
+  filter was checking `status == 'being_sourced'` for errands. After Round 8,
+  errands use `status='placed' AND commitment_fee_paid=true`. Fixed to match.
+  Legacy `around` orders still use `being_sourced` for backward compat.
+- **Kitchen queue stale delivery_type labels** (`admin/kitchen/kitchen_queue_screen.dart`):
+  removed `'campus_delivery' => 'Campus'` and `'hostel_delivery' => 'Hostel'`
+  cases; now `'delivery' => 'Delivery'` and `_ => 'Pickup'`.
+- **Group delivery screen stale labels** (`rider/delivery/group_delivery_screen.dart`):
+  same cleanup — `'pickup' => 'Pickup'` and `_ => 'Delivery'`.
+- **Job pool screen stale labels** (`rider/pool/job_pool_screen.dart`): same fix.
+- **pool_order.dart comment** — updated doc comment to say "Errand" not "Around".
+
+### Added
+
+- **`supabase/round9_cancel.sql`** — four cancel RPCs:
+  - `student_cancel_order(uuid)` — race-safe, fails if rider already accepted.
+  - `student_cancel_delivery_group(uuid)` — same for multi-vendor checkouts.
+  - `admin_cancel_order(uuid, text)` — admin cancels any non-terminal standalone order.
+  - `admin_cancel_delivery_group(uuid, text)` — admin cancels group + all legs.
+  - No automatic refunds on any cancellation (existing policy).
+- **Student cancel button** — `_OrderCard` and `_GroupCard` in `orders_screen.dart`
+  and `_ErrandOrderCard` in `student_home_screen.dart` now show a Cancel action
+  when `riderId == null && !isTerminal`. Confirm dialog required. Races handled
+  server-side by the RPC; client shows a clear error message if a rider accepted
+  simultaneously.
+- **`cancelOrder` / `cancelDeliveryGroup` / `mapCancelError`** — public helpers
+  in `order_repository.dart` used by all cancel buttons.
+
+### SQL to run
+
+```
+supabase/round9_cancel.sql  — run once in Supabase SQL Editor
+```
+
+---
+
 ## Round 8 — Unified orders, location-based fees, UI polish, bug fixes (2026-11-02)
 
 ### Summary
@@ -76,6 +223,42 @@ mark-all-read, and see-all vendors.
   errand tables, adds `delivery_location_id`/`location_details` to
   `delivery_groups` and `orders`, updates `place_multi_vendor_order` with
   pack-bracket fee calculation, adds `search_products` RPC.
+
+## Round 8 Bug Fixes (2) — Errand payment flow, delivery_type constraint, rider pool (2026-11-03)
+
+### Fixed
+
+- **Errand payment flow** — errand screens (`ErrandScreen`, `CreateErrandScreen`)
+  now call `place_errand_with_payment` (single upfront payment) instead of the
+  two-step staged flow (`place_errand_order` + `CommitmentFeeScreen`). The
+  correct sequence is: acknowledgment sheet → check/set PIN → PIN entry →
+  atomic fee deduction + order creation → `ErrandConfirmationScreen`.
+- **`delivery_groups.delivery_type` constraint** — the CHECK constraint only
+  allowed `('pickup','campus_delivery','hostel_delivery')` but Round 8 sends
+  `'delivery'`. `round8_bugfix.sql` migrates existing rows and narrows the
+  constraint to `('pickup','delivery')`.
+- **`pay_commitment_fee` guard** — now rejects `type in ('errand','around')`
+  orders with a clear exception. Errand orders must never reach this function.
+- **Rider pool (`job_pool_read`)** — updated policy includes
+  `type='errand' AND status='placed' AND commitment_fee_paid=true` so errand
+  orders are visible to riders after payment.
+- **`accept_order`** — now handles `type='errand'`: eligibility check requires
+  `status='placed' AND commitment_fee_paid=true`; on accept, status advances to
+  `'being_sourced'` ("Rider assigned" in the errand timeline).
+- **`confirm_pickup`** — errand orders now advance to `status='out_for_delivery'`
+  ("On the way") when the rider confirms pickup.
+- **Errand orders routing** — `_OrderCard` in `OrdersScreen` now routes
+  `order.isErrand` to `ErrandTrackingScreen` instead of `OrderTrackingScreen`.
+
+### Added
+
+- **`ErrandConfirmationScreen`** (`student/errand/errand_confirmation_screen.dart`) —
+  errand-specific confirmation: "Your errand has been sent. A rider will call
+  you." + Track errand button → `ErrandTrackingScreen` + Back to home.
+- **`supabase/round8_bugfix.sql`** — idempotent SQL fixing all 6 database-level
+  bugs above. Run once in Supabase SQL Editor after `round8_migration.sql`.
+
+---
 
 ## Round 8 Fixes — Errand page rebuild, AppAccordionCard, Create errand form (2026-11-03)
 

@@ -55,6 +55,7 @@ lib/
     orders/                  # OrdersScreen (Cart / Preparing / Completed tabs)
     tracking/                # OrderTrackingScreen (status timeline, refreshable)
     wallet/                  # WalletScreen, PaystackCheckoutPage, SavingPlanScreen
+    support/                 # SupportChatScreen — student ↔ admin chat (see "Customer Support Chat")
     profile/                 # StudentProfileScreen (rebuilt Phase 6) + sub-screens:
                               # MembershipCardScreen, ReferralScreen, GiftScreen,
                               # BadgesScreen, ScheduledOrdersStudentScreen,
@@ -84,7 +85,8 @@ lib/
     menu/                    # MenuManagementScreen, ProductFormScreen — Uniflex catalog CRUD
                               # (+ Requires Pack toggle, Uniflex pack price editor)
     manage/                  # ManageHubScreen — single "Manage" nav entry branching into
-                              # Vendors / Riders / Errand Categories / Delivery Locations
+                              # Vendors / Riders / Errand Categories / Delivery Locations / Support
+    support/                 # AdminSupportInboxScreen + AdminSupportChatScreen (see "Customer Support Chat")
     vendors/                 # VendorManagementScreen, VendorFormScreen,
                               # VendorProductsScreen — partner vendor CRUD (+ pack price)
     riders/                  # RiderManagementScreen — invite/remove/reactivate riders
@@ -99,6 +101,7 @@ lib/
                               # ErrandCategory, DeliveryLocation, WalletTransaction,
                               # SavingPlan, Gift, Achievement (Phase 6)
     services/
+      support/               # SupportChatService + all support providers (see "Customer Support Chat")
       notifications/         # NotificationService — FCM init, token storage, local
                               # notification display (Phase 6); showLocal() is also used
                               # directly by the order-status-change listener (Section 12)
@@ -397,6 +400,7 @@ directly, so there's one place that knows every key the app depends on.
 | Round 5 ✅ (PIN / payment root-cause fix) | All PIN functions + `pay_commitment_fee` re-created with `search_path = public, extensions`; `showSetPinSheet` rewritten with current-PIN detection; comprehensive `_mapError` coverage |
 | Round 7 ✅ (pack-first, multi-vendor, delivery groups) | `delivery_groups`/`delivery_settings` tables, `place_multi_vendor_order`/`pay_group_commitment_fee`/`accept_delivery_group`/`verify_group_delivery` RPCs, `PackBuilderScreen`, multi-vendor `CartState`, `GroupDeliveryScreen`, `DeliverySettingsScreen`, `deliveryFeePerVendor` helper |
 | Round 8 ✅ (locations, errands, unified orders, UI polish) | `delivery_locations` table + RPCs, location-based fees replacing `delivery_settings`, errand rename (around→errand across ~22 files), unified order identity via `delivery_groups`, accordion UI (catalog/pack builder/cart), `acknowledgment_sheet.dart`, double-tap guards, `SearchScreen`, `AllVendorsScreen`, `DeliveryLocationsScreen` |
+| Support Chat ✅ (2026-11-04) | `support_conversations`/`support_messages` tables + 4 RPCs, `shared/services/support/support_chat_service.dart`, `student/support/support_chat_screen.dart`, `admin/support/` inbox + chat screens, `supabase/functions/support-notify/`, push tap routing in both shells, token hygiene on sign-out |
 
 Update this table as phases land so it stays a reliable map of the repo.
 
@@ -756,3 +760,122 @@ available right now", backed by
 `any_riders_available()` (`SECURITY DEFINER`, checks whether any
 `role = 'rider' and rider_is_online and is_active` row exists) — no name
 or per-rider status ever leaves the server.
+
+## Customer Support Chat (2026-11-04)
+
+One-to-one Student ↔ Admin chat. Students open a conversation from their
+Profile → "Help & Support" or via "Get help with this order" on any active
+tracking screen. Admins reply from a shared inbox (all conversations, one
+pool — not assigned to individuals). Each student has at most one
+conversation at a time (`UNIQUE(student_id)` on `support_conversations`).
+
+### Schema (`supabase/support_chat.sql`)
+
+```
+support_conversations
+  id uuid PK, student_id uuid UNIQUE FK profiles,
+  status text CHECK('open'|'resolved') DEFAULT 'open',
+  last_message_at timestamptz, last_message_preview text,
+  student_unread_count int DEFAULT 0, admin_unread_count int DEFAULT 0,
+  resolved_at timestamptz, created_at timestamptz
+
+support_messages
+  id uuid PK, conversation_id uuid FK→CASCADE,
+  sender_id uuid FK→CASCADE, sender_role text CHECK('student'|'admin'),
+  sender_name text,          ← snapshot at send time
+  body text CHECK(1 ≤ trim(length) ≤ 2000),
+  order_id uuid FK orders ON DELETE SET NULL,
+  created_at timestamptz
+```
+
+Both tables are in the `supabase_realtime` publication.
+
+RLS (no client INSERT/UPDATE/DELETE — all writes go through RPCs):
+- `support_conversations`: student sees own row; admin sees all.
+- `support_messages`: student sees messages in own conversation; admin sees all.
+
+### RPCs
+
+| RPC | Who | What |
+|-----|-----|-------|
+| `send_support_message(p_body, p_order_id, p_conversation_id)` | student or admin | Student path: find-or-create conversation, validate order ownership, reopen if resolved, increment `admin_unread_count`. Admin path: requires `p_conversation_id`, verifies `is_admin()`, increments `student_unread_count`. Both: snapshot `sender_name`, rate-limit 20 msg/min. |
+| `mark_support_read(p_conversation_id, p_role)` | student or admin | Zeros the caller's unread counter; called best-effort on screen open. |
+| `resolve_support_conversation(p_conversation_id)` | admin only | Sets `status='resolved'`, `resolved_at`, zeros both counters. |
+| `get_support_unread_total()` | student only | Returns `student_unread_count` for the caller's conversation. |
+
+### Providers (`lib/shared/services/support/support_chat_service.dart`)
+
+```
+supportChatServiceProvider       → SupportChatService
+myConversationProvider           → StreamProvider<SupportConversation?>  (student)
+allConversationsProvider         → StreamProvider<List<SupportConversation>> (admin)
+conversationMessagesProvider     → StreamProvider.family<List<SupportMessage>, String>
+supportUnreadTotalProvider       → FutureProvider<int>  (student badge)
+adminSupportUnreadProvider       → Provider<int>  (sum of adminUnreadCount across all convs)
+```
+
+Streams use `supabase.from('…').stream(primaryKey: ['id'])` — the same
+Realtime pattern as kitchen orders and the job pool. No `.subscribe()`
+channels, no manual reconnect logic.
+
+### Client screens
+
+**Student:**
+- `lib/student/support/support_chat_screen.dart` — bubbles (admin left,
+  student right), date separators, order chip (attached once per message,
+  detached after first send), resolved banner, rate-limit error banner,
+  double-tap guard (`bool _isSending`).
+- Badge on "Help & Support" profile row watches `myConversationProvider`
+  → `.studentUnreadCount`.
+- "Get help with this order" `OutlinedButton.icon` on
+  `OrderTrackingScreen` and `GroupDeliveryScreen` pre-attaches `orderId`
+  and label to `SupportChatScreen`.
+
+**Admin:**
+- `lib/admin/support/admin_support_inbox_screen.dart` — `Open / Resolved / All`
+  filter chips; name search backed by async `fetchStudentProfile` calls
+  populating `Map<String, String> _names`; unread badge pill per tile.
+- `lib/admin/support/admin_support_chat_screen.dart` — `_StudentHeader`
+  (`PreferredSizeWidget`) with student name/nickname/phone fetched once
+  via `FutureBuilder`; "Mark Resolved" `AlertDialog` confirm.
+- Unread badge on Manage tab: `adminSupportUnreadProvider` passed to
+  `AppBottomNavShell(badgeCounts: [0, 0, unread, 0])` by `AdminShell`.
+  Manage hub shows the same count on the "Support" entry.
+
+### Push notifications for support messages
+
+New edge function: `supabase/functions/support-notify/index.ts`
+
+**Student sends** → function fetches all `profiles` rows with `role='admin'`
+and non-null `fcm_token` → pushes FCM notification to each admin.
+
+**Admin sends** → function joins `support_conversations` → `profiles` to
+get student `fcm_token` → pushes to that student.
+
+On FCM `UNREGISTERED` / `INVALID_ARGUMENT` error: function sets
+`fcm_token = null` for that profile (token hygiene).
+
+**Trigger** (`_trigger_support_notify` on `support_messages AFTER INSERT`):
+calls `support-notify` via `net.http_post` (pg_net extension). This
+requires the DB owner to run once:
+```sql
+ALTER DATABASE postgres SET app.supabase_project_url = 'https://…supabase.co';
+ALTER DATABASE postgres SET app.supabase_service_role_key = '…';
+```
+If pg_net is unavailable, the same edge function can be wired as a
+**Database Webhook** (Supabase Dashboard → Database → Webhooks) on
+`INSERT` on `support_messages` — same payload, no extension needed.
+
+**Push tap routing** (`lib/shared/services/notifications/notification_service.dart`):
+- `FirebaseMessaging.onMessageOpenedApp` and `getInitialMessage()` store
+  the payload in static `_pendingNavigation`.
+- `StudentShell.initState` and `AdminShell.initState` read it via
+  `consumePendingNavigation()` in `addPostFrameCallback`; `type == 'support'`
+  navigates to `SupportChatScreen` / `AdminSupportInboxScreen`.
+
+**Token hygiene:**
+- `NotificationService` listens to `auth.onAuthStateChange`; on
+  `AuthChangeEvent.signedOut` calls `store_fcm_token(null)` to clear
+  the stale token.
+- `send-notification` edge function (existing) also gained UNREGISTERED
+  cleanup in the same pass.

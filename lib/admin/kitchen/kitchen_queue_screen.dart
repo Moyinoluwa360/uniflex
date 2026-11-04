@@ -23,13 +23,10 @@ class KitchenQueueScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final ordersAsync = ref.watch(kitchenOrdersProvider);
-
     return Scaffold(
       appBar: UniflexAppBar(
         title: 'Kitchen Queue',
         actions: [
-          // Live indicator
           Padding(
             padding: const EdgeInsets.only(right: AppSpacing.md),
             child: Row(
@@ -55,7 +52,22 @@ class KitchenQueueScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: ordersAsync.when(
+      body: const KitchenQueueBody(),
+    );
+  }
+}
+
+/// The scrollable kitchen queue list — no Scaffold/AppBar. Used by both
+/// [KitchenQueueScreen] and the Food tab inside [AdminOrdersScreen].
+class KitchenQueueBody extends ConsumerWidget {
+  const KitchenQueueBody({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final ordersAsync = ref.watch(kitchenOrdersProvider);
+
+    return ordersAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => RetrySection(
           message: 'Could not connect to the queue. Check your connection.',
@@ -152,8 +164,7 @@ class KitchenQueueScreen extends ConsumerWidget {
             ],
           );
         },
-      ),
-    );
+      );
   }
 }
 
@@ -461,8 +472,6 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
                         const SizedBox(width: 4),
                         Text(
                           switch (order.deliveryType) {
-                            'campus_delivery' => 'Campus',
-                            'hostel_delivery' => 'Hostel',
                             'delivery' => 'Delivery',
                             _ => 'Pickup',
                           },

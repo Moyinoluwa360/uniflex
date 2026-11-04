@@ -5,12 +5,15 @@ import '../../shared/models/delivery_location.dart';
 import '../../shared/models/errand_category.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
-import '../ordering/commitment_fee_screen.dart';
+import '../../shared/widgets/pin/pin_entry_sheet.dart';
+import '../../shared/widgets/sheets/acknowledgment_sheet.dart';
 import '../ordering/order_repository.dart';
 import 'errand_category_providers.dart';
+import 'errand_confirmation_screen.dart';
 
 /// Full-screen form for creating an errand request.
 ///
@@ -52,27 +55,54 @@ class _CreateErrandScreenState extends ConsumerState<CreateErrandScreen> {
     if (!_canSubmit) return;
     if (!_formKey.currentState!.validate()) return;
 
+    final category = _selectedCategory!;
+
+    final ok = await showAcknowledgmentSheet(
+      context,
+      message:
+          "You're paying the errand fee (₦${category.flatFee.toStringAsFixed(0)}). "
+          'Your rider will call you to sort out the details.',
+    );
+    if (!ok || !mounted) return;
+
+    // Check / set PIN before collecting it.
+    final hasPin =
+        await ref.read(profileServiceProvider).hasTransactionPin();
+    if (!mounted) return;
+
+    if (!hasPin) {
+      final didSet = await showSetPinSheet(context, ref);
+      if (!mounted || !didSet) return;
+    }
+
+    final pin = await showEnterPinSheet(
+      context,
+      title: 'Confirm errand fee',
+    );
+    if (pin == null || !mounted) return;
+
     setState(() => _isSubmitting = true);
     try {
-      await _doSubmit();
+      await _doSubmit(pin);
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
-  Future<void> _doSubmit() async {
+  Future<void> _doSubmit(String pin) async {
     final category = _selectedCategory!;
     final loc = _selectedLocation;
     final details = _locationDetailsController.text.trim();
 
     final order = await ref
         .read(orderNotifierProvider.notifier)
-        .placeErrandRequestStaged(
+        .placeErrandRequest(
           categoryKey: category.key,
-          flatFee: category.flatFee,
+          fee: category.flatFee,
           pickupLocation: _pickupController.text.trim(),
           dropoffLocation: '',
           itemDescription: _descriptionController.text.trim(),
+          pin: pin,
           deliveryLocationId: loc?.id,
           locationDetails: details.isEmpty ? null : details,
         );
@@ -92,7 +122,7 @@ class _CreateErrandScreenState extends ConsumerState<CreateErrandScreen> {
 
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (_) => CommitmentFeeScreen.forOrder(order: order),
+        builder: (_) => ErrandConfirmationScreen(order: order),
       ),
     );
   }

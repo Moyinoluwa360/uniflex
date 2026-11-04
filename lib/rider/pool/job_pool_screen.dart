@@ -518,8 +518,7 @@ class _PoolGroupCardState extends ConsumerState<_PoolGroupCard> {
               children: [
                 Text(
                   switch (group.deliveryType) {
-                    'campus_delivery' => 'Campus',
-                    'hostel_delivery' => 'Hostel',
+                    'pickup' => 'Pickup',
                     _ => 'Delivery',
                   },
                   style: theme.textTheme.labelMedium?.copyWith(

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/models/advertisement.dart';
+import '../../shared/models/delivery_group.dart';
 import '../../shared/models/errand_category.dart';
 import '../../shared/models/order.dart';
 import '../../shared/models/order_item.dart';
@@ -155,6 +156,42 @@ class KitchenOrder {
 
   final Order order;
   final List<OrderItem> items;
+}
+
+/// A delivery group as seen by Admin — the group row plus the vendor names
+/// of its legs, used by the Deliveries tab of AdminOrdersScreen.
+class AdminDeliveryGroupRow {
+  const AdminDeliveryGroupRow({
+    required this.group,
+    required this.vendorNames,
+    required this.legCount,
+  });
+
+  final DeliveryGroup group;
+
+  /// Vendor names of the leg orders (deduplicated, ordered arbitrarily).
+  final List<String> vendorNames;
+
+  /// Number of leg orders (vendor stops) in this group.
+  final int legCount;
+}
+
+/// An errand order as seen by Admin — the order row plus detail from the
+/// errand_requests table, used by the Errands tab of AdminOrdersScreen.
+class AdminErrandRow {
+  const AdminErrandRow({
+    required this.order,
+    this.pickupLocation,
+    this.itemDescription,
+    this.category,
+  });
+
+  final Order order;
+  final String? pickupLocation;
+  final String? itemDescription;
+
+  /// The errand category key (e.g. 'buy_and_bring', 'general').
+  final String? category;
 }
 
 /// Service wrapping all Supabase calls made by admin-only screens.
@@ -666,6 +703,153 @@ class AdminService {
     return _client.storage.from('product-images').getPublicUrl(path);
   }
 
+  // ── Admin orders: Deliveries + Errands tabs ─────────────────────────────
+
+  /// Live stream of all non-terminal delivery groups (multi-vendor checkouts),
+  /// newest first. Each emission includes vendor names fetched in a single
+  /// batch. Used by the Deliveries tab of AdminOrdersScreen.
+  Stream<List<AdminDeliveryGroupRow>> streamAllDeliveryGroups() async* {
+    Future<List<AdminDeliveryGroupRow>> fetch() async {
+      final rows = await _client
+          .from('delivery_groups')
+          .select()
+          .inFilter('status', [
+            'placed',
+            'commitment_paid',
+            'awaiting_final_payment',
+            'out_for_delivery',
+          ])
+          .order('created_at', ascending: false);
+
+      if (rows.isEmpty) return [];
+
+      final ids = rows.map((m) => m['id'] as String).toList();
+
+      // Batch-fetch vendor names via leg orders.
+      final legs = await _client
+          .from('orders')
+          .select('delivery_group_id, vendors(name)')
+          .inFilter('delivery_group_id', ids);
+
+      final vendorsByGroup = <String, Set<String>>{};
+      final legCountByGroup = <String, int>{};
+      for (final leg in legs) {
+        final gid = leg['delivery_group_id'] as String;
+        final name = (leg['vendors'] as Map?)?['name'] as String?;
+        if (name != null) vendorsByGroup.putIfAbsent(gid, () => {}).add(name);
+        legCountByGroup[gid] = (legCountByGroup[gid] ?? 0) + 1;
+      }
+
+      return rows.map((m) {
+        final group = DeliveryGroup.fromMap(m);
+        return AdminDeliveryGroupRow(
+          group: group,
+          vendorNames: (vendorsByGroup[group.id] ?? {}).toList(),
+          legCount: legCountByGroup[group.id] ?? 1,
+        );
+      }).toList();
+    }
+
+    try {
+      yield await fetch();
+    } catch (e) {
+      debugPrint('[AdminDeliveries] initial fetch error: $e');
+      yield [];
+    }
+
+    try {
+      final stream = _client
+          .from('delivery_groups')
+          .stream(primaryKey: ['id'])
+          .order('created_at', ascending: false);
+      await for (final _ in stream) {
+        try {
+          yield await fetch();
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('[AdminDeliveries] stream error: $e');
+    }
+  }
+
+  /// Live stream of all non-terminal errand orders (type='errand' or legacy
+  /// 'around'), newest first. Each emission includes pickup + item info
+  /// from errand_requests. Used by the Errands tab of AdminOrdersScreen.
+  Stream<List<AdminErrandRow>> streamErrandOrders() async* {
+    Future<List<AdminErrandRow>> fetch() async {
+      final rows = await _client
+          .from('orders')
+          .select()
+          .inFilter('type', ['errand', 'around'])
+          .inFilter('status', ['placed', 'being_sourced', 'out_for_delivery'])
+          .order('created_at', ascending: false);
+
+      if (rows.isEmpty) return [];
+
+      final ids = rows.map((m) => m['id'] as String).toList();
+
+      final reqs = await _client
+          .from('errand_requests')
+          .select('order_id, pickup_location, item_description, category')
+          .inFilter('order_id', ids);
+
+      final reqsById = <String, Map<String, dynamic>>{
+        for (final r in reqs) r['order_id'] as String: r,
+      };
+
+      return rows.map((m) {
+        final order = Order.fromMap(m);
+        final req = reqsById[order.id];
+        return AdminErrandRow(
+          order: order,
+          pickupLocation: req?['pickup_location'] as String?,
+          itemDescription: req?['item_description'] as String?,
+          category: req?['category'] as String?,
+        );
+      }).toList();
+    }
+
+    try {
+      yield await fetch();
+    } catch (e) {
+      debugPrint('[AdminErrands] initial fetch error: $e');
+      yield [];
+    }
+
+    try {
+      final stream = _client
+          .from('orders')
+          .stream(primaryKey: ['id'])
+          .order('created_at', ascending: false);
+      await for (final _ in stream) {
+        try {
+          yield await fetch();
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('[AdminErrands] stream error: $e');
+    }
+  }
+
+  /// Admin cancels any non-terminal standalone order at any stage.
+  /// Calls `admin_cancel_order` SECURITY DEFINER RPC.
+  Future<void> adminCancelOrder(String orderId, {String? reason}) async {
+    await _client.rpc('admin_cancel_order', params: {
+      'p_order_id': orderId,
+      'p_reason': reason,
+    });
+  }
+
+  /// Admin cancels a multi-vendor delivery group and all its non-terminal
+  /// legs. Calls `admin_cancel_delivery_group` SECURITY DEFINER RPC.
+  Future<void> adminCancelDeliveryGroup(String groupId,
+      {String? reason}) async {
+    await _client.rpc('admin_cancel_delivery_group', params: {
+      'p_group_id': groupId,
+      'p_reason': reason,
+    });
+  }
+
   // ── Dashboard ─────────────────────────────────────────────────────────
 
   /// Returns today's key metrics: order counts by status, pending count,
@@ -700,10 +884,19 @@ class AdminService {
         .select('id')
         .eq('role', 'rider');
 
-    // Orders for this month (superset of week/today)
+    // Standalone orders this month (delivery_group_id IS NULL excludes legs
+    // so multi-vendor checkouts are not counted multiple times).
     final monthOrders = await _client
         .from('orders')
         .select('id, status, total_amount, created_at, rider_id')
+        .gte('created_at', startOfMonth.toIso8601String())
+        .filter('delivery_group_id', 'is', null);
+
+    // Delivery groups this month — each group is one checkout from the
+    // student's perspective, so we count it as one order.
+    final monthGroups = await _client
+        .from('delivery_groups')
+        .select('id, status, commitment_fee_total, created_at, rider_id')
         .gte('created_at', startOfMonth.toIso8601String());
 
     // Aggregate
@@ -730,6 +923,32 @@ class AdminService {
         revToday += amount;
       }
       statusCounts[status] = (statusCounts[status] ?? 0) + 1;
+      if (status == 'completed') {
+        completed++;
+        if (riderId != null) {
+          riderDeliveries[riderId] = (riderDeliveries[riderId] ?? 0) + 1;
+        }
+      }
+      if (status == 'cancelled') cancelled++;
+    }
+
+    // Add delivery group counts (each group = one checkout).
+    for (final row in monthGroups) {
+      final createdAt = DateTime.parse(row['created_at'] as String);
+      // Use commitment_fee_total as the revenue figure for the group.
+      final amount = (row['commitment_fee_total'] as num?)?.toDouble() ?? 0;
+      final status = row['status'] as String;
+      final riderId = row['rider_id'] as String?;
+
+      revMonth += amount;
+      if (createdAt.isAfter(startOfWeek)) {
+        ordersWeek++;
+        revWeek += amount;
+      }
+      if (createdAt.isAfter(startOfDay)) {
+        ordersToday++;
+        revToday += amount;
+      }
       if (status == 'completed') {
         completed++;
         if (riderId != null) {
@@ -788,7 +1007,7 @@ class AdminService {
       'totalRiders': riderRows.length,
       'ordersToday': ordersToday,
       'ordersThisWeek': ordersWeek,
-      'ordersThisMonth': monthOrders.length,
+      'ordersThisMonth': monthOrders.length + monthGroups.length,
       'revenueToday': revToday,
       'revenueThisWeek': revWeek,
       'revenueThisMonth': revMonth,

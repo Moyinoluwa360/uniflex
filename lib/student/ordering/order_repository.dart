@@ -661,7 +661,7 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
     }
   }
 
-  /// Places an Errand request (laundry, hostel transfer, etc.).
+  /// Places an Errand request and deducts the fee in one atomic step.
   /// [categoryKey] and [fee] come from the admin-configurable
   /// `errand_categories` table rather than a hardcoded enum.
   Future<Order?> placeErrandRequest({
@@ -671,6 +671,8 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
     required String dropoffLocation,
     required String itemDescription,
     required String pin,
+    String? deliveryLocationId,
+    String? locationDetails,
   }) async {
     state = const OrderPlacementState(isLoading: true);
     try {
@@ -683,19 +685,16 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
           'p_pickup_location': pickupLocation,
           'p_dropoff_location': dropoffLocation,
           'p_item_description': itemDescription,
-          'p_total_amount': fee,
+          'p_flat_fee': fee,
           'p_pin': pin,
+          if (deliveryLocationId != null)
+            'p_delivery_location_id': deliveryLocationId,
+          if (locationDetails != null && locationDetails.isNotEmpty)
+            'p_location_details': locationDetails,
         },
       ) as Map<String, dynamic>;
 
-      final rpcError = result['error'] as String?;
-      if (rpcError != null) {
-        state = OrderPlacementState(error: _mapError(rpcError));
-        return null;
-      }
-
       final orderId = result['order_id'] as String;
-      final planOverBudget = result['plan_over_budget'] as bool? ?? false;
 
       final order = Order(
         id: orderId,
@@ -713,9 +712,8 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
       ref.invalidate(walletBalanceProvider);
       ref.invalidate(walletInfoProvider);
       ref.invalidate(walletTransactionsProvider);
-      ref.invalidate(activeSavingPlanProvider);
 
-      state = OrderPlacementState(order: order, budgetWarning: planOverBudget);
+      state = OrderPlacementState(order: order);
       return order;
     } catch (e) {
       state = OrderPlacementState(error: _mapError(e.toString()));
@@ -830,6 +828,39 @@ class OrderNotifier extends Notifier<OrderPlacementState> {
 
 final orderNotifierProvider =
     NotifierProvider<OrderNotifier, OrderPlacementState>(OrderNotifier.new);
+
+// ---------------------------------------------------------------------------
+// Student cancel (A3 — before rider accepts)
+// ---------------------------------------------------------------------------
+
+/// Cancel a standalone order (errand / pickup) before a rider accepts.
+/// Throws if the order is already terminal or a rider has taken it.
+/// Invalidates [studentOrdersProvider] on success.
+Future<void> cancelOrder(WidgetRef ref, String orderId) async {
+  final client = ref.read(supabaseClientProvider);
+  await client.rpc('student_cancel_order', params: {'p_order_id': orderId});
+  ref.invalidate(studentOrdersProvider);
+}
+
+/// Cancel a multi-vendor delivery group before a rider accepts.
+/// Invalidates [studentDeliveryGroupsProvider] on success.
+Future<void> cancelDeliveryGroup(WidgetRef ref, String groupId) async {
+  final client = ref.read(supabaseClientProvider);
+  await client.rpc('student_cancel_delivery_group',
+      params: {'p_group_id': groupId});
+  ref.invalidate(studentDeliveryGroupsProvider);
+}
+
+/// Maps raw exception messages from cancel RPCs to user-facing strings.
+String mapCancelError(String raw) {
+  if (raw.contains('ORDER_ALREADY_ACCEPTED')) {
+    return 'A rider has already accepted this order. You can no longer cancel it.';
+  }
+  if (raw.contains('ORDER_ALREADY_TERMINAL')) {
+    return 'This order is already completed or cancelled.';
+  }
+  return 'Could not cancel. Please try again.';
+}
 
 // ---------------------------------------------------------------------------
 // Custom order items (C3 — rider adds, student approves/rejects)

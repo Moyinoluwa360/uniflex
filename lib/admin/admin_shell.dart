@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../shared/services/auth/auth_providers.dart';
+import '../shared/services/notifications/notification_service.dart';
+import '../shared/services/support/support_chat_service.dart';
 import '../shared/widgets/navigation/app_bottom_nav_shell.dart';
 import 'analytics/admin_analytics_screen.dart';
 import 'dashboard/admin_dashboard_screen.dart';
 import 'kitchen/kitchen_queue_screen.dart';
 import 'manage/manage_hub_screen.dart';
+import 'orders/admin_orders_screen.dart';
+import 'support/admin_support_inbox_screen.dart';
 
 /// Root of the Admin experience. Reads [currentProfileProvider] to
 /// determine the admin tier and shows tabs accordingly:
@@ -20,20 +24,45 @@ import 'manage/manage_hub_screen.dart';
 ///
 /// Owns its own navigation stack — no screen inside here should import
 /// from lib/student/ or lib/rider/.
-class AdminShell extends ConsumerWidget {
+class AdminShell extends ConsumerStatefulWidget {
   const AdminShell({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final profileAsync = ref.watch(currentProfileProvider);
-    final profile = profileAsync.valueOrNull;
+  ConsumerState<AdminShell> createState() => _AdminShellState();
+}
+
+class _AdminShellState extends ConsumerState<AdminShell> {
+  @override
+  void initState() {
+    super.initState();
+    // Handle push notification tap that opened the app.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final nav = NotificationService.consumePendingNavigation();
+      if (nav?['type'] == 'support' && mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => const AdminSupportInboxScreen(),
+          ),
+        );
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = ref.watch(currentProfileProvider).valueOrNull;
     final isKitchenStaff = profile?.isKitchenStaff ?? false;
 
-    final tabs = isKitchenStaff
-        ? _kitchenStaffTabs
-        : _superAdminTabs;
+    if (isKitchenStaff) {
+      return const AppBottomNavShell(tabs: _kitchenStaffTabs);
+    }
 
-    return AppBottomNavShell(tabs: tabs);
+    // Manage tab is index 2 — show unread badge for support messages.
+    final unread = ref.watch(adminSupportUnreadProvider);
+    return AppBottomNavShell(
+      tabs: _superAdminTabs,
+      badgeCounts: [0, 0, unread, 0],
+    );
   }
 }
 
@@ -57,7 +86,7 @@ const _superAdminTabs = [
     label: 'Orders',
     icon: Icons.receipt_long_outlined,
     selectedIcon: Icons.receipt_long,
-    screen: KitchenQueueScreen(),
+    screen: AdminOrdersScreen(),
   ),
   AppNavTab(
     label: 'Manage',

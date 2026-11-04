@@ -1198,9 +1198,16 @@ class _ErrandSection extends ConsumerWidget {
   }
 }
 
-class _ErrandOrderCard extends StatelessWidget {
+class _ErrandOrderCard extends ConsumerStatefulWidget {
   const _ErrandOrderCard({required this.order});
   final Order order;
+
+  @override
+  ConsumerState<_ErrandOrderCard> createState() => _ErrandOrderCardState();
+}
+
+class _ErrandOrderCardState extends ConsumerState<_ErrandOrderCard> {
+  bool _isCancelling = false;
 
   Color _statusColor(OrderStatus s) => switch (s) {
         OrderStatus.placed => AppColors.info,
@@ -1216,10 +1223,49 @@ class _ErrandOrderCard extends StatelessWidget {
         _ => s.label,
       };
 
+  Future<void> _cancel() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel errand?'),
+        content: const Text('Are you sure you want to cancel this errand?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep errand'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Cancel errand',
+                style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isCancelling = true);
+    try {
+      await cancelOrder(ref, widget.order.id);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(mapCancelError(e.toString())),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isCancelling = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final order = widget.order;
     final statusColor = _statusColor(order.status);
+    final canCancel = order.riderId == null;
 
     return InkWell(
       onTap: () => Navigator.of(context).push(
@@ -1277,8 +1323,24 @@ class _ErrandOrderCard extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.chevron_right,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.4)),
+            if (canCancel)
+              _isCancelling
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                      child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2)),
+                    )
+                  : IconButton(
+                      icon: const Icon(Icons.cancel_outlined),
+                      color: AppColors.error,
+                      tooltip: 'Cancel errand',
+                      onPressed: _cancel,
+                    )
+            else
+              Icon(Icons.chevron_right,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.4)),
           ],
         ),
       ),

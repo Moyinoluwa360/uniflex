@@ -163,6 +163,24 @@ serve(async (req: Request) => {
     })
 
     const result = await fcmRes.json()
+
+    // Clear invalid / unregistered tokens from the DB so they don't
+    // accumulate. FCM returns UNREGISTERED when the app is uninstalled.
+    if (!fcmRes.ok && result?.error?.status === 'UNREGISTERED') {
+      try {
+        const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2')
+        const supabaseUrl  = Deno.env.get('SUPABASE_URL')      ?? ''
+        const serviceKey   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        const admin = createClient(supabaseUrl, serviceKey)
+        await admin
+          .from('profiles')
+          .update({ fcm_token: null })
+          .eq('fcm_token', token)
+      } catch (cleanupErr) {
+        console.warn('Token cleanup failed:', cleanupErr)
+      }
+    }
+
     return new Response(JSON.stringify(result), {
       status: fcmRes.status,
       headers: { 'Content-Type': 'application/json' },

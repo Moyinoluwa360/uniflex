@@ -54,10 +54,20 @@ class AppNavShellScope extends InheritedWidget {
 /// AdminShell) from the same widget rather than each hand-rolling
 /// navigation chrome. This widget holds no cross-role state — each shell
 /// instance owns its own selected-tab state independently.
+///
+/// Pass [badgeCounts] to show numeric badges on nav items. The list length
+/// must match [tabs]; a value of 0 hides the badge for that item.
 class AppBottomNavShell extends ConsumerStatefulWidget {
-  const AppBottomNavShell({super.key, required this.tabs});
+  const AppBottomNavShell({
+    super.key,
+    required this.tabs,
+    this.badgeCounts,
+  });
 
   final List<AppNavTab> tabs;
+
+  /// Optional unread/badge counts, one per tab. Zero = no badge.
+  final List<int>? badgeCounts;
 
   @override
   ConsumerState<AppBottomNavShell> createState() => _AppBottomNavShellState();
@@ -70,6 +80,20 @@ class _AppBottomNavShellState extends ConsumerState<AppBottomNavShell> {
     if (index >= 0 && index < widget.tabs.length) {
       setState(() => _index = index);
     }
+  }
+
+  Widget _badgedIcon(IconData icon, int tabIndex,
+      {required bool selected}) {
+    final count = widget.badgeCounts != null &&
+            tabIndex < widget.badgeCounts!.length
+        ? widget.badgeCounts![tabIndex]
+        : 0;
+    final child = Icon(icon);
+    if (count <= 0) return child;
+    return Badge(
+      label: Text('$count'),
+      child: child,
+    );
   }
 
   @override
@@ -98,11 +122,12 @@ class _AppBottomNavShellState extends ConsumerState<AppBottomNavShell> {
         currentIndex: _index,
         onTap: (i) => setState(() => _index = i),
         items: [
-          for (final tab in widget.tabs)
+          for (var i = 0; i < widget.tabs.length; i++)
             BottomNavigationBarItem(
-              icon: Icon(tab.icon),
-              activeIcon: Icon(tab.selectedIcon),
-              label: tab.label,
+              icon: _badgedIcon(widget.tabs[i].icon, i, selected: false),
+              activeIcon:
+                  _badgedIcon(widget.tabs[i].selectedIcon, i, selected: true),
+              label: widget.tabs[i].label,
             ),
         ],
       ),
