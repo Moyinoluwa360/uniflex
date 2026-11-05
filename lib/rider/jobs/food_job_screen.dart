@@ -16,7 +16,7 @@ import '../services/rider_service.dart';
 class FoodJobScreen extends ConsumerStatefulWidget {
   /// Open in preview mode (from pool — group not yet accepted).
   FoodJobScreen.fromPool({super.key, required this.poolGroup})
-      : groupId = poolGroup.group.id,
+      : groupId = poolGroup!.group.id,
         isPreview = true;
 
   /// Open as active job (group already accepted by this rider).

@@ -218,7 +218,7 @@ class AdminService {
     final data = await _client
         .from('vendors')
         .select()
-        .is_('deleted_at', null)
+        .isFilter('deleted_at', null)
         .order('is_featured', ascending: false)
         .order('name');
     return data.map((m) => Vendor.fromMap(m)).toList();
@@ -273,7 +273,7 @@ class AdminService {
         .from('products')
         .select()
         .eq('vendor_id', vendorId)
-        .is_('deleted_at', null)
+        .isFilter('deleted_at', null)
         .order('category')
         .order('name');
     return data.map((m) => Product.fromMap(m)).toList();
