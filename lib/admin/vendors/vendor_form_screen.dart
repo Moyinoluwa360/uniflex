@@ -6,6 +6,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/image_upload/image_upload_field.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../services/admin_providers.dart';
 
@@ -29,6 +30,7 @@ class _VendorFormScreenState extends ConsumerState<VendorFormScreen> {
   late final TextEditingController _contactCtrl;
   late final TextEditingController _packPriceCtrl;
   late bool _isActive;
+  String? _imageUrl;
   bool _isSaving = false;
 
   @override
@@ -42,6 +44,7 @@ class _VendorFormScreenState extends ConsumerState<VendorFormScreen> {
     _packPriceCtrl = TextEditingController(
         text: (v?.packPrice ?? 200).toStringAsFixed(0));
     _isActive = v?.isActive ?? true;
+    _imageUrl = v?.imageUrl;
   }
 
   @override
@@ -65,7 +68,7 @@ class _VendorFormScreenState extends ConsumerState<VendorFormScreen> {
             description: _descCtrl.text.trim(),
             isActive: _isActive,
             badgeLabel: widget.vendor?.badgeLabel ?? 'Partner',
-            imageUrl: widget.vendor?.imageUrl,
+            imageUrl: _imageUrl,
             location: _locationCtrl.text.trim().isEmpty
                 ? null
                 : _locationCtrl.text.trim(),
@@ -99,6 +102,19 @@ class _VendorFormScreenState extends ConsumerState<VendorFormScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ── Photo ─────────────────────────────────────────────────
+              Text('Photo', style: Theme.of(context).textTheme.labelLarge),
+              const SizedBox(height: AppSpacing.sm),
+              ImageUploadField(
+                initialUrl: _imageUrl,
+                cropToSquare: true,
+                hint: 'Photos are cropped to a square.',
+                uploadFn: ref.read(adminServiceProvider).uploadVendorImage,
+                onChanged: (url) => setState(() => _imageUrl = url),
+              ),
+
+              const SizedBox(height: AppSpacing.lg),
+
               // ── Name ─────────────────────────────────────────────────
               AppTextField(
                 controller: _nameCtrl,

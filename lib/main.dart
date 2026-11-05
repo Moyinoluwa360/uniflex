@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
 import 'shared/config/env_config.dart';
+import 'shared/services/connectivity/connectivity_service.dart';
 import 'shared/services/notifications/notification_service.dart';
 
 Future<void> main() async {
@@ -32,6 +33,8 @@ Future<void> main() async {
     // Firebase not yet configured — non-fatal, app continues without push.
     debugPrint('[Firebase] init skipped: $e');
   }
+
+  await ConnectivityService.instance.init();
 
   runApp(const ProviderScope(child: UniflexApp()));
 }

@@ -92,6 +92,15 @@ class AdminScheduledOrdersScreen extends ConsumerWidget {
                 ref.invalidate(scheduledOrdersProvider);
                 ref.invalidate(kitchenOrdersProvider);
               },
+              onMarkReady: orders[i].status == OrderStatus.preparing
+                  ? () async {
+                      await ref
+                          .read(adminServiceProvider)
+                          .updateOrderStatus(orders[i].id, 'ready_for_pickup');
+                      ref.invalidate(scheduledOrdersProvider);
+                      ref.invalidate(kitchenOrdersProvider);
+                    }
+                  : null,
             ),
           );
         },
@@ -104,10 +113,14 @@ class _ScheduledOrderCard extends StatefulWidget {
   const _ScheduledOrderCard({
     required this.order,
     required this.onAdvance,
+    this.onMarkReady,
   });
 
   final Order order;
   final VoidCallback onAdvance;
+
+  /// Called when admin taps "Mark Ready for Pickup" on a preparing order.
+  final VoidCallback? onMarkReady;
 
   @override
   State<_ScheduledOrderCard> createState() => _ScheduledOrderCardState();
@@ -280,6 +293,16 @@ class _ScheduledOrderCardState extends State<_ScheduledOrderCard> {
                     style: FilledButton.styleFrom(
                         minimumSize: const Size(0, 36)),
                     child: const Text('Start Preparing'),
+                  )
+                else if (order.status == OrderStatus.preparing &&
+                    widget.onMarkReady != null)
+                  FilledButton(
+                    onPressed: widget.onMarkReady,
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, 36),
+                      backgroundColor: AppColors.emerald,
+                    ),
+                    child: const Text('Mark Ready for Pickup'),
                   ),
               ],
             ),

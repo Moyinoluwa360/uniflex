@@ -9,6 +9,8 @@ class DeliveryGroup {
     required this.studentId,
     required this.deliveryType,
     this.deliveryLocation,
+    this.locationDetails,
+    this.deliveryLocationId,
     this.studentNote,
     required this.commitmentFeeTotal,
     this.finalAmount,
@@ -19,6 +21,7 @@ class DeliveryGroup {
     this.deliveryStage,
     this.scheduledFor,
     required this.createdAt,
+    this.cancelledByStudent = false,
   });
 
   factory DeliveryGroup.fromMap(Map<String, dynamic> map) {
@@ -27,6 +30,8 @@ class DeliveryGroup {
       studentId: map['student_id'] as String,
       deliveryType: map['delivery_type'] as String,
       deliveryLocation: map['delivery_location'] as String?,
+      locationDetails: map['location_details'] as String?,
+      deliveryLocationId: map['delivery_location_id'] as String?,
       studentNote: map['student_note'] as String?,
       commitmentFeeTotal:
           (map['commitment_fee_total'] as num?)?.toDouble() ?? 0,
@@ -41,6 +46,7 @@ class DeliveryGroup {
           ? DateTime.parse(map['scheduled_for'] as String)
           : null,
       createdAt: DateTime.parse(map['created_at'] as String),
+      cancelledByStudent: map['cancelled_by_student'] as bool? ?? false,
     );
   }
 
@@ -48,6 +54,8 @@ class DeliveryGroup {
   final String studentId;
   final String deliveryType;
   final String? deliveryLocation;
+  final String? locationDetails;
+  final String? deliveryLocationId;
   final String? studentNote;
   final double commitmentFeeTotal;
   final double? finalAmount;
@@ -58,6 +66,7 @@ class DeliveryGroup {
   final String? deliveryStage;
   final DateTime? scheduledFor;
   final DateTime createdAt;
+  final bool cancelledByStudent;
 
   String get shortId => '#${id.substring(0, 8).toUpperCase()}';
 
@@ -69,6 +78,7 @@ class DeliveryGroup {
 enum DeliveryGroupStatus {
   placed,
   commitmentPaid,
+  riderAccepted,
   awaitingFinalPayment,
   outForDelivery,
   completed,
@@ -77,6 +87,7 @@ enum DeliveryGroupStatus {
   static DeliveryGroupStatus fromString(String s) => switch (s) {
         'placed' => placed,
         'commitment_paid' => commitmentPaid,
+        'rider_accepted' => riderAccepted,
         'awaiting_final_payment' => awaitingFinalPayment,
         'out_for_delivery' => outForDelivery,
         'completed' => completed,
@@ -87,6 +98,7 @@ enum DeliveryGroupStatus {
   String get rawValue => switch (this) {
         placed => 'placed',
         commitmentPaid => 'commitment_paid',
+        riderAccepted => 'rider_accepted',
         awaitingFinalPayment => 'awaiting_final_payment',
         outForDelivery => 'out_for_delivery',
         completed => 'completed',
@@ -95,7 +107,8 @@ enum DeliveryGroupStatus {
 
   String get label => switch (this) {
         placed => 'Placed',
-        commitmentPaid => 'Being Prepared',
+        commitmentPaid => 'In Rider Pool',
+        riderAccepted => 'Rider Accepted',
         awaitingFinalPayment => 'Awaiting Payment',
         outForDelivery => 'Out for Delivery',
         completed => 'Completed',

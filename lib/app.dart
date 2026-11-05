@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'shared/router/auth_gate.dart';
 import 'shared/theme/app_theme.dart';
 import 'shared/theme/theme_mode_provider.dart';
+import 'shared/widgets/connectivity/connectivity_banner.dart';
 
 /// Root widget. Everything auth/role-related happens inside [AuthGate] —
 /// this widget only owns the app-wide theme and MaterialApp shell.
@@ -21,6 +22,8 @@ class UniflexApp extends ConsumerWidget {
       darkTheme: AppTheme.dark,
       themeMode: themeMode,
       home: const AuthGate(),
+      builder: (context, child) =>
+          ConnectivityBanner(child: child ?? const SizedBox.shrink()),
     );
   }
 }

@@ -66,22 +66,29 @@ lib/
 
   rider/                     # Rider-only screens and navigation. Root: rider_shell.dart
     services/                # RiderService + rider Riverpod providers
+                             #   streamPool() → unified {groups, errands} pool stream
+                             #   streamActiveWork() → unified {groups, errands} active work
+                             #   getGroupCustomerInfo(id), getGroupItems(id),
+                             #   setGroupFinalPrice(id, amount)
     dashboard/               # RiderDashboardScreen — online/offline toggle + daily stats
-    pool/                    # JobPoolScreen — live job pool (Supabase Realtime)
-                             # pool_order.dart — enriched pool model
-    delivery/                # ActiveDeliveryScreen — pickup/delivery workflow + PIN gate
-                             # delivery_record.dart — history record model
-    history/                 # DeliveryHistoryScreen — past deliveries list
+    pool/                    # JobPoolScreen — unified pool (food groups + errands)
+                             #   pool_group.dart / pool_order.dart — enriched pool models
+    jobs/                    # FoodJobScreen — preview + active food delivery job
+                             # ErrandJobScreen — preview + active errand job
+    delivery/                # ActiveDeliveryScreen / GroupDeliveryScreen — legacy stubs
+                             #   both redirect to FoodJobScreen; kept for old call sites
+                             #   delivery_record.dart — history record model
+    history/                 # DeliveryHistoryScreen — past deliveries (includes cancelled)
     profile/                 # RiderProfileScreen — real profile + logout
   admin/                     # Admin-only screens and navigation. Root: admin_shell.dart
                               # (Admin also covers Kitchen Staff duties — no separate login)
     services/                # AdminService + admin Riverpod providers
     dashboard/               # AdminDashboardScreen — real-time stats
-    kitchen/                 # KitchenQueueScreen — live queue via Supabase Realtime
-                              # (Phase 6: BULK badge + campus/hostel delivery labels;
-                              #  post-testing fixes: Ready split by pickup/delivery,
-                              #  Transfer to Rider action)
-    scheduled/               # AdminScheduledOrdersScreen — Phase 6 pre-order countdown
+    kitchen/                 # KitchenQueueScreen — scheduled pickups only (no deliveries)
+    orders/                  # AdminOrdersScreen — 2 tabs (Deliveries / Errands),
+                              #   filter chips Active/Completed/Cancelled, search bar
+                              # AdminOrderDetailsScreen — group or errand detail + cancel
+    scheduled/               # AdminScheduledOrdersScreen — pre-order countdown + mark ready
     menu/                    # MenuManagementScreen, ProductFormScreen — Uniflex catalog CRUD
                               # (+ Requires Pack toggle, Uniflex pack price editor)
     manage/                  # ManageHubScreen — single "Manage" nav entry branching into
@@ -90,9 +97,8 @@ lib/
     vendors/                 # VendorManagementScreen, VendorFormScreen,
                               # VendorProductsScreen — partner vendor CRUD (+ pack price)
     riders/                  # RiderManagementScreen — invite/remove/reactivate riders
-                              # (post-testing fixes)
     errand_categories/       # ErrandCategoriesScreen, ErrandCategoryFormScreen — CRUD for
-                              # the errand_categories table (renamed from around_categories)
+                              # the errand_categories table
     delivery_locations/      # DeliveryLocationsScreen — CRUD for location-based delivery fees
     profile/                 # AdminProfileScreen — name, email, tier + logout
 
@@ -110,6 +116,7 @@ lib/
                               # control used by every realtime/live data screen
       pin/                   # showEnterPinSheet / showSetPinSheet — transaction PIN UI
       sheets/                # acknowledgment_sheet.dart — pre-payment confirmation modal
+      image_upload/          # ImageUploadField — pick/crop/resize/upload/preview (Fix Pack 3)
 
 supabase/
   schema.sql                 # All DDL and seed data (run by hand in Supabase SQL editor)
@@ -485,6 +492,146 @@ status and `delivery_type`:
 The Realtime subscription then delivers each change back to all connected
 admin sessions automatically — no `ref.invalidate` is needed after a
 status update.
+
+## Image upload & storage (Fix Pack 3)
+
+### Storage bucket
+
+All admin-uploaded images go into a single Supabase Storage bucket called
+`product-images` (created by `fix_pack_3.sql`, Section 1). Objects are
+organised by prefix:
+
+```
+product-images/
+  products/   ← food/vendor product photos
+  vendors/    ← partner vendor logos / photos
+  ads/        ← advertisement banner images
+```
+
+The bucket is **public** (read without auth) with a 5 MB per-object cap and
+MIME whitelist `image/jpeg`, `image/png`, `image/webp`. RLS on
+`storage.objects`:
+
+| Operation | Who can |
+|---|---|
+| INSERT | Authenticated admin (`is_admin()`) |
+| UPDATE | Authenticated admin |
+| DELETE | Authenticated admin |
+| SELECT | Everyone (public read) |
+
+### `ImageUploadField` widget
+
+`lib/shared/widgets/image_upload/image_upload_field.dart` is a reusable
+form field that owns the full pick → process → upload → preview lifecycle:
+
+1. **Pick** — `ImagePicker.pickImage` from gallery (source-agnostic; iOS
+   and Android permissions are requested by the plugin automatically).
+2. **Process** — pure-Dart `image` package (no native code; works in tests
+   and on simulator):
+   - `cropToSquare: true` → center-crop to `min(W, H)` then resize to
+     1200 × 1200 at JPEG quality 80. Used for product and vendor photos.
+   - `cropToSquare: false` → resize so the long side ≤ 1200 px, preserve
+     aspect ratio, JPEG quality 80. Used for ad banners.
+3. **Upload** — calls the `uploadFn` callback provided by the caller
+   (e.g. `adminService.uploadProductImage`). A `LinearProgressIndicator`
+   is shown during the upload.
+4. **Preview** — the returned URL is stored in state and shown in a
+   `ClipRRect` with a ×-button to clear.
+5. **Error** — a red strip with a "Retry" link replaces the progress bar
+   on failure; tapping retry re-runs from step 1.
+
+The widget is stateful; the caller is notified of URL changes via
+`onChanged: (String? url)`.
+
+### Ad banner aspect ratio
+
+The student home carousel renders each card at viewport × 86 % width and
+128 pt height. On a standard 390 pt wide phone that is roughly 335 × 128 pt
+— approximately **2.6 : 1**. The admin form hints **1200 × 460 px** as the
+recommended upload size.
+
+### Soft delete (Fix Pack 3)
+
+Products, vendors, and errand categories now have a `deleted_at timestamptz`
+column (nullable). "Delete" in admin screens means writing
+`deleted_at = NOW()` — the row is never `DELETE`d. This solves the FK
+constraint: `order_items.product_id` and `errand_requests.category`
+reference rows that historical orders point to; a hard delete is blocked by
+the DB and would destroy order history.
+
+Student-facing read policies exclude soft-deleted rows:
+- `products`: `is_available = true AND deleted_at IS NULL`
+- `vendors`: `deleted_at IS NULL`
+- `errand_categories`: `is_active = true AND deleted_at IS NULL`
+
+Admin reads every row (`is_admin()` bypasses the filter) so soft-deleted
+items remain visible in the admin lists (e.g. greyed-out or filterable in a
+future phase).
+
+## Delivery lifecycle (Fix Pack 2)
+
+`delivery_groups` is the canonical entity for every food delivery. Even a
+single-vendor order creates a group; each vendor's portion becomes a leg
+(`orders` row linked via `delivery_group_id`). The status ladder:
+
+```
+placed
+  → commitment_paid      (student paid commitment fee; group enters rider pool)
+  → rider_accepted       (rider accepted; rider sees customer info + items)
+  → awaiting_final_payment (rider set a final price; student must Pay or Decline)
+  → out_for_delivery     (student paid; PIN revealed to student)
+  → completed            (rider entered PIN at door)
+     or cancelled        (admin cancel, or student cancelled before rider accepted)
+```
+
+### Rider visibility rules
+
+- **Pool** (`commitment_paid`, `rider_id IS NULL`): riders see groups ready
+  to accept. `RiderService.streamPool()` returns a combined record
+  `({List<PoolGroup> groups, List<PoolOrder> errands})`.
+- **Accepted** (`rider_accepted` or later, `rider_id = auth.uid()`): the
+  assigned rider sees their active jobs. Customer info (name, phone, PIN) is
+  returned by `get_group_customer_info`. PIN is redacted until
+  `out_for_delivery`.
+- **Items** (`get_group_items`): vendor-grouped jsonb with per-item quantity,
+  unit price, section, and pack assignments. Fetched once on job open.
+
+### Final payment flow
+
+1. Rider taps "Enter Final Price" → `set_delivery_group_final_price(id, amount)`.
+   - SQL guard: `amount > 0 AND amount ≤ 500,000`.
+   - Sets `final_amount`, advances status to `awaiting_final_payment`.
+   - Rider may correct the price from both `rider_accepted` and
+     `awaiting_final_payment` states.
+2. Student sees `_GroupFinalPaymentCard` on `OrderTrackingScreen`.
+   - **Pay** → `pay_group_final_amount` (uses `final_amount` from group, not
+     leg sum) → status becomes `out_for_delivery`; PIN revealed.
+   - **Decline** → confirmation dialog → `decline_group_final_amount` →
+     `cancelled_by_student = true`. Rider sees a cancelled-by-student view
+     and auto-pops after a short delay.
+
+### Student cancel before rider accepts
+
+`cancel_delivery_group_before_accept` requires `status = 'commitment_paid'`
+and `rider_id IS NULL` — the NOWAIT lock prevents a race where a rider
+accepts at the same moment. After `rider_accepted` the student can no longer
+cancel unilaterally; they must Decline the final price instead.
+
+### Admin orders
+
+`AdminOrdersScreen` (2 tabs: Deliveries / Errands) streams all statuses from
+`AdminService.streamAllDeliveryGroups()` / `streamErrandOrders()` and
+filters client-side by Active / Completed / Cancelled chips. Tapping a card
+opens `AdminOrderDetailsScreen`, which shows full item breakdown, fees,
+timeline, and a cancel button (calls `admin_cancel_delivery_group` RPC).
+
+### Scheduled orders and Kitchen Queue
+
+`scheduled_for` is only valid for `delivery_type = 'pickup'`.
+`place_multi_vendor_order` raises an exception if a delivery order arrives
+with a `scheduled_for` timestamp. `KitchenQueueScreen` and
+`AdminScheduledOrdersScreen` therefore only ever show pickup orders;
+delivery orders are never scheduled.
 
 ## Rider job pool — pull model (Phase 5)
 

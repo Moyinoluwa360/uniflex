@@ -1,14 +1,12 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../shared/models/product.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/image_upload/image_upload_field.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../services/admin_providers.dart';
 
@@ -37,9 +35,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   late String _section;
   late String? _foodSubsection;
   late bool _isAvailable;
-  String? _imageUrl; // existing URL (from product being edited)
-  Uint8List? _pickedBytes; // newly picked image bytes
-  String? _pickedFileName;
+  String? _imageUrl; // current URL — updated by ImageUploadField
   bool _isSaving = false;
 
   static const _sections = ['food', 'drinks', 'others'];
@@ -72,46 +68,19 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final file = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 800,
-      maxHeight: 800,
-      imageQuality: 80,
-    );
-    if (file == null) return;
-    final bytes = await file.readAsBytes();
-    setState(() {
-      _pickedBytes = bytes;
-      _pickedFileName = '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
-    });
-  }
-
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
 
     try {
-      final service = ref.read(adminServiceProvider);
-
-      // Upload new image if one was picked.
-      String? imageUrl = _imageUrl;
-      if (_pickedBytes != null && _pickedFileName != null) {
-        imageUrl = await service.uploadProductImage(
-          _pickedBytes!,
-          _pickedFileName!,
-        );
-      }
-
-      await service.upsertProduct(
+      await ref.read(adminServiceProvider).upsertProduct(
         id: widget.product?.id,
         vendorId: widget.vendorId,
         name: _nameCtrl.text.trim(),
         description: _descCtrl.text.trim(),
         category: _sectionLabels[_section] ?? 'Others',
         basePrice: double.parse(_priceCtrl.text.trim()),
-        imageUrl: imageUrl,
+        imageUrl: _imageUrl,
         isAvailable: _isAvailable,
         requiresPack: _section == 'food',
         section: _section,
@@ -148,10 +117,12 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
               // ── Image ────────────────────────────────────────────────
               Text('Photo', style: theme.textTheme.labelLarge),
               const SizedBox(height: AppSpacing.sm),
-              _ImagePicker(
-                existingUrl: _imageUrl,
-                pickedBytes: _pickedBytes,
-                onTap: _pickImage,
+              ImageUploadField(
+                initialUrl: _imageUrl,
+                cropToSquare: true,
+                hint: 'Photos are cropped to a square.',
+                uploadFn: ref.read(adminServiceProvider).uploadProductImage,
+                onChanged: (url) => setState(() => _imageUrl = url),
               ),
 
               const SizedBox(height: AppSpacing.lg),
@@ -295,69 +266,3 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   }
 }
 
-class _ImagePicker extends StatelessWidget {
-  const _ImagePicker({
-    required this.existingUrl,
-    required this.pickedBytes,
-    required this.onTap,
-  });
-
-  final String? existingUrl;
-  final Uint8List? pickedBytes;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    Widget child;
-
-    if (pickedBytes != null) {
-      child = Image.memory(pickedBytes!, fit: BoxFit.cover);
-    } else if (existingUrl != null) {
-      child = Image.network(
-        existingUrl!,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => const Icon(
-          Icons.image_not_supported_outlined,
-          size: 32,
-        ),
-      );
-    } else {
-      child = Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.add_photo_alternate_outlined,
-            size: 32,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Tap to add photo',
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
-            ),
-          ),
-        ],
-      );
-    }
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 140,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(
-            color: theme.dividerColor,
-            style: BorderStyle.solid,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: child,
-      ),
-    );
-  }
-}

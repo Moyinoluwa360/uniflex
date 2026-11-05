@@ -559,6 +559,7 @@ class _GroupCardState extends ConsumerState<_GroupCard> {
     return switch (s) {
       DeliveryGroupStatus.placed => AppColors.info,
       DeliveryGroupStatus.commitmentPaid => AppColors.warning,
+      DeliveryGroupStatus.riderAccepted => AppColors.orange,
       DeliveryGroupStatus.awaitingFinalPayment => AppColors.warning,
       DeliveryGroupStatus.outForDelivery => AppColors.orange,
       DeliveryGroupStatus.completed => AppColors.emerald,

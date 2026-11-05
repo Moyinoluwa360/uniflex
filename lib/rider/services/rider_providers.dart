@@ -10,6 +10,8 @@ import '../pool/pool_group.dart';
 import '../pool/pool_order.dart';
 import 'rider_service.dart';
 
+// ignore_for_file: unused_element
+
 /// Single shared instance of [RiderService].
 final riderServiceProvider = Provider<RiderService>((ref) {
   return RiderService(
@@ -18,24 +20,32 @@ final riderServiceProvider = Provider<RiderService>((ref) {
   );
 });
 
-/// Live stream of pool-eligible unassigned orders. Re-emits via Supabase
-/// Realtime whenever any matching order row changes (new order placed,
-/// order accepted by another rider, etc.).
-final jobPoolProvider = StreamProvider<List<PoolOrder>>((ref) {
-  return ref.watch(riderServiceProvider).streamJobPool();
+/// Unified pool: delivery groups + errand orders.
+final poolProvider =
+    StreamProvider<({List<PoolGroup> groups, List<PoolOrder> errands})>((ref) {
+  return ref.watch(riderServiceProvider).streamPool();
 });
 
-/// Live stream of delivery groups in the pool (committed, unassigned).
+/// Backward-compat alias: expose just the groups from the unified pool.
 final groupPoolProvider = StreamProvider<List<PoolGroup>>((ref) {
-  return ref.watch(riderServiceProvider).streamGroupPool();
+  final pool = ref.watch(poolProvider).valueOrNull;
+  return Stream.value(pool?.groups ?? []);
 });
 
-/// Streams the rider's active deliveries (out_for_delivery).
-/// Emits an empty list when the rider has no active orders.
-final activeDeliveriesProvider = StreamProvider<List<Order>>((ref) {
+/// Active work: delivery groups + errand orders assigned to this rider.
+final activeWorkProvider = StreamProvider<
+    ({List<DeliveryGroup> groups, List<Order> errands})>((ref) {
   final profile = ref.watch(currentProfileProvider).valueOrNull;
-  if (profile == null) return Stream.value(const []);
-  return ref.watch(riderServiceProvider).streamActiveDeliveries(profile.id);
+  if (profile == null) {
+    return Stream.value((groups: <DeliveryGroup>[], errands: <Order>[]));
+  }
+  return ref.watch(riderServiceProvider).streamActiveWork(profile.id);
+});
+
+/// Backward-compat alias: expose just the errands from activeWorkProvider.
+final activeDeliveriesProvider = StreamProvider<List<Order>>((ref) {
+  final work = ref.watch(activeWorkProvider).valueOrNull;
+  return Stream.value(work?.errands ?? []);
 });
 
 /// Today + total delivery stats, plus online status. Refresh with
@@ -55,10 +65,23 @@ final deliveryHistoryProvider =
 /// ActiveDeliveryScreen can watch it with `.family`.
 final activeDeliveryDetailProvider =
     FutureProvider.family<ActiveDeliveryDetail?, String>((ref, orderId) async {
-  final orders = ref.watch(activeDeliveriesProvider).valueOrNull ?? [];
+  final work = ref.watch(activeWorkProvider).valueOrNull;
+  final orders = work?.errands ?? [];
   final order = orders.where((o) => o.id == orderId).firstOrNull;
   if (order == null) return null;
   return ref.read(riderServiceProvider).fetchActiveDeliveryDetail(order);
+});
+
+/// Full items for a delivery group. FutureProvider.family keyed by group ID.
+final groupItemsProvider =
+    FutureProvider.family<List<GroupVendorItems>, String>((ref, groupId) {
+  return ref.read(riderServiceProvider).getGroupItems(groupId);
+});
+
+/// Customer info for an accepted group. FutureProvider.family keyed by group ID.
+final groupCustomerInfoProvider =
+    FutureProvider.family<GroupCustomerInfo, String>((ref, groupId) {
+  return ref.read(riderServiceProvider).getGroupCustomerInfo(groupId);
 });
 
 /// Live stream of a single delivery group by ID. Used by GroupDeliveryScreen.

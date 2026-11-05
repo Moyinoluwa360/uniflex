@@ -118,10 +118,18 @@ class SupportChatService {
           .from('support_messages')
           .stream(primaryKey: ['id'])
           .eq('conversation_id', conversationId)
-          .order('created_at');
+          .order('created_at', ascending: true);
 
       await for (final rows in stream) {
-        yield rows.map(SupportMessage.fromMap).toList();
+        // Re-sort client-side: Supabase stream ordering isn't always stable
+        // when real-time inserts arrive out of order.
+        final msgs = rows.map(SupportMessage.fromMap).toList()
+          ..sort((a, b) {
+            final c = a.createdAt.compareTo(b.createdAt);
+            if (c != 0) return c;
+            return a.id.compareTo(b.id);
+          });
+        yield msgs;
       }
     } catch (_) {
       // Realtime failed; initial data already delivered.
@@ -133,7 +141,8 @@ class SupportChatService {
         .from('support_messages')
         .select()
         .eq('conversation_id', conversationId)
-        .order('created_at');
+        .order('created_at', ascending: true)
+        .order('id', ascending: true);
     return rows.map(SupportMessage.fromMap).toList();
   }
 
@@ -154,17 +163,20 @@ class SupportChatService {
   /// Sends a message. Returns `{ message_id, conversation_id }`.
   ///
   /// [conversationId] is required for admin callers; ignored for students.
-  /// [orderId] optionally attaches an order to this message (student only;
-  /// the RPC validates it belongs to the caller).
+  /// [orderId] optionally attaches a standalone order (student only).
+  /// [groupId] optionally attaches a delivery group (student only).
+  /// Only one of [orderId] / [groupId] should be set per message.
   Future<Map<String, dynamic>> sendMessage(
     String body, {
     String? orderId,
+    String? groupId,
     String? conversationId,
   }) async {
     try {
       final result = await _client.rpc('send_support_message', params: {
         'p_body': body.trim(),
         if (orderId != null) 'p_order_id': orderId,
+        if (groupId != null) 'p_group_id': groupId,
         if (conversationId != null) 'p_conversation_id': conversationId,
       });
       return Map<String, dynamic>.from(result as Map);

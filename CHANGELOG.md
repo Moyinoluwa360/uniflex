@@ -2,6 +2,171 @@
 
 All notable changes to this project are documented here, phase by phase.
 
+## Fix Pack 3 — Image Upload, Advertisements & Soft Delete (2026-11-05)
+
+### Fixed
+
+- **Image upload was silently broken** — the `product-images` storage
+  bucket section in `schema.sql` was commented out, so no bucket ever
+  existed. Every `uploadBinary` call failed immediately. `fix_pack_3.sql`
+  creates the bucket with a 5 MB per-object limit and the correct
+  `image/jpeg`, `image/png`, `image/webp` MIME whitelist.
+
+- **Product availability toggle crashed silently** — `_toggleAvailability`
+  in `MenuManagementScreen` called `upsertProduct` without forwarding
+  `section` and `foodSubsection`. The defaults (`section='food'`,
+  `food_subsection=null`) violated the DB CHECK constraint
+  `products_subsection_only_for_food`, so the UPDATE was rejected on the
+  server and the UI reverted without an error message. The fix passes the
+  existing product's `section` and `foodSubsection` through the call.
+
+- **Product / vendor delete was hard-blocked by FK** — `order_items`
+  references `products.id` without `ON DELETE CASCADE`; `errand_requests`
+  references `errand_categories.key` without cascade. Any row referenced
+  by historical orders could not be deleted. Fixed with **soft delete**:
+  `deleteProduct`, `deleteVendor`, and `deleteErrandCategory` now write
+  `deleted_at = NOW()` instead of running `DELETE`.
+
+- **`AdLinkType.fromName` returned `vendor`/`wallet` for legacy rows** —
+  the `fromName` switch mapped those values to the enum variants of the
+  same name. After the Fix Pack 3 migration those variants no longer exist
+  in the DB, but the fix also makes old pre-migration rows safe to read:
+  any unknown or legacy link type now falls through to `AdLinkType.none`.
+
+### Added
+
+- **`lib/shared/widgets/image_upload/image_upload_field.dart`** — shared
+  `ImageUploadField` widget used by all three admin form screens
+  (products, vendors, advertisements). Handles: gallery pick via
+  `image_picker`, center-crop to square (optional, controlled by
+  `cropToSquare`), resize (long side capped at 1200 px), JPEG encode at
+  quality 80, upload progress overlay, preview on success, error strip
+  with Retry, clear button to remove the current image.
+
+- **`supabase/fix_pack_3.sql`** — 11-section idempotent migration:
+  storage bucket + 4 RLS policies; `deleted_at` on `products`,
+  `vendors`, `errand_categories`; updated student read policies that
+  exclude soft-deleted rows; `place_multi_vendor_order` guard rejecting
+  unavailable/deleted items; advertisement migration converting legacy
+  `vendor`/`wallet` link types to `none`; narrowed `link_type` CHECK
+  constraint to `('none', 'url')` only.
+
+- **`supabase/fix_pack_3_test.sql`** — rollback-safe SQL test script:
+  soft-delete column presence, storage bucket public, ad link_type
+  constraint enforcement, deleted-row filtering for products/vendors/
+  errand categories, subsection constraint still enforced.
+
+- **`test/fix_pack_3_test.dart`** — 23 pure unit tests (all passing):
+  URL auto-prepend logic, `AdLinkType.fromName` backward compat (vendor
+  → none, wallet → none, null → none, garbage → none), `Advertisement.isLive`
+  schedule logic, `Product` section constraint round-trip via
+  `toMap`/`fromMap`, availability flag parsing, center-crop pixel math.
+
+### Changed
+
+- **Advertisements** — link type options narrowed to **Nothing** and
+  **Opens a website** only. Vendor and wallet link types are removed from
+  the admin form. The URL field validates the link before save and
+  auto-prepends `https://` if the admin types a bare domain. External
+  links open in the system browser (`LaunchMode.externalApplication`)
+  with a friendly SnackBar on failure.
+
+- **Admin form screens** — `ProductFormScreen`, `VendorFormScreen`, and
+  `AdvertisementFormScreen` all replaced inline image-picker logic with
+  the shared `ImageUploadField`. Vendor photo upload (previously
+  missing) is now wired in. Ad banner uses `cropToSquare: false`;
+  products and vendors use `cropToSquare: true`. Suggested ad banner
+  size noted in the hint: **1200 × 460 px (~2.6:1)**.
+
+- **`AdminService`** — added `uploadVendorImage`; refactored all three
+  upload methods through a shared `_uploadImage(prefix, bytes, fileName)`
+  helper that writes into `product-images/{prefix}/` paths.
+  `fetchAllVendorProducts` and `fetchAllVendors` filter out soft-deleted
+  rows with `.is_('deleted_at', null)`.
+
+## Fix Pack 2 — Delivery Flow Overhaul (2026-11-05)
+
+### Changed
+
+- **Unified delivery lifecycle** — `delivery_groups` is now the single
+  canonical entity for all deliveries (single-vendor included). The old
+  Uniflex-special-casing (`source='uniflex'` branching) is removed from
+  all RPCs. Every delivery goes through the same status ladder:
+  `placed → commitment_paid → rider_accepted → awaiting_final_payment
+  → out_for_delivery → completed` (or `cancelled`).
+
+- **Rider flow rebuilt** — replaced the old per-vendor flag/confirm
+  workflow with two purpose-built job screens:
+  - **`lib/rider/jobs/food_job_screen.dart`** — covers both preview (from
+    pool) and active job views. Single vendor → flat item list;
+    multi-vendor → `AppAccordionCard` accordions all closed by default.
+    Status stepper, customer card with Call/WhatsApp, `_EnterPriceSheet`
+    to set final delivery price, PIN entry to complete.
+  - **`lib/rider/jobs/errand_job_screen.dart`** — same pattern for errands.
+    Two-step stepper: Accepted → Completed.
+
+- **Job pool screen** (`lib/rider/pool/job_pool_screen.dart`) — now shows
+  food groups and errands in a single unified stream. FOOD (green) and
+  ERRAND (violet) badge chips; cards open detail screens before accepting.
+
+- **Removed from rider flow** — per-vendor pickup confirm, flag item
+  unavailable, add custom item, item sourcing confirm, `AdjustOrderScreen`.
+  `ActiveDeliveryScreen` and `GroupDeliveryScreen` are now stubs that
+  redirect to `FoodJobScreen`.
+
+- **Student tracking** (`lib/student/tracking/order_tracking_screen.dart`)
+  — updated for the new lifecycle:
+  - 5-step `_GroupStatusTimeline`: Placed / Rider Accepted / Final Price
+    Sent / Out for Delivery / Completed.
+  - `_GroupFinalPaymentCard`: Pay + Decline buttons appear when status is
+    `awaiting_final_payment`. Decline confirmation → cancels order.
+  - `_GroupDeliveryConfirmedCard`: tappable PIN digit boxes when status is
+    `out_for_delivery`.
+  - Removed: custom-items approval panel, `AdjustOrderScreen` button.
+
+- **Admin orders screen** (`lib/admin/orders/admin_orders_screen.dart`)
+  — rebuilt with 2 tabs (Deliveries / Errands), filter chips
+  Active/Completed/Cancelled, search bar, and navigation to
+  `AdminOrderDetailsScreen`. Kitchen Queue for deliveries removed.
+
+- **Admin order details** (`lib/admin/orders/admin_order_details_screen.dart`)
+  — new screen covering both groups and errands: status badge, customer
+  info, rider, item breakdown with packs, fees, timeline, cancel action.
+
+### Added
+
+- **`supabase/fix_pack_2.sql`** — 15-section idempotent migration:
+  - Adds `rider_accepted` to `delivery_groups` status constraint.
+  - Adds `rider_accepted_at` and `cancelled_by_student` columns.
+  - Rider RLS: pool view (commitment_paid groups) + assigned view.
+  - New/replaced RPCs: `accept_delivery_group` (NOWAIT race-safe),
+    `set_delivery_group_final_price`, `pay_group_final_amount`,
+    `decline_group_final_amount`, `cancel_delivery_group_before_accept`,
+    `get_group_customer_info` (redacts PIN until `out_for_delivery`),
+    `get_group_items`, `pay_group_commitment_fee` (source branching removed),
+    `place_multi_vendor_order` (rejects `scheduled_for` on delivery),
+    `verify_group_delivery` (graceful `delivery_records` insert).
+  - `delivery_groups` added to `supabase_realtime` publication.
+
+- **`supabase/fix_pack_2_test.sql`** — rollback-safe SQL test script:
+  schema column checks, status constraint, RPC existence, final-price
+  guard validation, `scheduled_for` on delivery rejection,
+  Realtime publication check.
+
+- **`test/fix_pack_2_test.dart`** — 30 pure unit tests: `DeliveryGroupStatus`
+  enum roundtrip + labels, `DeliveryGroup` model parsing, `GroupCustomerInfo`
+  fromMap + displayName + PIN redaction, `GroupLineItem` lineTotal + section
+  helpers, `GroupPack` label, final-price acceptance range.
+
+- **Fix Pack 1 (2026-11-04)** — also included in this deploy:
+  - `supabase/fix_pack_1.sql`: adds `delivery_group_id` to
+    `support_messages`, updates `send_support_message` RPC.
+  - `lib/shared/models/support_message.dart`: `deliveryGroupId` field.
+  - `lib/shared/services/connectivity/connectivity_service.dart`:
+    OS network + reachability probe singleton.
+  - `lib/shared/widgets/connectivity/connectivity_banner.dart`:
+    offline (red) / restored (green auto-hide) banner wired into app root.
+
 ## Support Chat (2026-11-04)
 
 ### Added

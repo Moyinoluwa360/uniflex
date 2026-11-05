@@ -12,6 +12,7 @@ class DeliveryRecord {
     this.orderType,
     this.vendorName,
     this.deliveryLocation,
+    this.wasCancelled = false,
   });
 
   factory DeliveryRecord.fromMap(
@@ -33,6 +34,7 @@ class DeliveryRecord {
           ? (orderMap!['vendors'] as Map<String, dynamic>)['name'] as String?
           : null,
       deliveryLocation: orderMap?['delivery_location'] as String?,
+      wasCancelled: m['was_cancelled'] as bool? ?? false,
     );
   }
 
@@ -48,6 +50,7 @@ class DeliveryRecord {
   final String? orderType;
   final String? vendorName;
   final String? deliveryLocation;
+  final bool wasCancelled;
 
   String get shortId => '#${orderId.substring(0, 8).toUpperCase()}';
 

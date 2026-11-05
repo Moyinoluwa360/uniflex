@@ -87,10 +87,13 @@ class VendorCartGroup {
 
 /// Multi-vendor cart state. Groups items by vendor.
 class CartState {
-  const CartState({this.groups = const {}});
+  const CartState({this.groups = const {}, this.lastModifiedAt});
 
   /// VendorId → VendorCartGroup
   final Map<String, VendorCartGroup> groups;
+
+  /// When items were last added/removed/changed. Used for 1-hour expiry.
+  final DateTime? lastModifiedAt;
 
   bool get isEmpty => groups.values.every((g) => g.isEmpty);
   int get vendorCount => groups.values.where((g) => !g.isEmpty).length;
@@ -123,23 +126,34 @@ class CartState {
   bool get isUniflexOnly =>
       groups.values.every((g) => g.isEmpty || g.vendor.isUniflex);
 
-  CartState copyWith({Map<String, VendorCartGroup>? groups}) {
-    return CartState(groups: groups ?? this.groups);
+  CartState copyWith({
+    Map<String, VendorCartGroup>? groups,
+    DateTime? lastModifiedAt,
+  }) {
+    return CartState(
+      groups: groups ?? this.groups,
+      lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
+    );
   }
 
   Map<String, dynamic> toJson() => {
         'version': 2,
         'groups': groups
             .map((vendorId, group) => MapEntry(vendorId, group.toJson())),
+        if (lastModifiedAt != null)
+          'last_modified_at': lastModifiedAt!.toIso8601String(),
       };
 
   factory CartState.fromJson(Map<String, dynamic> json) {
+    final rawLastMod = json['last_modified_at'] as String?;
+    final lastMod = rawLastMod != null ? DateTime.tryParse(rawLastMod) : null;
+
     if (json['version'] == 2) {
       final rawGroups = json['groups'] as Map<String, dynamic>? ?? {};
       final groups = rawGroups.map((vendorId, g) => MapEntry(
           vendorId,
           VendorCartGroup.fromJson(g as Map<String, dynamic>)));
-      return CartState(groups: groups);
+      return CartState(groups: groups, lastModifiedAt: lastMod);
     }
     // Legacy v1 format: single vendor cart.
     return _migrateLegacy(json);
@@ -168,7 +182,15 @@ class CartState {
   }
 }
 
+const _cartExpiry = Duration(hours: 1);
+
 class CartNotifier extends Notifier<CartState> {
+  bool _expiredOnLoad = false;
+
+  /// True when a saved cart was silently dropped at startup because it was
+  /// more than 1 hour old. The UI reads this once to show a toast.
+  bool get expiredOnLoad => _expiredOnLoad;
+
   @override
   CartState build() {
     _restore();
@@ -189,7 +211,20 @@ class CartNotifier extends Notifier<CartState> {
     if (raw == null) return;
     try {
       final json = jsonDecode(raw) as Map<String, dynamic>;
-      state = CartState.fromJson(json);
+      final loaded = CartState.fromJson(json);
+
+      // Check 1-hour expiry. Old carts with no timestamp are treated as
+      // fresh (backward-compatible).
+      if (!loaded.isEmpty && loaded.lastModifiedAt != null &&
+          DateTime.now().difference(loaded.lastModifiedAt!) > _cartExpiry) {
+        await prefs.remove(_cartKey);
+        await prefs.remove(_legacyCartKey);
+        _expiredOnLoad = true;
+        // state stays empty (default)
+        return;
+      }
+
+      state = loaded;
     } catch (_) {
       await prefs.remove(_cartKey);
       await prefs.remove(_legacyCartKey);
@@ -203,6 +238,26 @@ class CartNotifier extends Notifier<CartState> {
     } else {
       await prefs.setString(_cartKey, jsonEncode(state.toJson()));
     }
+  }
+
+  /// Updates [lastModifiedAt] on every cart mutation so the expiry timer
+  /// resets with each change.
+  void _touch() {
+    state = state.copyWith(lastModifiedAt: DateTime.now());
+    _persist();
+  }
+
+  /// Call this when the cart screen is opened or the app resumes.
+  /// Returns true if the cart was expired and cleared (UI should toast).
+  bool checkAndClearIfExpired() {
+    if (state.isEmpty) return false;
+    final lastMod = state.lastModifiedAt;
+    if (lastMod == null) return false; // no timestamp yet — never expires mid-session
+    if (DateTime.now().difference(lastMod) > _cartExpiry) {
+      clear();
+      return true;
+    }
+    return false;
   }
 
   /// Adds a non-food item (drinks, others) to the cart for [vendor].
@@ -227,7 +282,7 @@ class CartNotifier extends Notifier<CartState> {
 
     groups[vendor.id] = group.copyWith(items: items);
     state = CartState(groups: groups);
-    _persist();
+    _touch();
   }
 
   /// Adds a food item from the pack builder (tagged with pack index).
@@ -255,7 +310,7 @@ class CartNotifier extends Notifier<CartState> {
     );
 
     state = CartState(groups: groups);
-    _persist();
+    _touch();
   }
 
   /// Remove an item at [index] within a specific vendor's group.
@@ -272,7 +327,7 @@ class CartNotifier extends Notifier<CartState> {
     }
 
     state = CartState(groups: groups);
-    _persist();
+    _touch();
   }
 
   /// Remove a whole vendor's group from the cart.
@@ -280,7 +335,7 @@ class CartNotifier extends Notifier<CartState> {
     final groups = Map<String, VendorCartGroup>.from(state.groups);
     groups.remove(vendorId);
     state = CartState(groups: groups);
-    _persist();
+    _touch();
   }
 
   /// Clear all food packs for a vendor (when re-entering pack builder).
@@ -305,7 +360,7 @@ class CartNotifier extends Notifier<CartState> {
     }
 
     state = CartState(groups: groups);
-    _persist();
+    _touch();
   }
 
   // ── Legacy compat (single-vendor API) ──────────────────────────────
@@ -338,7 +393,7 @@ class CartNotifier extends Notifier<CartState> {
         items[localIdx] = items[localIdx].copyWith(quantity: quantity);
         groups[entry.key] = entry.value.copyWith(items: items);
         state = CartState(groups: groups);
-        _persist();
+        _touch();
         return;
       }
       offset += groupLen;

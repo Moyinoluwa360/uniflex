@@ -21,9 +21,27 @@ class CartScreen extends ConsumerStatefulWidget {
 }
 
 class _CartScreenState extends ConsumerState<CartScreen> {
-  /// Which vendor groups are expanded (by vendor ID).
-  late Set<String> _expandedVendors;
-  bool _initialized = false;
+  /// Which vendor groups are expanded (by vendor ID). All start closed.
+  final Set<String> _expandedVendors = {};
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final notifier = ref.read(cartProvider.notifier);
+      final wasExpired =
+          notifier.expiredOnLoad || notifier.checkAndClearIfExpired();
+      if (wasExpired) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Your cart was cleared after 1 hour.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,12 +90,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         .where((g) => !g.isEmpty)
         .toList();
     final isMultiVendor = vendorGroups.length > 1;
-
-    // Initialize expanded set once with the first vendor open.
-    if (!_initialized && vendorGroups.isNotEmpty) {
-      _expandedVendors = {vendorGroups.first.vendor.id};
-      _initialized = true;
-    }
 
     return Scaffold(
       appBar: UniflexAppBar(
@@ -143,7 +155,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                 _expandedVendors.remove(group.vendor.id);
               } else {
                 // Only one vendor open at a time.
-                _expandedVendors = {group.vendor.id};
+                _expandedVendors
+                  ..clear()
+                  ..add(group.vendor.id);
               }
             }),
             trailingAction: IconButton(

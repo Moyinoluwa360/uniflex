@@ -618,7 +618,18 @@ class _PromoBannerCarouselState extends ConsumerState<_PromoBannerCarousel> {
         if (raw == null) return;
         final uri = Uri.tryParse(raw);
         if (uri == null || !uri.hasScheme) return;
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        try {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } catch (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Couldn't open the link. Try again later."),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        }
     }
   }
 

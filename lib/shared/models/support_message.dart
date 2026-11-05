@@ -9,6 +9,7 @@ class SupportMessage {
     required this.senderName,
     required this.body,
     this.orderId,
+    this.deliveryGroupId,
     required this.createdAt,
   });
 
@@ -21,6 +22,7 @@ class SupportMessage {
       senderName: m['sender_name'] as String,
       body: m['body'] as String,
       orderId: m['order_id'] as String?,
+      deliveryGroupId: m['delivery_group_id'] as String?,
       createdAt: DateTime.parse(m['created_at'] as String).toLocal(),
     );
   }
@@ -37,8 +39,11 @@ class SupportMessage {
   final String senderName;
   final String body;
 
-  /// Non-null when the student attached an order to this message.
+  /// Non-null when the student attached a standalone order to this message.
   final String? orderId;
+
+  /// Non-null when the student attached a delivery group to this message.
+  final String? deliveryGroupId;
   final DateTime createdAt;
 
   bool get isFromAdmin => senderRole == 'admin';

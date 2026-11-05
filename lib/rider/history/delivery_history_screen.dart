@@ -22,7 +22,10 @@ class DeliveryHistoryScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
-            onPressed: () => ref.invalidate(deliveryHistoryProvider),
+            onPressed: () {
+              // Invalidate to re-fetch including cancelled records.
+              ref.invalidate(deliveryHistoryProvider);
+            },
           ),
         ],
       ),
@@ -100,11 +103,11 @@ class _HistoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isErrand = record.orderType == 'around' || record.orderType == 'errand';
+    final isErrand =
+        record.orderType == 'around' || record.orderType == 'errand';
     final typeLabel = isErrand ? 'Errand' : 'Food';
-    final typeColor = isErrand
-        ? AppColors.accentViolet
-        : AppColors.emerald;
+    final typeColor =
+        isErrand ? AppColors.accentViolet : AppColors.emerald;
 
     return Card(
       margin: const EdgeInsets.only(bottom: AppSpacing.cardGap),
@@ -116,25 +119,30 @@ class _HistoryCard extends StatelessWidget {
         padding: const EdgeInsets.all(AppSpacing.md),
         child: Row(
           children: [
-            // Type icon
+            // Type icon.
             Container(
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: typeColor.withValues(alpha: 0.1),
+                color: (record.wasCancelled
+                        ? AppColors.error
+                        : typeColor)
+                    .withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                isErrand
-                    ? Icons.directions_bike_outlined
-                    : Icons.delivery_dining_outlined,
-                color: typeColor,
+                record.wasCancelled
+                    ? Icons.cancel_outlined
+                    : (isErrand
+                        ? Icons.directions_bike_outlined
+                        : Icons.delivery_dining_outlined),
+                color: record.wasCancelled ? AppColors.error : typeColor,
                 size: 22,
               ),
             ),
             const SizedBox(width: AppSpacing.md),
 
-            // Details
+            // Details.
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -148,6 +156,7 @@ class _HistoryCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: AppSpacing.sm),
+                      // Type badge.
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: AppSpacing.sm - 2, vertical: 2),
@@ -163,6 +172,26 @@ class _HistoryCard extends StatelessWidget {
                           ),
                         ),
                       ),
+                      // Cancelled badge.
+                      if (record.wasCancelled) ...[
+                        const SizedBox(width: AppSpacing.xs),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.sm - 2, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.error.withValues(alpha: 0.1),
+                            borderRadius:
+                                BorderRadius.circular(AppRadius.pill),
+                          ),
+                          child: Text(
+                            'CANCELLED',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: AppColors.error,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 2),
@@ -189,11 +218,11 @@ class _HistoryCard extends StatelessWidget {
               ),
             ),
 
-            // Amount + duration
+            // Amount + duration.
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                if (record.orderTotal != null)
+                if (record.orderTotal != null && !record.wasCancelled)
                   Text(
                     '₦${record.orderTotal!.toStringAsFixed(0)}',
                     style: theme.textTheme.labelMedium?.copyWith(
@@ -204,8 +233,8 @@ class _HistoryCard extends StatelessWidget {
                 Text(
                   record.durationLabel,
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color:
-                        theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    color: theme.colorScheme.onSurface
+                        .withValues(alpha: 0.5),
                   ),
                 ),
               ],

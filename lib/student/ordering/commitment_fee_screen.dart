@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/models/order.dart';
 import '../../shared/services/auth/auth_providers.dart';
+import '../../shared/utils/app_error_mapper.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/theme/app_colors.dart';
@@ -70,21 +71,22 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
 
   Future<void> _pay() async {
     if (_isSubmitting) return;
-
-    final msg = _isErrand
-        ? "You're paying the errand fee. A rider will be assigned to "
-            'handle your request.'
-        : 'This fee is non-refundable and will be deducted from your wallet '
-            'immediately. A rider will be dispatched to source your items.';
-
-    final ok = await showAcknowledgmentSheet(context, message: msg);
-    if (!ok || !mounted) return;
-
     setState(() => _isSubmitting = true);
 
     try {
+      final msg = _isErrand
+          ? "You're paying the errand fee. A rider will be assigned to "
+              'handle your request.'
+          : 'This fee is non-refundable and will be deducted from your wallet '
+              'immediately. A rider will be dispatched to source your items.';
+
+      final ok = await showAcknowledgmentSheet(context, message: msg);
+      if (!ok || !mounted) {
+        setState(() => _isSubmitting = false);
+        return;
+      }
       await _doPay();
-    } finally {
+    } catch (_) {
       if (mounted) setState(() => _isSubmitting = false);
     }
   }
@@ -202,7 +204,7 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
     if (raw.contains('crypt')) {
       return 'Server configuration error. Please contact support. (ref: crypt)';
     }
-    return 'Payment failed: $raw';
+    return AppErrorMapper.map(raw);
   }
 
   @override

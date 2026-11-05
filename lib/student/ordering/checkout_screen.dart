@@ -11,8 +11,8 @@ import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../../shared/widgets/navigation/app_bottom_nav_shell.dart';
+import '../../shared/utils/app_error_mapper.dart';
 import '../../shared/widgets/pin/pin_entry_sheet.dart';
-import '../../shared/widgets/sheets/acknowledgment_sheet.dart';
 import 'cart_provider.dart';
 import 'commitment_fee_screen.dart';
 import 'order_confirmation_screen.dart';
@@ -147,18 +147,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       return;
     }
 
-    // Acknowledgment for delivery orders.
-    if (!_isPickup) {
-      final ok = await showAcknowledgmentSheet(
-        context,
-        message:
-            "You're paying the delivery fee only. Your food is paid for "
-            "after the rider confirms your order. We'll notify you when "
-            "it's time to pay.",
-      );
-      if (!ok || !mounted) return;
-    }
-
     setState(() => _isSubmitting = true);
 
     try {
@@ -261,28 +249,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
     if (order == null) {
       final error = notifierState.error ?? '';
-      if (error == 'insufficient_balance') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Insufficient wallet balance. Please top up first.'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      } else if (error == 'invalid_pin') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Incorrect PIN. Please try again.'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error.isEmpty ? 'Order failed. Please try again.' : error),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      final friendly = error.isEmpty
+          ? 'Order failed. Please try again.'
+          : AppErrorMapper.map(error);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendly),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
       return;
     }
 

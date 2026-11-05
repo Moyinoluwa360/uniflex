@@ -5,15 +5,18 @@ import '../../shared/models/delivery_group.dart';
 import '../../shared/models/order.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
-import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
-import '../kitchen/kitchen_queue_screen.dart';
 import '../services/admin_providers.dart';
 import '../services/admin_service.dart';
-import '../../shared/services/auth/auth_providers.dart';
+import 'admin_order_details_screen.dart';
 
-/// Tabbed order management screen for super_admin: Food | Deliveries | Errands.
-/// Kitchen staff see this screen but only get the Food tab (no tab bar).
+/// Tabbed order management screen for admin: Deliveries | Errands.
+///
+/// Each tab has three filter chips (Active / Completed / Cancelled) and
+/// a search bar. Cards navigate to [AdminOrderDetailsScreen] on tap.
+///
+/// Kitchen Queue content has been removed — it lives in the separate
+/// AdminScheduledOrdersScreen and KitchenQueueScreen.
 class AdminOrdersScreen extends ConsumerStatefulWidget {
   const AdminOrdersScreen({super.key});
 
@@ -28,7 +31,7 @@ class _AdminOrdersScreenState extends ConsumerState<AdminOrdersScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 3, vsync: this);
+    _tabs = TabController(length: 2, vsync: this);
   }
 
   @override
@@ -66,20 +69,6 @@ class _AdminOrdersScreenState extends ConsumerState<AdminOrdersScreen>
 
   @override
   Widget build(BuildContext context) {
-    final profile = ref.watch(currentProfileProvider).valueOrNull;
-    final isKitchenStaff = profile?.isKitchenStaff ?? false;
-
-    // Kitchen staff: single-tab view — no tab bar shown.
-    if (isKitchenStaff) {
-      return Scaffold(
-        appBar: UniflexAppBar(
-          title: 'Orders',
-          actions: [_liveDot(context)],
-        ),
-        body: const KitchenQueueBody(),
-      );
-    }
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Orders'),
@@ -87,7 +76,6 @@ class _AdminOrdersScreenState extends ConsumerState<AdminOrdersScreen>
         bottom: TabBar(
           controller: _tabs,
           tabs: const [
-            Tab(text: 'Food'),
             Tab(text: 'Deliveries'),
             Tab(text: 'Errands'),
           ],
@@ -96,7 +84,6 @@ class _AdminOrdersScreenState extends ConsumerState<AdminOrdersScreen>
       body: TabBarView(
         controller: _tabs,
         children: const [
-          KitchenQueueBody(),
           _DeliveriesTab(),
           _ErrandsTab(),
         ],
@@ -105,58 +92,8 @@ class _AdminOrdersScreenState extends ConsumerState<AdminOrdersScreen>
   }
 }
 
-// ── Shared helpers ─────────────────────────────────────────────────────────
+// ── Filter chip bar ───────────────────────────────────────────────────────────
 
-/// Shows a cancel confirmation dialog with an optional reason field.
-/// Returns after the action completes (or is dismissed).
-Future<void> _showAdminCancelDialog(
-  BuildContext context, {
-  required String title,
-  required Future<void> Function(String? reason) onCancel,
-  required void Function() onDone,
-}) async {
-  final reasonCtrl = TextEditingController();
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text(title),
-      content: TextField(
-        controller: reasonCtrl,
-        maxLines: 2,
-        decoration: const InputDecoration(
-          labelText: 'Reason (optional)',
-          hintText: 'e.g. Student requested cancellation',
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(false),
-          child: const Text('Keep'),
-        ),
-        TextButton(
-          style: TextButton.styleFrom(foregroundColor: Colors.red),
-          onPressed: () => Navigator.of(ctx).pop(true),
-          child: const Text('Cancel Order'),
-        ),
-      ],
-    ),
-  );
-  if (confirmed != true || !context.mounted) return;
-  final reason =
-      reasonCtrl.text.trim().isNotEmpty ? reasonCtrl.text.trim() : null;
-  try {
-    await onCancel(reason);
-    onDone();
-  } catch (e) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not cancel: $e')),
-      );
-    }
-  }
-}
-
-/// Filter chip bar shared by both Deliveries and Errands tabs.
 class _FilterBar extends StatelessWidget {
   const _FilterBar({
     required this.selected,
@@ -188,9 +125,50 @@ class _FilterBar extends StatelessWidget {
   }
 }
 
-// ── Deliveries tab ─────────────────────────────────────────────────────────
+// ── Search bar ────────────────────────────────────────────────────────────────
 
-enum _DeliveryFilter { all, waiting, withRider }
+class _SearchBar extends StatelessWidget {
+  const _SearchBar({
+    required this.controller,
+    required this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
+      child: TextField(
+        controller: controller,
+        onChanged: onChanged,
+        style: theme.textTheme.bodyMedium,
+        decoration: InputDecoration(
+          hintText: 'Search by ID or customer',
+          prefixIcon: const Icon(Icons.search, size: 20),
+          suffixIcon: controller.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear, size: 18),
+                  onPressed: () {
+                    controller.clear();
+                    onChanged('');
+                  },
+                )
+              : null,
+          contentPadding:
+              const EdgeInsets.symmetric(vertical: AppSpacing.sm + 2),
+          isDense: true,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Deliveries tab ────────────────────────────────────────────────────────────
+
+enum _StatusFilter { active, completed, cancelled }
 
 class _DeliveriesTab extends ConsumerStatefulWidget {
   const _DeliveriesTab();
@@ -200,7 +178,33 @@ class _DeliveriesTab extends ConsumerStatefulWidget {
 }
 
 class _DeliveriesTabState extends ConsumerState<_DeliveriesTab> {
-  _DeliveryFilter _filter = _DeliveryFilter.all;
+  _StatusFilter _filter = _StatusFilter.active;
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  bool _matchesFilter(DeliveryGroup group) {
+    return switch (_filter) {
+      _StatusFilter.active => !group.isTerminal,
+      _StatusFilter.completed =>
+        group.status == DeliveryGroupStatus.completed,
+      _StatusFilter.cancelled =>
+        group.status == DeliveryGroupStatus.cancelled,
+    };
+  }
+
+  bool _matchesQuery(AdminDeliveryGroupRow row) {
+    if (_query.isEmpty) return true;
+    final q = _query.toLowerCase();
+    return row.group.shortId.toLowerCase().contains(q) ||
+        row.group.id.toLowerCase().contains(q) ||
+        row.vendorNames.any((n) => n.toLowerCase().contains(q));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -214,29 +218,30 @@ class _DeliveriesTabState extends ConsumerState<_DeliveriesTab> {
         onRetry: () => ref.invalidate(adminDeliveryGroupsProvider),
       ),
       data: (groups) {
-        final filtered = switch (_filter) {
-          _DeliveryFilter.all => groups,
-          _DeliveryFilter.waiting =>
-            groups.where((r) => r.group.riderId == null).toList(),
-          _DeliveryFilter.withRider =>
-            groups.where((r) => r.group.riderId != null).toList(),
-        };
+        final filtered = groups
+            .where((r) => _matchesFilter(r.group) && _matchesQuery(r))
+            .toList();
 
         return Column(
           children: [
             const SizedBox(height: AppSpacing.sm),
             _FilterBar(
               selected: _filter.index,
-              labels: const ['All', 'Waiting', 'With Rider'],
+              labels: const ['Active', 'Completed', 'Cancelled'],
               onSelect: (i) =>
-                  setState(() => _filter = _DeliveryFilter.values[i]),
+                  setState(() => _filter = _StatusFilter.values[i]),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            _SearchBar(
+              controller: _searchCtrl,
+              onChanged: (v) => setState(() => _query = v),
             ),
             const SizedBox(height: AppSpacing.sm),
             Expanded(
               child: filtered.isEmpty
                   ? Center(
                       child: Text(
-                        'No active deliveries',
+                        'No ${_filter.name} deliveries',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.onSurface
                               .withValues(alpha: 0.55),
@@ -262,50 +267,31 @@ class _DeliveriesTabState extends ConsumerState<_DeliveriesTab> {
   }
 }
 
-class _DeliveryGroupCard extends ConsumerStatefulWidget {
+class _DeliveryGroupCard extends StatelessWidget {
   const _DeliveryGroupCard({required this.row});
   final AdminDeliveryGroupRow row;
 
   @override
-  ConsumerState<_DeliveryGroupCard> createState() => _DeliveryGroupCardState();
-}
-
-class _DeliveryGroupCardState extends ConsumerState<_DeliveryGroupCard> {
-  bool _isCancelling = false;
-
-  Future<void> _cancel() async {
-    setState(() => _isCancelling = true);
-    await _showAdminCancelDialog(
-      context,
-      title: 'Cancel this delivery?',
-      onCancel: (reason) => ref
-          .read(adminServiceProvider)
-          .adminCancelDeliveryGroup(widget.row.group.id, reason: reason),
-      onDone: () {
-        ref.invalidate(adminDeliveryGroupsProvider);
-        if (mounted) setState(() => _isCancelling = false);
-      },
-    );
-    if (mounted) setState(() => _isCancelling = false);
-  }
-
-  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final row = widget.row;
     final group = row.group;
 
     final statusColor = switch (group.status) {
       DeliveryGroupStatus.placed => AppColors.orange,
-      DeliveryGroupStatus.commitmentPaid => theme.colorScheme.primary,
+      DeliveryGroupStatus.commitmentPaid ||
+      DeliveryGroupStatus.riderAccepted =>
+        theme.colorScheme.primary,
       DeliveryGroupStatus.awaitingFinalPayment => AppColors.info,
       DeliveryGroupStatus.outForDelivery => AppColors.emerald,
-      _ => theme.colorScheme.outline,
+      DeliveryGroupStatus.completed => AppColors.emerald,
+      DeliveryGroupStatus.cancelled => theme.colorScheme.error,
     };
 
     final vendorLabel = row.vendorNames.isEmpty
         ? 'Unknown vendor'
         : row.vendorNames.join(' · ');
+
+    final timeAgo = _timeAgo(group.createdAt);
 
     return Card(
       margin: const EdgeInsets.only(bottom: AppSpacing.cardGap),
@@ -313,142 +299,120 @@ class _DeliveryGroupCardState extends ConsumerState<_DeliveryGroupCard> {
         borderRadius: BorderRadius.circular(AppRadius.card),
         side: BorderSide(color: statusColor.withValues(alpha: 0.3)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.sm, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => AdminOrderDetailsScreen.group(group: group),
+        )),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header row: status badge + short ID + time
+              Row(
+                children: [
+                  _StatusChip(label: group.status.label, color: statusColor),
+                  const Spacer(),
+                  Text(
+                    group.shortId,
+                    style: theme.textTheme.labelMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
                   ),
-                  child: Text(
-                    group.status.label,
+                  const SizedBox(width: AppSpacing.sm),
+                  Text(
+                    timeAgo,
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: statusColor,
-                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                     ),
                   ),
-                ),
-                const Spacer(),
-                Text(
-                  group.shortId,
-                  style: theme.textTheme.labelMedium
-                      ?.copyWith(fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            // Vendors
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.storefront_outlined,
-                    size: 14,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    '${row.legCount} ${row.legCount == 1 ? 'stop' : 'stops'} · $vendorLabel',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ),
-              ],
-            ),
-            if (group.deliveryLocation != null) ...[
-              const SizedBox(height: 4),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              // Vendors
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.location_on_outlined,
+                  Icon(Icons.storefront_outlined,
                       size: 14,
                       color:
                           theme.colorScheme.onSurface.withValues(alpha: 0.5)),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      group.deliveryLocation!,
+                      '${row.legCount} ${row.legCount == 1 ? 'stop' : 'stops'} · $vendorLabel',
                       style: theme.textTheme.bodySmall,
                     ),
                   ),
                 ],
               ),
-            ],
-            if (group.studentNote != null) ...[
-              const SizedBox(height: 4),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.sticky_note_2_outlined,
-                      size: 14,
-                      color: AppColors.warning.withValues(alpha: 0.8)),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      group.studentNote!,
-                      style: theme.textTheme.bodySmall,
+              if (group.deliveryLocation != null) ...[
+                const SizedBox(height: 4),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.location_on_outlined,
+                        size: 14,
+                        color: theme.colorScheme.onSurface
+                            .withValues(alpha: 0.5)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        group.deliveryLocation!,
+                        style: theme.textTheme.bodySmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: AppSpacing.sm),
-            // Footer: rider status + cancel
-            Row(
-              children: [
-                Icon(
-                  group.riderId == null
-                      ? Icons.hourglass_empty_outlined
-                      : Icons.two_wheeler_outlined,
-                  size: 14,
-                  color: group.riderId == null
-                      ? AppColors.orange
-                      : AppColors.emerald,
+                  ],
                 ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
+              ],
+              const SizedBox(height: AppSpacing.sm),
+              // Footer: rider
+              Row(
+                children: [
+                  Icon(
                     group.riderId == null
-                        ? 'No rider yet'
-                        : 'Rider assigned',
+                        ? Icons.hourglass_empty_outlined
+                        : Icons.two_wheeler_outlined,
+                    size: 14,
+                    color: group.riderId == null
+                        ? AppColors.orange
+                        : AppColors.emerald,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    group.riderId == null ? 'Waiting for rider' : 'Rider assigned',
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: group.riderId == null
                           ? AppColors.orange
                           : AppColors.emerald,
                     ),
                   ),
-                ),
-                if (!group.isTerminal)
-                  TextButton.icon(
-                    onPressed: _isCancelling ? null : _cancel,
-                    icon: _isCancelling
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.cancel_outlined, size: 16),
-                    label: const Text('Cancel'),
-                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                  const Spacer(),
+                  Icon(
+                    Icons.chevron_right,
+                    size: 18,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
                   ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+
+  String _timeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    return '${diff.inHours}h ago';
+  }
 }
 
-// ── Errands tab ────────────────────────────────────────────────────────────
-
-enum _ErrandFilter { all, open, inProgress }
+// ── Errands tab ───────────────────────────────────────────────────────────────
 
 class _ErrandsTab extends ConsumerStatefulWidget {
   const _ErrandsTab();
@@ -458,7 +422,31 @@ class _ErrandsTab extends ConsumerStatefulWidget {
 }
 
 class _ErrandsTabState extends ConsumerState<_ErrandsTab> {
-  _ErrandFilter _filter = _ErrandFilter.all;
+  _StatusFilter _filter = _StatusFilter.active;
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  bool _matchesFilter(Order order) {
+    return switch (_filter) {
+      _StatusFilter.active => !order.status.isTerminal,
+      _StatusFilter.completed => order.status == OrderStatus.completed,
+      _StatusFilter.cancelled => order.status == OrderStatus.cancelled,
+    };
+  }
+
+  bool _matchesQuery(AdminErrandRow row) {
+    if (_query.isEmpty) return true;
+    final q = _query.toLowerCase();
+    return row.order.shortId.toLowerCase().contains(q) ||
+        row.order.id.toLowerCase().contains(q) ||
+        (row.category?.toLowerCase().contains(q) ?? false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -472,33 +460,30 @@ class _ErrandsTabState extends ConsumerState<_ErrandsTab> {
         onRetry: () => ref.invalidate(adminErrandOrdersProvider),
       ),
       data: (errands) {
-        final filtered = switch (_filter) {
-          _ErrandFilter.all => errands,
-          _ErrandFilter.open => errands
-              .where((r) => r.order.status == OrderStatus.placed)
-              .toList(),
-          _ErrandFilter.inProgress => errands
-              .where((r) =>
-                  r.order.status == OrderStatus.beingSourced ||
-                  r.order.status == OrderStatus.outForDelivery)
-              .toList(),
-        };
+        final filtered = errands
+            .where((r) => _matchesFilter(r.order) && _matchesQuery(r))
+            .toList();
 
         return Column(
           children: [
             const SizedBox(height: AppSpacing.sm),
             _FilterBar(
               selected: _filter.index,
-              labels: const ['All', 'Open', 'In Progress'],
+              labels: const ['Active', 'Completed', 'Cancelled'],
               onSelect: (i) =>
-                  setState(() => _filter = _ErrandFilter.values[i]),
+                  setState(() => _filter = _StatusFilter.values[i]),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            _SearchBar(
+              controller: _searchCtrl,
+              onChanged: (v) => setState(() => _query = v),
             ),
             const SizedBox(height: AppSpacing.sm),
             Expanded(
               child: filtered.isEmpty
                   ? Center(
                       child: Text(
-                        'No active errands',
+                        'No ${_filter.name} errands',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.onSurface
                               .withValues(alpha: 0.55),
@@ -524,43 +509,21 @@ class _ErrandsTabState extends ConsumerState<_ErrandsTab> {
   }
 }
 
-class _ErrandOrderCard extends ConsumerStatefulWidget {
+class _ErrandOrderCard extends StatelessWidget {
   const _ErrandOrderCard({required this.row});
   final AdminErrandRow row;
 
   @override
-  ConsumerState<_ErrandOrderCard> createState() => _ErrandOrderCardState();
-}
-
-class _ErrandOrderCardState extends ConsumerState<_ErrandOrderCard> {
-  bool _isCancelling = false;
-
-  Future<void> _cancel() async {
-    setState(() => _isCancelling = true);
-    await _showAdminCancelDialog(
-      context,
-      title: 'Cancel this errand?',
-      onCancel: (reason) => ref
-          .read(adminServiceProvider)
-          .adminCancelOrder(widget.row.order.id, reason: reason),
-      onDone: () {
-        ref.invalidate(adminErrandOrdersProvider);
-        if (mounted) setState(() => _isCancelling = false);
-      },
-    );
-    if (mounted) setState(() => _isCancelling = false);
-  }
-
-  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final row = widget.row;
     final order = row.order;
 
     final statusColor = switch (order.status) {
       OrderStatus.placed => AppColors.orange,
       OrderStatus.beingSourced => theme.colorScheme.primary,
       OrderStatus.outForDelivery => AppColors.emerald,
+      OrderStatus.completed => AppColors.emerald,
+      OrderStatus.cancelled => theme.colorScheme.error,
       _ => theme.colorScheme.outline,
     };
 
@@ -572,163 +535,146 @@ class _ErrandOrderCardState extends ConsumerState<_ErrandOrderCard> {
         borderRadius: BorderRadius.circular(AppRadius.card),
         side: BorderSide(color: statusColor.withValues(alpha: 0.3)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.sm, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppColors.accentViolet.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                  ),
-                  child: Text(
-                    'Errand',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: AppColors.accentViolet,
-                      fontWeight: FontWeight.w600,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => AdminOrderDetailsScreen.order(order: order),
+        )),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentViolet.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                    ),
+                    child: Text(
+                      'Errand',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: AppColors.accentViolet,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.sm, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                  const SizedBox(width: AppSpacing.sm),
+                  _StatusChip(label: order.status.label, color: statusColor),
+                  const Spacer(),
+                  Text(
+                    order.shortId,
+                    style: theme.textTheme.labelMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
                   ),
-                  child: Text(
-                    order.status.label,
+                  const SizedBox(width: AppSpacing.sm),
+                  Text(
+                    timeAgo,
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: statusColor,
-                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                     ),
                   ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              // Category
+              if (row.category != null)
+                Row(
+                  children: [
+                    Icon(Icons.category_outlined,
+                        size: 14,
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+                    const SizedBox(width: 6),
+                    Text(
+                      row.category!.replaceAll('_', ' '),
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
                 ),
-                const Spacer(),
-                Text(
-                  order.shortId,
-                  style: theme.textTheme.labelMedium
-                      ?.copyWith(fontWeight: FontWeight.w700),
+              // Pickup location
+              if (row.pickupLocation != null) ...[
+                const SizedBox(height: 4),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.upload_outlined,
+                        size: 14,
+                        color: theme.colorScheme.onSurface
+                            .withValues(alpha: 0.5)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        row.pickupLocation!,
+                        style: theme.textTheme.bodySmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
               ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            // Category + time
-            if (row.category != null)
-              Text(
-                '${row.category!.replaceAll('_', ' ')} · $timeAgo',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              // Drop-off
+              if (order.deliveryLocation != null) ...[
+                const SizedBox(height: 4),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.location_on_outlined,
+                        size: 14,
+                        color: theme.colorScheme.onSurface
+                            .withValues(alpha: 0.5)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        order.deliveryLocation!,
+                        style: theme.textTheme.bodySmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            const SizedBox(height: 4),
-            // Pickup
-            if (row.pickupLocation != null)
+              ],
+              const SizedBox(height: AppSpacing.sm),
+              // Footer: rider
               Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.upload_outlined,
-                      size: 14,
-                      color:
-                          theme.colorScheme.onSurface.withValues(alpha: 0.5)),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      row.pickupLocation!,
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ),
-                ],
-              ),
-            // Drop-off
-            if (order.deliveryLocation != null) ...[
-              const SizedBox(height: 4),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.location_on_outlined,
-                      size: 14,
-                      color:
-                          theme.colorScheme.onSurface.withValues(alpha: 0.5)),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      order.deliveryLocation!,
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            // Item description
-            if (row.itemDescription != null) ...[
-              const SizedBox(height: 4),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.description_outlined,
-                      size: 14,
-                      color:
-                          theme.colorScheme.onSurface.withValues(alpha: 0.5)),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      row.itemDescription!,
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: AppSpacing.sm),
-            // Footer: rider status + cancel
-            Row(
-              children: [
-                Icon(
-                  order.riderId == null
-                      ? Icons.hourglass_empty_outlined
-                      : Icons.two_wheeler_outlined,
-                  size: 14,
-                  color: order.riderId == null
-                      ? AppColors.orange
-                      : AppColors.emerald,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
+                  Icon(
                     order.riderId == null
-                        ? 'No rider yet'
-                        : 'Rider assigned',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: order.riderId == null
-                          ? AppColors.orange
-                          : AppColors.emerald,
+                        ? Icons.hourglass_empty_outlined
+                        : Icons.two_wheeler_outlined,
+                    size: 14,
+                    color: order.riderId == null
+                        ? AppColors.orange
+                        : AppColors.emerald,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      order.riderId == null
+                          ? 'Waiting for rider'
+                          : 'Rider assigned',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: order.riderId == null
+                            ? AppColors.orange
+                            : AppColors.emerald,
+                      ),
                     ),
                   ),
-                ),
-                if (!order.status.isTerminal)
-                  TextButton.icon(
-                    onPressed: _isCancelling ? null : _cancel,
-                    icon: _isCancelling
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.cancel_outlined, size: 16),
-                    label: const Text('Cancel'),
-                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                  Icon(
+                    Icons.chevron_right,
+                    size: 18,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
                   ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -737,7 +683,34 @@ class _ErrandOrderCardState extends ConsumerState<_ErrandOrderCard> {
   String _timeAgo(DateTime dt) {
     final diff = DateTime.now().difference(dt);
     if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     return '${diff.inHours}h ago';
+  }
+}
+
+// ── Shared chip ───────────────────────────────────────────────────────────────
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.label, required this.color});
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+      ),
+    );
   }
 }

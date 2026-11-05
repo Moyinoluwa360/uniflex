@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../shared/models/custom_order_item.dart';
+import '../../shared/utils/app_error_mapper.dart';
 import '../../shared/models/delivery_group.dart';
 import '../../shared/models/order.dart';
 import '../../shared/services/auth/auth_providers.dart';
@@ -15,7 +14,6 @@ import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../../shared/widgets/pin/pin_entry_sheet.dart';
-import '../ordering/adjust_order_screen.dart';
 import '../ordering/order_repository.dart';
 import '../support/support_chat_screen.dart';
 
@@ -45,6 +43,7 @@ class OrderTrackingScreen extends ConsumerStatefulWidget {
 
 class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   bool _isPayingFinal = false;
+  bool _isDeclining = false;
 
   Future<void> _payFinalAmount(Order o) async {
     final hasPin =
@@ -87,27 +86,129 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
           ),
         );
       }
-    } on PostgrestException catch (e) {
+    } catch (e) {
       if (mounted) {
-        final msg = e.message.contains('INSUFFICIENT_BALANCE')
-            ? 'Insufficient balance.'
-            : e.message.contains('INVALID_PIN')
-                ? 'Incorrect PIN.'
-                : 'Payment failed. Please try again.';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+          SnackBar(
+            content: Text(AppErrorMapper.map(e)),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isPayingFinal = false);
+    }
+  }
+
+  Future<void> _payGroupFinalAmount(DeliveryGroup g) async {
+    final hasPin =
+        await ref.read(profileServiceProvider).hasTransactionPin();
+    if (!mounted) return;
+
+    if (!hasPin) {
+      final didSet = await showSetPinSheet(context, ref);
+      if (!mounted || !didSet) return;
+    }
+
+    final pin = await showEnterPinSheet(
+      context,
+      title: 'Pay for your order',
+      subtitle:
+          'Enter your 4-digit PIN to pay ₦${g.finalAmount?.toStringAsFixed(0) ?? '—'}.',
+    );
+    if (pin == null || !mounted) return;
+
+    setState(() => _isPayingFinal = true);
+
+    try {
+      final client = ref.read(supabaseClientProvider);
+      await client.rpc('pay_group_final_amount', params: {
+        'p_group_id': g.id,
+        'p_pin': pin,
+      });
+
+      ref.invalidate(walletBalanceProvider);
+      ref.invalidate(walletInfoProvider);
+      ref.invalidate(walletTransactionsProvider);
+      ref.invalidate(groupByIdProvider(g.id));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Payment successful — your rider is on the way!'),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Payment failed. Please try again.'),
-              behavior: SnackBarBehavior.floating),
+          SnackBar(
+            content: Text(AppErrorMapper.map(e)),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } finally {
       if (mounted) setState(() => _isPayingFinal = false);
+    }
+  }
+
+  Future<void> _declineGroupOrder(DeliveryGroup g) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Decline this order?'),
+        content: const Text(
+          'The order will be cancelled. The delivery fee already paid is non-refundable.',
+        ),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Keep order'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Yes, decline'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isDeclining = true);
+
+    try {
+      final client = ref.read(supabaseClientProvider);
+      await client.rpc('decline_group_final_amount', params: {
+        'p_group_id': g.id,
+      });
+
+      ref.invalidate(groupByIdProvider(g.id));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Order declined.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppErrorMapper.map(e)),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isDeclining = false);
     }
   }
 
@@ -128,6 +229,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     return switch (s) {
       DeliveryGroupStatus.placed => AppColors.info,
       DeliveryGroupStatus.commitmentPaid => AppColors.warning,
+      DeliveryGroupStatus.riderAccepted => AppColors.orange,
       DeliveryGroupStatus.awaitingFinalPayment => AppColors.warning,
       DeliveryGroupStatus.outForDelivery => AppColors.orange,
       DeliveryGroupStatus.completed => AppColors.emerald,
@@ -270,9 +372,23 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
 
                 const SizedBox(height: AppSpacing.xl),
 
-                // Delivery PIN
-                if (g.deliveryPin != null && !g.isTerminal) ...[
-                  _TrackingPinCard(pin: g.deliveryPin!),
+                // ── Awaiting final payment card ──────────────────────────
+                if (g.status == DeliveryGroupStatus.awaitingFinalPayment &&
+                    !g.finalPaymentPaid) ...[
+                  _GroupFinalPaymentCard(
+                    group: g,
+                    isPayingFinal: _isPayingFinal,
+                    isDeclining: _isDeclining,
+                    onPay: () => _payGroupFinalAmount(g),
+                    onDecline: () => _declineGroupOrder(g),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                ],
+
+                // ── Out for delivery — payment confirmed + PIN reminder ──
+                if (g.status == DeliveryGroupStatus.outForDelivery &&
+                    g.deliveryPin != null) ...[
+                  _GroupDeliveryConfirmedCard(pin: g.deliveryPin!),
                   const SizedBox(height: AppSpacing.xl),
                 ],
 
@@ -327,8 +443,8 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                     onPressed: () => Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => SupportChatScreen(
-                          initialOrderId: g.id,
-                          initialOrderLabel: '#${g.shortId} · Delivery',
+                          initialGroupId: g.id,
+                          initialGroupLabel: '#${g.shortId} · Delivery',
                         ),
                       ),
                     ),
@@ -456,7 +572,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
 
                 const SizedBox(height: AppSpacing.xl),
 
-                // ── Being sourced — rider info + adjust link ─────────────
+                // ── Being sourced — rider info ───────────────────────────
                 if (o.status == OrderStatus.beingSourced) ...[
                   Container(
                     width: double.infinity,
@@ -499,19 +615,6 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.sm),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.edit_outlined, size: 16),
-                    label: const Text('View / Adjust Order'),
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => AdjustOrderScreen(order: o),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  // Custom items pending approval
-                  _PendingCustomItems(orderId: o.id),
                   const SizedBox(height: AppSpacing.xl),
                 ],
 
@@ -829,19 +932,20 @@ class _GroupStatusTimeline extends StatelessWidget {
 
   static const _steps = [
     (status: DeliveryGroupStatus.placed, label: 'Order Placed'),
-    (status: DeliveryGroupStatus.commitmentPaid, label: 'Being Prepared'),
+    (status: DeliveryGroupStatus.riderAccepted, label: 'Rider Accepted'),
+    (status: DeliveryGroupStatus.awaitingFinalPayment, label: 'Final Price Sent'),
     (status: DeliveryGroupStatus.outForDelivery, label: 'Out for Delivery'),
-    (status: DeliveryGroupStatus.completed, label: 'Delivered'),
+    (status: DeliveryGroupStatus.completed, label: 'Completed'),
   ];
 
   int _currentIndex() {
-    // Map the actual status to the closest step index.
     return switch (status) {
       DeliveryGroupStatus.placed => 0,
-      DeliveryGroupStatus.commitmentPaid => 1,
-      DeliveryGroupStatus.awaitingFinalPayment => 1, // still "being prepared"
-      DeliveryGroupStatus.outForDelivery => 2,
-      DeliveryGroupStatus.completed => 3,
+      DeliveryGroupStatus.commitmentPaid => 0, // still at "placed" step
+      DeliveryGroupStatus.riderAccepted => 1,
+      DeliveryGroupStatus.awaitingFinalPayment => 2,
+      DeliveryGroupStatus.outForDelivery => 3,
+      DeliveryGroupStatus.completed => 4,
       DeliveryGroupStatus.cancelled => -1,
     };
   }
@@ -877,7 +981,7 @@ class _GroupStatusTimeline extends StatelessWidget {
     return Column(
       children: List.generate(_steps.length, (i) {
         final step = _steps[i];
-        final done = i <= current;
+        final done = current >= 0 && i <= current;
         final isCurrent = i == current;
         final isLast = i == _steps.length - 1;
 
@@ -937,16 +1041,274 @@ class _GroupStatusTimeline extends StatelessWidget {
   }
 }
 
+/// Pay / Decline card shown when a group is in awaitingFinalPayment state.
+class _GroupFinalPaymentCard extends ConsumerWidget {
+  const _GroupFinalPaymentCard({
+    required this.group,
+    required this.isPayingFinal,
+    required this.isDeclining,
+    required this.onPay,
+    required this.onDecline,
+  });
+
+  final DeliveryGroup group;
+  final bool isPayingFinal;
+  final bool isDeclining;
+  final VoidCallback onPay;
+  final VoidCallback onDecline;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final walletAsync = ref.watch(walletBalanceProvider);
+    final balance = walletAsync.valueOrNull ?? 0.0;
+    final finalAmt = group.finalAmount;
+    final hasSufficientBalance =
+        finalAmt != null && balance >= finalAmt;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title row
+          Row(
+            children: [
+              const Icon(Icons.payment_outlined,
+                  color: AppColors.warning, size: 20),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                'Pay for your order',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: AppColors.warning,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+
+          // Final amount
+          Text(
+            '₦${finalAmt?.toStringAsFixed(0) ?? '—'}',
+            style: theme.textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+
+          // Wallet balance row
+          Row(
+            children: [
+              Icon(
+                Icons.account_balance_wallet_outlined,
+                size: 16,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Wallet balance: ₦${balance.toStringAsFixed(0)}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              if (finalAmt != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: hasSufficientBalance
+                        ? AppColors.emerald.withValues(alpha: 0.12)
+                        : AppColors.error.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                  ),
+                  child: Text(
+                    hasSufficientBalance ? 'Sufficient' : 'Insufficient',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: hasSufficientBalance
+                          ? AppColors.emerald
+                          : AppColors.error,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+
+          // Pay button
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed:
+                  (isPayingFinal || isDeclining || finalAmt == null)
+                      ? null
+                      : onPay,
+              child: isPayingFinal
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppColors.pureWhite),
+                    )
+                  : Text(
+                      'Pay ₦${finalAmt?.toStringAsFixed(0) ?? '—'}',
+                    ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+
+          // Decline button
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.error,
+                side: const BorderSide(color: AppColors.error),
+              ),
+              onPressed:
+                  (isPayingFinal || isDeclining) ? null : onDecline,
+              child: isDeclining
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppColors.error),
+                    )
+                  : const Text('Decline order'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Card shown when a group is outForDelivery — confirms payment and
+/// shows the delivery PIN in large individual digit boxes.
+class _GroupDeliveryConfirmedCard extends StatelessWidget {
+  const _GroupDeliveryConfirmedCard({required this.pin});
+
+  final String pin;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.emerald.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.emerald.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.check_circle_outline,
+                  color: AppColors.emerald, size: 20),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                'Payment confirmed',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: AppColors.emerald,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Your rider is on the way. Give them your delivery PIN at the door:',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: AppColors.emerald.withValues(alpha: 0.85),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          GestureDetector(
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: pin));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('PIN copied'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ...pin.split('').map(
+                  (digit) => Container(
+                    width: 44,
+                    height: 52,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.emerald.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: AppColors.emerald.withValues(alpha: 0.4)),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      digit,
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.emerald,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                const Icon(Icons.copy_outlined,
+                    size: 16, color: AppColors.emerald),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Tap to copy',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: AppColors.emerald.withValues(alpha: 0.6),
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Expandable per-vendor leg breakdown within a delivery group.
-class _GroupLegsSection extends ConsumerWidget {
+/// Single-vendor: flat card. Multi-vendor: one accordion per vendor,
+/// all closed by default.
+class _GroupLegsSection extends ConsumerStatefulWidget {
   const _GroupLegsSection({required this.groupId});
 
   final String groupId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_GroupLegsSection> createState() => _GroupLegsSectionState();
+}
+
+class _GroupLegsSectionState extends ConsumerState<_GroupLegsSection> {
+  final Set<int> _expandedIndices = {};
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final legsAsync = ref.watch(groupLegsForStudentProvider(groupId));
+    final legsAsync = ref.watch(groupLegsForStudentProvider(widget.groupId));
 
     return legsAsync.when(
       loading: () => const Padding(
@@ -967,10 +1329,28 @@ class _GroupLegsSection extends ConsumerWidget {
           );
         }
 
+        // Single vendor: plain flat card
+        if (legs.length == 1) {
+          return _LegCard(leg: legs.first);
+        }
+
+        // Multi-vendor: accordion per vendor, all closed by default
         return Column(
-          children: [
-            for (final leg in legs) _LegCard(leg: leg),
-          ],
+          children: List.generate(legs.length, (i) {
+            final leg = legs[i];
+            final isExpanded = _expandedIndices.contains(i);
+            return _LegAccordionCard(
+              leg: leg,
+              isExpanded: isExpanded,
+              onToggle: () => setState(() {
+                if (isExpanded) {
+                  _expandedIndices.remove(i);
+                } else {
+                  _expandedIndices.add(i);
+                }
+              }),
+            );
+          }),
         );
       },
     );
@@ -1008,43 +1388,203 @@ class _LegCard extends StatelessWidget {
         color: theme.colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(AppRadius.card),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
+          Row(
+            children: [
+              Expanded(
+                child: Text(
                   leg.vendorName ?? 'Vendor',
                   style: theme.textTheme.labelLarge,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '₦${leg.totalAmount.toStringAsFixed(0)}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: 3,
+                ),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                ),
+                child: Text(
+                  leg.status.label,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              ],
+              ),
+            ],
+          ),
+          if (leg.items.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            ...leg.items.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${item.quantity}× ${item.productName}',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                    Text(
+                      '₦${item.unitPrice.toStringAsFixed(0)}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface
+                            .withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            '₦${leg.totalAmount.toStringAsFixed(0)}',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.sm,
-              vertical: 3,
-            ),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(AppRadius.pill),
-            ),
-            child: Text(
-              leg.status.label,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w600,
+        ],
+      ),
+    );
+  }
+}
+
+class _LegAccordionCard extends StatelessWidget {
+  const _LegAccordionCard({
+    required this.leg,
+    required this.isExpanded,
+    required this.onToggle,
+  });
+
+  final Order leg;
+  final bool isExpanded;
+  final VoidCallback onToggle;
+
+  Color _statusColor(OrderStatus s) {
+    return switch (s) {
+      OrderStatus.placed => AppColors.info,
+      OrderStatus.preparing => AppColors.warning,
+      OrderStatus.ready || OrderStatus.readyForPickup => AppColors.emerald,
+      OrderStatus.outForDelivery => AppColors.orange,
+      OrderStatus.completed => AppColors.emerald,
+      OrderStatus.cancelled => AppColors.error,
+      OrderStatus.beingSourced => AppColors.orange,
+      OrderStatus.awaitingFinalPayment => AppColors.warning,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = _statusColor(leg.status);
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+      ),
+      child: Column(
+        children: [
+          // Header row (always visible)
+          InkWell(
+            onTap: onToggle,
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          leg.vendorName ?? 'Vendor',
+                          style: theme.textTheme.labelLarge,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '₦${leg.totalAmount.toStringAsFixed(0)}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface
+                                .withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                    ),
+                    child: Text(
+                      leg.status.label,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Icon(
+                    isExpanded
+                        ? Icons.expand_less
+                        : Icons.expand_more,
+                    size: 20,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  ),
+                ],
               ),
             ),
           ),
+
+          // Expanded items list
+          if (isExpanded && leg.items.isNotEmpty) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.md),
+              child: Column(
+                children: leg.items
+                    .map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${item.quantity}× ${item.productName}',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ),
+                            Text(
+                              '₦${item.unitPrice.toStringAsFixed(0)}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurface
+                                    .withValues(alpha: 0.6),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1116,166 +1656,6 @@ class _TrackingPinCard extends StatelessWidget {
               color: AppColors.emerald.withValues(alpha: 0.8),
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Shows pending custom items that the rider has added to this order.
-/// The student can approve or reject each item.
-class _PendingCustomItems extends ConsumerWidget {
-  const _PendingCustomItems({required this.orderId});
-
-  final String orderId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final itemsAsync = ref.watch(pendingCustomItemsProvider(orderId));
-
-    return itemsAsync.when(
-      loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
-      data: (items) {
-        if (items.isEmpty) return const SizedBox.shrink();
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: AppSpacing.md),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: BoxDecoration(
-                color: AppColors.info.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(AppRadius.card),
-                border: Border.all(
-                    color: AppColors.info.withValues(alpha: 0.3)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.add_shopping_cart,
-                          color: AppColors.info, size: 20),
-                      const SizedBox(width: AppSpacing.sm),
-                      Text(
-                        'Custom Items — Approval Needed',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: AppColors.info,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    'Your rider wants to add these items. Approve or reject each one.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: AppColors.info.withValues(alpha: 0.8),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  ...items.map((item) => _CustomItemRow(item: item)),
-                ],
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _CustomItemRow extends ConsumerStatefulWidget {
-  const _CustomItemRow({required this.item});
-
-  final CustomOrderItem item;
-
-  @override
-  ConsumerState<_CustomItemRow> createState() => _CustomItemRowState();
-}
-
-class _CustomItemRowState extends ConsumerState<_CustomItemRow> {
-  bool _isProcessing = false;
-
-  Future<void> _approve() async {
-    setState(() => _isProcessing = true);
-    try {
-      final client = ref.read(supabaseClientProvider);
-      await approveCustomItem(client, widget.item.id);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to approve: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
-  }
-
-  Future<void> _reject() async {
-    setState(() => _isProcessing = true);
-    try {
-      final client = ref.read(supabaseClientProvider);
-      await rejectCustomItem(client, widget.item.id);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to reject: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final item = widget.item;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(item.description, style: theme.textTheme.bodyMedium),
-                Text(
-                  '₦${item.price.toStringAsFixed(0)}',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (_isProcessing)
-            const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          else ...[
-            IconButton(
-              icon: const Icon(Icons.check_circle, color: AppColors.emerald),
-              tooltip: 'Approve',
-              onPressed: _approve,
-              iconSize: 28,
-            ),
-            IconButton(
-              icon: const Icon(Icons.cancel, color: AppColors.error),
-              tooltip: 'Reject',
-              onPressed: _reject,
-              iconSize: 28,
-            ),
-          ],
         ],
       ),
     );

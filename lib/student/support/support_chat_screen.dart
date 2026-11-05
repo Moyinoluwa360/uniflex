@@ -22,13 +22,21 @@ class SupportChatScreen extends ConsumerStatefulWidget {
     super.key,
     this.initialOrderId,
     this.initialOrderLabel,
+    this.initialGroupId,
+    this.initialGroupLabel,
   });
 
-  /// Pre-fill an order chip above the text box. Null for a plain conversation.
+  /// Pre-fill a standalone order chip. Null for a plain conversation.
   final String? initialOrderId;
 
-  /// Short label shown on the chip, e.g. "#AB12 · Uniflex · Preparing".
+  /// Short label shown on the order chip, e.g. "#AB12 · Uniflex · Preparing".
   final String? initialOrderLabel;
+
+  /// Pre-fill a delivery-group chip (multi-vendor checkout).
+  final String? initialGroupId;
+
+  /// Short label for the group chip, e.g. "#GRP1234 · Delivery".
+  final String? initialGroupLabel;
 
   @override
   ConsumerState<SupportChatScreen> createState() => _SupportChatScreenState();
@@ -41,12 +49,16 @@ class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
   String? _error;
   String? _attachedOrderId;
   String? _attachedOrderLabel;
+  String? _attachedGroupId;
+  String? _attachedGroupLabel;
 
   @override
   void initState() {
     super.initState();
     _attachedOrderId = widget.initialOrderId;
     _attachedOrderLabel = widget.initialOrderLabel;
+    _attachedGroupId = widget.initialGroupId;
+    _attachedGroupLabel = widget.initialGroupLabel;
   }
 
   @override
@@ -67,18 +79,21 @@ class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
     });
 
     final orderId = _attachedOrderId;
+    final groupId = _attachedGroupId;
     try {
       await ref.read(supportChatServiceProvider).sendMessage(
             text,
             orderId: orderId,
+            groupId: groupId,
           );
       _controller.clear();
-      // Detach the order chip after the first send — further messages in this
-      // session don't need to repeat the order reference.
-      if (mounted && _attachedOrderId != null) {
+      // Detach the chip after the first send.
+      if (mounted && (orderId != null || groupId != null)) {
         setState(() {
           _attachedOrderId = null;
           _attachedOrderLabel = null;
+          _attachedGroupId = null;
+          _attachedGroupLabel = null;
         });
       }
       _scrollToBottom();
@@ -212,11 +227,14 @@ class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
           _InputBar(
             controller: _controller,
             isSending: _isSending,
-            attachedOrderId: _attachedOrderId,
-            attachedOrderLabel: _attachedOrderLabel,
+            // Show whichever chip is set — order takes precedence.
+            attachedOrderId: _attachedOrderId ?? _attachedGroupId,
+            attachedOrderLabel: _attachedOrderLabel ?? _attachedGroupLabel,
             onDetachOrder: () => setState(() {
               _attachedOrderId = null;
               _attachedOrderLabel = null;
+              _attachedGroupId = null;
+              _attachedGroupLabel = null;
             }),
             onSend: _send,
           ),
@@ -302,8 +320,8 @@ class _MessageListState extends ConsumerState<_MessageList> {
             conversationMessagesProvider(widget.conversationId)),
       ),
       data: (msgs) {
-        // Scroll to bottom when new messages arrive.
-        if (_prev != null && msgs.length > _prev!.length) {
+        // Scroll to bottom on initial load and when new messages arrive.
+        if (msgs.isNotEmpty && (_prev == null || msgs.length > _prev!.length)) {
           widget.onScrollToBottom();
         }
         _prev = msgs;

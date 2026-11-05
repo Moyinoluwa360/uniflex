@@ -8,6 +8,123 @@ import '../delivery/delivery_record.dart';
 import '../pool/pool_group.dart';
 import '../pool/pool_order.dart';
 
+/// Full customer info returned after a rider accepts a delivery group.
+class GroupCustomerInfo {
+  const GroupCustomerInfo({
+    required this.fullName,
+    this.nickname,
+    required this.phone,
+    this.email,
+    this.deliveryLocation,
+    this.locationDetails,
+    this.studentNote,
+    this.deliveryPin,
+  });
+
+  factory GroupCustomerInfo.fromMap(Map<String, dynamic> m) {
+    return GroupCustomerInfo(
+      fullName: m['full_name'] as String? ?? 'Customer',
+      nickname: m['nickname'] as String?,
+      phone: m['phone'] as String? ?? '',
+      email: m['email'] as String?,
+      deliveryLocation: m['delivery_location'] as String?,
+      locationDetails: m['location_details'] as String?,
+      studentNote: m['student_note'] as String?,
+      deliveryPin: m['delivery_pin'] as String?,
+    );
+  }
+
+  final String fullName;
+  final String? nickname;
+  final String phone;
+  final String? email;
+  final String? deliveryLocation;
+  final String? locationDetails;
+  final String? studentNote;
+  final String? deliveryPin;
+
+  String get displayName =>
+      nickname != null ? '$fullName (@$nickname)' : fullName;
+}
+
+/// One vendor's item breakdown within a delivery group.
+class GroupVendorItems {
+  const GroupVendorItems({
+    required this.vendorId,
+    required this.vendorName,
+    this.vendorLocation,
+    required this.items,
+    required this.packs,
+    required this.subtotal,
+  });
+
+  final String vendorId;
+  final String vendorName;
+  final String? vendorLocation;
+  final List<GroupLineItem> items;
+  final List<GroupPack> packs;
+  final double subtotal;
+
+  List<GroupLineItem> get foodItems =>
+      items.where((i) => i.section == 'food').toList();
+  List<GroupLineItem> get drinkItems =>
+      items.where((i) => i.section == 'drinks').toList();
+  List<GroupLineItem> get otherItems =>
+      items
+          .where((i) => i.section != 'food' && i.section != 'drinks')
+          .toList();
+}
+
+class GroupLineItem {
+  const GroupLineItem({
+    required this.productName,
+    required this.quantity,
+    required this.unitPrice,
+    required this.section,
+    this.foodSubsection,
+  });
+
+  factory GroupLineItem.fromMap(Map<String, dynamic> m) {
+    return GroupLineItem(
+      productName: m['product_name'] as String,
+      quantity: m['quantity'] as int,
+      unitPrice: (m['unit_price'] as num).toDouble(),
+      section: m['section'] as String? ?? 'others',
+      foodSubsection: m['food_subsection'] as String?,
+    );
+  }
+
+  final String productName;
+  final int quantity;
+  final double unitPrice;
+  final String section;
+  final String? foodSubsection;
+
+  double get lineTotal => unitPrice * quantity;
+}
+
+class GroupPack {
+  const GroupPack({
+    required this.packIndex,
+    required this.items,
+  });
+
+  final int packIndex;
+  final List<GroupPackItem> items;
+
+  String get label => 'Pack ${packIndex + 1}';
+}
+
+class GroupPackItem {
+  const GroupPackItem({
+    required this.productName,
+    required this.quantity,
+  });
+
+  final String productName;
+  final int quantity;
+}
+
 /// Pickup location + customer contact for a currently active delivery.
 class ActiveDeliveryDetail {
   const ActiveDeliveryDetail({
@@ -182,80 +299,118 @@ class RiderService {
     }
   }
 
-  // ── Delivery group pool stream (Round 7) ───────────────────────────
+  // ── Unified pool stream (delivery groups + errands) ───────────────
 
-  /// Live stream of delivery groups in the pool (committed but unassigned).
-  Stream<List<PoolGroup>> streamGroupPool() async* {
-    Future<List<PoolGroup>> fetchGroups() async {
-      final rows = await _client
+  /// Live stream of the job pool: delivery groups + errand orders.
+  Stream<({List<PoolGroup> groups, List<PoolOrder> errands})> streamPool() async* {
+    Future<({List<PoolGroup> groups, List<PoolOrder> errands})>
+        fetchPool() async {
+      // Delivery groups in pool.
+      final groupRows = await _client
           .from('delivery_groups')
           .select()
           .eq('status', 'commitment_paid')
           .isFilter('rider_id', null)
           .order('created_at', ascending: false);
 
-      if (rows.isEmpty) return [];
-
-      final groupIds =
-          rows.map((m) => m['id'] as String).toList();
-
-      // Fetch legs for these groups to get vendor info.
-      final legs = await _client
+      // Errand orders in pool.
+      final errandRows = await _client
           .from('orders')
-          .select('delivery_group_id, vendor_id')
-          .inFilter('delivery_group_id', groupIds);
+          .select()
+          .eq('type', 'errand')
+          .eq('status', 'placed')
+          .eq('commitment_fee_paid', true)
+          .isFilter('rider_id', null)
+          .order('created_at', ascending: false);
 
-      // Batch-fetch vendor names.
-      final vendorIds = legs
-          .map((m) => m['vendor_id'] as String?)
-          .whereType<String>()
-          .toSet()
-          .toList();
+      if (groupRows.isEmpty && errandRows.isEmpty) {
+        return (groups: <PoolGroup>[], errands: <PoolOrder>[]);
+      }
+
+      // Enrich groups with vendor names.
+      final groupIds = groupRows.map((m) => m['id'] as String).toList();
+      final legs = groupIds.isNotEmpty
+          ? await _client
+              .from('orders')
+              .select('delivery_group_id, vendor_id')
+              .inFilter('delivery_group_id', groupIds)
+          : <Map<String, dynamic>>[];
+
+      final allVendorIds = {
+        ...legs.map((l) => l['vendor_id'] as String?).whereType<String>(),
+      }.toList();
+
       final vendorNames = <String, String>{};
-      if (vendorIds.isNotEmpty) {
+      final vendorLocations = <String, String>{};
+      if (allVendorIds.isNotEmpty) {
         final vendors = await _client
             .from('vendors')
-            .select('id, name')
-            .inFilter('id', vendorIds);
+            .select('id, name, location')
+            .inFilter('id', allVendorIds);
         for (final v in vendors) {
           vendorNames[v['id'] as String] = v['name'] as String;
+          if (v['location'] != null) {
+            vendorLocations[v['id'] as String] = v['location'] as String;
+          }
         }
       }
 
-      return rows.map((m) {
+      final poolGroups = groupRows.map((m) {
         final group = DeliveryGroup.fromMap(m);
-        final groupLegs = legs
-            .where((l) => l['delivery_group_id'] == group.id)
-            .toList();
+        final groupLegs =
+            legs.where((l) => l['delivery_group_id'] == group.id).toList();
         final names = groupLegs
-            .map((l) => vendorNames[l['vendor_id']] ?? 'Unknown')
+            .map((l) => vendorNames[l['vendor_id']] ?? 'Vendor')
             .toSet()
             .toList();
         return PoolGroup(
-          group: group,
-          vendorNames: names,
-          legCount: groupLegs.length,
+            group: group, vendorNames: names, legCount: groupLegs.length);
+      }).toList();
+
+      // Enrich errands with pickup info.
+      final errandIds = errandRows.map((m) => m['id'] as String).toList();
+      final errandDetails = errandIds.isNotEmpty
+          ? await _client
+              .from('errand_requests')
+              .select('order_id, pickup_location, item_description, category')
+              .inFilter('order_id', errandIds)
+          : <Map<String, dynamic>>[];
+
+      final errandById = <String, Map<String, dynamic>>{
+        for (final e in errandDetails) e['order_id'] as String: e,
+      };
+
+      final poolErrands = errandRows.map((m) {
+        final order = Order.fromMap(m);
+        final details = errandById[order.id];
+        return PoolOrder(
+          order: order,
+          pickupName: details?['pickup_location'] as String? ?? 'Errand pickup',
+          pickupAddress: null,
+          orderTypeLabel: 'Errand',
         );
       }).toList();
+
+      return (groups: poolGroups, errands: poolErrands);
     }
 
-    yield await fetchGroups();
+    yield await fetchPool();
 
     try {
-      final stream = _client
+      final groupStream = _client
           .from('delivery_groups')
           .stream(primaryKey: ['id'])
           .order('created_at', ascending: false);
 
-      await for (final _ in stream) {
+      await for (final _ in groupStream) {
         try {
-          yield await fetchGroups();
+          yield await fetchPool();
         } catch (e) {
-          debugPrint('[RiderGroupPool] Realtime fetch error: $e');
+          debugPrint('[RiderPool] fetch error: $e');
         }
       }
     } catch (e) {
-      debugPrint('[RiderGroupPool] Realtime stream error: $e');
+      debugPrint('[RiderPool] stream error: $e');
     }
   }
 
@@ -296,12 +451,6 @@ class RiderService {
   Future<void> acceptDeliveryGroup(String groupId) async {
     await _client.rpc(
         'accept_delivery_group', params: {'p_group_id': groupId});
-  }
-
-  /// Confirms pickup at one vendor stop within a delivery group.
-  Future<void> confirmGroupLegPickup(String orderId) async {
-    await _client.rpc(
-        'confirm_group_leg_pickup', params: {'p_order_id': orderId});
   }
 
   /// Verifies delivery of the entire group using the single delivery PIN.
@@ -345,35 +494,56 @@ class RiderService {
     }).toList();
   }
 
-  // ── Active delivery stream ─────────────────────────────────────────
+  // ── Active work stream ─────────────────────────────────────────────
 
-  /// Streams the rider's active deliveries.
-  /// Includes both 'out_for_delivery' (normal delivery) and 'being_sourced'
-  /// (partner/around orders the rider has accepted and is still sourcing).
-  Stream<List<Order>> streamActiveDeliveries(String riderId) async* {
-    Future<List<Order>> fetchActive() async {
-      final rows = await _client
+  /// Streams the rider's active items: active delivery groups + active errand orders.
+  Stream<({List<DeliveryGroup> groups, List<Order> errands})> streamActiveWork(
+      String riderId) async* {
+    Future<({List<DeliveryGroup> groups, List<Order> errands})>
+        fetchActive() async {
+      final groupRows = await _client
+          .from('delivery_groups')
+          .select()
+          .eq('rider_id', riderId)
+          .inFilter('status', [
+            'rider_accepted',
+            'awaiting_final_payment',
+            'out_for_delivery',
+          ])
+          .order('created_at', ascending: false);
+
+      final errandRows = await _client
           .from('orders')
           .select()
           .eq('rider_id', riderId)
-          .inFilter('status', ['out_for_delivery', 'being_sourced', 'awaiting_final_payment'])
+          .eq('type', 'errand')
+          .inFilter('status', ['being_sourced', 'out_for_delivery'])
           .order('created_at', ascending: false);
-      return rows.map((m) => Order.fromMap(m)).toList();
+
+      return (
+        groups: groupRows.map((m) => DeliveryGroup.fromMap(m)).toList(),
+        errands: errandRows.map((m) => Order.fromMap(m)).toList(),
+      );
     }
 
     yield await fetchActive();
 
     try {
-      final stream = _client
-          .from('orders')
+      // Listen to both tables
+      final groupStream = _client
+          .from('delivery_groups')
           .stream(primaryKey: ['id'])
           .eq('rider_id', riderId);
 
-      await for (final _ in stream) {
-        yield await fetchActive();
+      await for (final _ in groupStream) {
+        try {
+          yield await fetchActive();
+        } catch (e) {
+          debugPrint('[RiderActive] fetch error: $e');
+        }
       }
     } catch (e) {
-      debugPrint('[RiderDelivery] Realtime stream error: $e');
+      debugPrint('[RiderActive] stream error: $e');
     }
   }
 
@@ -434,10 +604,6 @@ class RiderService {
     await _notifications.notifyOrderStatus(orderId);
   }
 
-  Future<void> confirmPickup(String orderId) async {
-    await _client.rpc('confirm_pickup', params: {'p_order_id': orderId});
-  }
-
   Future<void> verifyDelivery(String orderId, String pin) async {
     await _client.rpc('verify_delivery', params: {
       'p_order_id': orderId,
@@ -446,88 +612,129 @@ class RiderService {
     await _notifications.notifyOrderStatus(orderId);
   }
 
-  /// Sends the customer a free-text message about an order this rider is
-  /// currently assigned to. Throws [NotifyException] on failure, because
-  /// unlike the automatic pushes this is an explicit action.
-  Future<void> messageCustomer({
-    required String orderId,
-    required String message,
-  }) {
-    return _notifications.messageCustomer(orderId: orderId, message: message);
-  }
+  // ── Delivery group actions (new flow) ─────────────────────────────
 
-  // ── Sourcing flow (partner / errand orders) ────────────────────────
-
-  /// Flags an item as unavailable while sourcing. The DB records the flag
-  /// and sends the student a notification. [orderItemId] is null for errand
-  /// requests (which have no line items).
-  Future<void> flagItemUnavailable({
-    required String orderId,
-    String? orderItemId,
-    required String productName,
-    required int quantity,
-  }) async {
-    await _client.rpc('flag_item_unavailable', params: {
-      'p_order_id': orderId,
-      'p_order_item_id': orderItemId,
-      'p_product_name': productName,
-      'p_quantity': quantity,
-    });
-  }
-
-  /// Confirms the items that are available and sets the final total.
-  /// Moves the order to 'awaiting_final_payment' and notifies the student.
-  Future<void> confirmSourcingItems({
-    required String orderId,
-    required double finalAmount,
-  }) async {
-    await _client.rpc('confirm_sourced_items', params: {
-      'p_order_id': orderId,
+  /// Sets the final food total for a delivery group.
+  /// Rider can call this until the student pays.
+  Future<void> setGroupFinalPrice(String groupId, double finalAmount) async {
+    await _client.rpc('set_delivery_group_final_price', params: {
+      'p_group_id': groupId,
       'p_final_amount': finalAmount,
     });
-    await _notifications.notifyOrderStatus(orderId);
+  }
+
+  /// Fetches full customer info for an accepted delivery group.
+  Future<GroupCustomerInfo> getGroupCustomerInfo(String groupId) async {
+    final result = await _client.rpc(
+      'get_group_customer_info',
+      params: {'p_group_id': groupId},
+    );
+    return GroupCustomerInfo.fromMap(Map<String, dynamic>.from(result as Map));
+  }
+
+  /// Fetches full item breakdown for a delivery group (vendor list with packs/drinks/others).
+  Future<List<GroupVendorItems>> getGroupItems(String groupId) async {
+    final result = await _client.rpc(
+      'get_group_items',
+      params: {'p_group_id': groupId},
+    );
+    final raw = result as List<dynamic>;
+    return raw.map((v) {
+      final vm = Map<String, dynamic>.from(v as Map);
+      final itemsRaw = vm['items'] as List<dynamic>? ?? [];
+      final packsRaw = vm['packs'] as List<dynamic>? ?? [];
+
+      final items = itemsRaw
+          .map((i) => GroupLineItem.fromMap(Map<String, dynamic>.from(i as Map)))
+          .toList();
+
+      final packs = packsRaw.map((p) {
+        final pm = Map<String, dynamic>.from(p as Map);
+        final packItems = (pm['items'] as List<dynamic>? ?? [])
+            .map((pi) {
+              final pim = Map<String, dynamic>.from(pi as Map);
+              return GroupPackItem(
+                productName: pim['product_name'] as String,
+                quantity: pim['quantity'] as int,
+              );
+            })
+            .toList();
+        return GroupPack(
+          packIndex: pm['pack_index'] as int,
+          items: packItems,
+        );
+      }).toList();
+
+      return GroupVendorItems(
+        vendorId: vm['vendor_id'] as String,
+        vendorName: vm['vendor_name'] as String,
+        vendorLocation: vm['vendor_location'] as String?,
+        items: items,
+        packs: packs,
+        subtotal: (vm['subtotal'] as num?)?.toDouble() ?? 0,
+      );
+    }).toList();
   }
 
   // ── Delivery history ───────────────────────────────────────────────
 
-  // ── Custom items ────────────────────────────────────────────────────
-
-  /// Adds a custom item to an order during the sourcing phase.
-  /// The student must approve it before the rider includes the cost.
-  Future<void> addCustomItem({
-    required String orderId,
-    required String description,
-    required double price,
-  }) async {
-    await _client.rpc('add_custom_item', params: {
-      'p_order_id': orderId,
-      'p_description': description,
-      'p_price': price,
-    });
-  }
-
   Future<List<DeliveryRecord>> fetchDeliveryHistory() async {
+    // Completed deliveries from delivery_records (traditional).
     final records = await _client
         .from('delivery_records')
         .select()
         .order('completed_at', ascending: false)
-        .limit(50);
+        .limit(100);
 
-    if (records.isEmpty) return [];
+    // Also get completed/cancelled groups for this rider.
+    final riderId = _client.auth.currentUser?.id;
+    if (riderId == null) return [];
+
+    final groupRows = await _client
+        .from('delivery_groups')
+        .select()
+        .eq('rider_id', riderId)
+        .inFilter('status', ['completed', 'cancelled'])
+        .order('created_at', ascending: false)
+        .limit(100);
+
+    // Build group-based history entries.
+    final groupHistory = groupRows.map((m) {
+      final group = DeliveryGroup.fromMap(m);
+      return DeliveryRecord(
+        id: group.id,
+        orderId: group.id,
+        completedAt: group.createdAt,
+        vendorName: '${group.deliveryLocation ?? 'Delivery'} (group)',
+        orderTotal: group.finalAmount ?? group.commitmentFeeTotal,
+        deliveryLocation: group.deliveryLocation,
+        orderType: 'food',
+        wasCancelled: group.status == DeliveryGroupStatus.cancelled,
+      );
+    }).toList();
+
+    // Build from delivery_records.
+    if (records.isEmpty) return groupHistory;
 
     final orderIds = records.map((m) => m['order_id'] as String).toList();
-
     final orders = await _client
         .from('orders')
-        .select('id, type, total_amount, delivery_location, vendor_id, vendors(name)')
+        .select(
+            'id, type, total_amount, delivery_location, vendor_id, vendors(name)')
         .inFilter('id', orderIds);
 
     final ordersById = <String, Map<String, dynamic>>{
       for (final o in orders) o['id'] as String: o,
     };
 
-    return records
-        .map((m) => DeliveryRecord.fromMap(m, ordersById[m['order_id'] as String]))
+    final recordHistory = records
+        .map((m) =>
+            DeliveryRecord.fromMap(m, ordersById[m['order_id'] as String]))
         .toList();
+
+    // Merge and sort by completedAt desc.
+    final merged = [...recordHistory, ...groupHistory];
+    merged.sort((a, b) => b.completedAt.compareTo(a.completedAt));
+    return merged;
   }
 }

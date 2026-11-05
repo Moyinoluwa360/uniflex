@@ -264,6 +264,9 @@ class MenuManagementScreen extends ConsumerWidget {
     Product product,
     bool available,
   ) async {
+    // section and foodSubsection MUST be passed — omitting them defaults to
+    // section='food'/foodSubsection=null, violating the DB constraint
+    // products_subsection_only_for_food (section='food' requires subsection).
     await ref.read(adminServiceProvider).upsertProduct(
           id: product.id,
           vendorId: product.vendorId,
@@ -274,6 +277,8 @@ class MenuManagementScreen extends ConsumerWidget {
           imageUrl: product.imageUrl,
           isAvailable: available,
           requiresPack: product.requiresPack,
+          section: product.section,
+          foodSubsection: product.foodSubsection,
         );
     ref.invalidate(adminVendorProductsProvider(_uniflexVendorId));
   }

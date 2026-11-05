@@ -212,12 +212,13 @@ class AdminService {
 
   // ── Vendors ─────────────────────────────────────────────────────────
 
-  /// All vendors (active and inactive), ordered with Uniflex first then
-  /// alphabetically. Includes partner vendors not shown to students.
+  /// All non-deleted vendors (active and inactive), ordered with Uniflex
+  /// first then alphabetically. Includes partner vendors not shown to students.
   Future<List<Vendor>> fetchAllVendors() async {
     final data = await _client
         .from('vendors')
         .select()
+        .is_('deleted_at', null)
         .order('is_featured', ascending: false)
         .order('name');
     return data.map((m) => Vendor.fromMap(m)).toList();
@@ -252,21 +253,27 @@ class AdminService {
     }
   }
 
-  /// Hard-delete a vendor row. Cascades to products via the FK constraint.
-  /// Use with caution — prefer deactivating (isActive = false) instead.
+  /// Soft-delete a vendor by setting deleted_at.
+  ///
+  /// Hard delete is not safe: vendors → products (cascade) → order_items
+  /// (no cascade) → FK violation if any item was ever ordered.
   Future<void> deleteVendor(String id) async {
-    await _client.from('vendors').delete().eq('id', id);
+    await _client
+        .from('vendors')
+        .update({'deleted_at': DateTime.now().toUtc().toIso8601String()})
+        .eq('id', id);
   }
 
   // ── Products ─────────────────────────────────────────────────────────
 
-  /// All products for [vendorId], including unavailable items (so admin
-  /// can toggle availability). Ordered by category then name.
+  /// All non-deleted products for [vendorId], including unavailable items
+  /// (so admin can toggle availability). Ordered by category then name.
   Future<List<Product>> fetchAllVendorProducts(String vendorId) async {
     final data = await _client
         .from('products')
         .select()
         .eq('vendor_id', vendorId)
+        .is_('deleted_at', null)
         .order('category')
         .order('name');
     return data.map((m) => Product.fromMap(m)).toList();
@@ -305,26 +312,40 @@ class AdminService {
     }
   }
 
-  /// Hard-delete a product. Also removes its product_options via cascade.
+  /// Soft-delete a product by setting deleted_at.
+  ///
+  /// Hard delete is not safe: order_items.product_id references products(id)
+  /// without ON DELETE CASCADE, so deleting a product that any order
+  /// references raises a FK violation.
   Future<void> deleteProduct(String id) async {
-    await _client.from('products').delete().eq('id', id);
+    await _client
+        .from('products')
+        .update({'deleted_at': DateTime.now().toUtc().toIso8601String()})
+        .eq('id', id);
   }
 
-  /// Upload [bytes] to the `product-images` storage bucket, returning
-  /// the public URL on success. [fileName] should include a unique
-  /// component (e.g. a UUID) to avoid collisions.
-  ///
-  /// Requires the `product-images` bucket to exist and have the admin
-  /// upload policy applied (see schema.sql Phase 4 Storage section).
-  Future<String> uploadProductImage(Uint8List bytes, String fileName) async {
-    final path = 'products/$fileName';
+  /// Upload image bytes to the `product-images` bucket under [prefix],
+  /// returning the public URL.  Shared by all three upload helpers below.
+  Future<String> _uploadImage(String prefix, Uint8List bytes, String fileName) async {
+    final path = '$prefix/$fileName';
     await _client.storage.from('product-images').uploadBinary(
           path,
           bytes,
-          fileOptions: const FileOptions(upsert: true),
+          fileOptions: const FileOptions(
+            upsert: true,
+            contentType: 'image/jpeg',
+          ),
         );
     return _client.storage.from('product-images').getPublicUrl(path);
   }
+
+  /// Upload a menu-item photo.  Caller should center-crop to 1:1 first.
+  Future<String> uploadProductImage(Uint8List bytes, String fileName) =>
+      _uploadImage('products', bytes, fileName);
+
+  /// Upload a vendor logo/photo.  Caller should center-crop to 1:1 first.
+  Future<String> uploadVendorImage(Uint8List bytes, String fileName) =>
+      _uploadImage('vendors', bytes, fileName);
 
   // ── Kitchen Queue ─────────────────────────────────────────────────────
 
@@ -545,10 +566,16 @@ class AdminService {
     }
   }
 
-  /// Hard-delete a category. Blocked by the `errand_requests` foreign key
-  /// if any past request used it — deactivate instead in that case.
+  /// Soft-delete an errand category by setting deleted_at.
+  ///
+  /// Hard delete fails when errand_requests.category references this row
+  /// (no cascade). Soft delete hides it from students and admin list while
+  /// keeping historical request records intact.
   Future<void> deleteErrandCategory(String id) async {
-    await _client.from('errand_categories').delete().eq('id', id);
+    await _client
+        .from('errand_categories')
+        .update({'deleted_at': DateTime.now().toUtc().toIso8601String()})
+        .eq('id', id);
   }
 
   // ── Referral codes (Phase 10) ─────────────────────────────────────────
@@ -691,34 +718,21 @@ class AdminService {
     await _client.from('advertisements').delete().eq('id', id);
   }
 
-  /// Uploads an ad image into the existing product-images bucket, under its
-  /// own prefix so ad art and menu photos stay separable.
-  Future<String> uploadAdImage(Uint8List bytes, String fileName) async {
-    final path = 'ads/$fileName';
-    await _client.storage.from('product-images').uploadBinary(
-          path,
-          bytes,
-          fileOptions: const FileOptions(upsert: true),
-        );
-    return _client.storage.from('product-images').getPublicUrl(path);
-  }
+  /// Upload an advertisement banner.  No crop — the caller preserves the
+  /// original aspect ratio.
+  Future<String> uploadAdImage(Uint8List bytes, String fileName) =>
+      _uploadImage('ads', bytes, fileName);
 
   // ── Admin orders: Deliveries + Errands tabs ─────────────────────────────
 
-  /// Live stream of all non-terminal delivery groups (multi-vendor checkouts),
-  /// newest first. Each emission includes vendor names fetched in a single
-  /// batch. Used by the Deliveries tab of AdminOrdersScreen.
+  /// Live stream of ALL delivery groups (all statuses), newest first.
+  /// Each emission includes vendor names fetched in a single batch.
+  /// The screen applies Active / Completed / Cancelled filtering client-side.
   Stream<List<AdminDeliveryGroupRow>> streamAllDeliveryGroups() async* {
     Future<List<AdminDeliveryGroupRow>> fetch() async {
       final rows = await _client
           .from('delivery_groups')
           .select()
-          .inFilter('status', [
-            'placed',
-            'commitment_paid',
-            'awaiting_final_payment',
-            'out_for_delivery',
-          ])
           .order('created_at', ascending: false);
 
       if (rows.isEmpty) return [];
@@ -772,16 +786,15 @@ class AdminService {
     }
   }
 
-  /// Live stream of all non-terminal errand orders (type='errand' or legacy
+  /// Live stream of ALL errand orders (all statuses, type='errand' or legacy
   /// 'around'), newest first. Each emission includes pickup + item info
-  /// from errand_requests. Used by the Errands tab of AdminOrdersScreen.
+  /// from errand_requests. The screen applies status filtering client-side.
   Stream<List<AdminErrandRow>> streamErrandOrders() async* {
     Future<List<AdminErrandRow>> fetch() async {
       final rows = await _client
           .from('orders')
           .select()
           .inFilter('type', ['errand', 'around'])
-          .inFilter('status', ['placed', 'being_sourced', 'out_for_delivery'])
           .order('created_at', ascending: false);
 
       if (rows.isEmpty) return [];

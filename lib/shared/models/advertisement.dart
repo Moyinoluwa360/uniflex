@@ -6,9 +6,9 @@ enum AdLinkType {
   url;
 
   static AdLinkType fromName(String? raw) => switch (raw) {
-        'vendor' => AdLinkType.vendor,
-        'wallet' => AdLinkType.wallet,
         'url' => AdLinkType.url,
+        // vendor and wallet were removed in Fix Pack 3; map to none so old
+        // DB rows (pre-migration) are still readable without a crash.
         _ => AdLinkType.none,
       };
 }
