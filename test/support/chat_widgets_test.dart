@@ -242,7 +242,7 @@ void main() {
 
   group('Message content validation', () {
     test('body trimming — whitespace-only should be caught', () {
-      final body = '   ';
+      const body = '   ';
       expect(body.trim().isEmpty, true);
     });
 

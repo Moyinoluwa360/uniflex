@@ -68,103 +68,102 @@ class KitchenQueueBody extends ConsumerWidget {
     final ordersAsync = ref.watch(kitchenOrdersProvider);
 
     return ordersAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => RetrySection(
-          message: 'Could not connect to the queue. Check your connection.',
-          onRetry: () => ref.invalidate(kitchenOrdersProvider),
-        ),
-        data: (orders) {
-          if (orders.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 88,
-                    height: 88,
-                    decoration: BoxDecoration(
-                      color: AppColors.emerald.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.check_circle_outline,
-                      size: 36,
-                      color: AppColors.emerald,
-                    ),
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => RetrySection(
+        message: 'Could not connect to the queue. Check your connection.',
+        onRetry: () => ref.invalidate(kitchenOrdersProvider),
+      ),
+      data: (orders) {
+        if (orders.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 88,
+                  height: 88,
+                  decoration: BoxDecoration(
+                    color: AppColors.emerald.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
                   ),
-                  const SizedBox(height: AppSpacing.md),
-                  Text(
-                    'Queue is clear',
-                    style: theme.textTheme.titleMedium,
+                  child: const Icon(
+                    Icons.check_circle_outline,
+                    size: 36,
+                    color: AppColors.emerald,
                   ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    'No active orders right now.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  'Queue is clear',
+                  style: theme.textTheme.titleMedium,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'No active orders right now.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
-                ],
-              ),
-            );
-          }
-
-          // Group by status for visual separation. "Ready" is split by
-          // fulfillment type (post-testing fixes, Section 12) since a
-          // pickup order's next step is "hand it over" while a delivery
-          // order's next step is "transfer to a rider" — the old single
-          // "Ready" bucket had no room for either action.
-          final beingSourced = orders
-              .where((o) => o.order.status == OrderStatus.beingSourced)
-              .toList();
-          final placed = orders
-              .where((o) => o.order.status == OrderStatus.placed)
-              .toList();
-          final preparing = orders
-              .where((o) => o.order.status == OrderStatus.preparing)
-              .toList();
-          final awaitingPayment = orders
-              .where((o) => o.order.status == OrderStatus.awaitingFinalPayment)
-              .toList();
-          final readyForPickup = orders
-              .where((o) => o.order.status == OrderStatus.readyForPickup)
-              .toList();
-          final readyForDelivery =
-              orders.where((o) => o.order.status == OrderStatus.ready).toList();
-          final outForDelivery = orders
-              .where((o) => o.order.status == OrderStatus.outForDelivery)
-              .toList();
-
-          final sections = <Widget>[];
-          void addSection(String label, List<KitchenOrder> items, Color color) {
-            if (items.isEmpty) return;
-            if (sections.isNotEmpty) {
-              sections.add(const SizedBox(height: AppSpacing.lg));
-            }
-            sections.add(_SectionHeader(
-                label: label, count: items.length, color: color));
-            sections.add(const SizedBox(height: AppSpacing.sm));
-            sections.addAll(
-                items.map((ko) => _KitchenOrderCard(kitchenOrder: ko)));
-          }
-
-          addSection('Being Sourced', beingSourced, AppColors.orange);
-          addSection('Scheduled', placed, AppColors.orange);
-          addSection('Preparing', preparing, theme.colorScheme.primary);
-          addSection('Awaiting Final Payment', awaitingPayment, AppColors.info);
-          addSection('Ready for Pickup', readyForPickup, AppColors.emerald);
-          addSection('Ready for Delivery', readyForDelivery, AppColors.emerald);
-          addSection('Out for Delivery', outForDelivery, AppColors.orange);
-
-          return ListView(
-            padding: const EdgeInsets.all(AppSpacing.screenGutter),
-            children: [
-              ...sections,
-              const SizedBox(height: AppSpacing.xl),
-            ],
+                ),
+              ],
+            ),
           );
-        },
-      );
+        }
+
+        // Group by status for visual separation. "Ready" is split by
+        // fulfillment type (post-testing fixes, Section 12) since a
+        // pickup order's next step is "hand it over" while a delivery
+        // order's next step is "transfer to a rider" — the old single
+        // "Ready" bucket had no room for either action.
+        final beingSourced = orders
+            .where((o) => o.order.status == OrderStatus.beingSourced)
+            .toList();
+        final placed =
+            orders.where((o) => o.order.status == OrderStatus.placed).toList();
+        final preparing = orders
+            .where((o) => o.order.status == OrderStatus.preparing)
+            .toList();
+        final awaitingPayment = orders
+            .where((o) => o.order.status == OrderStatus.awaitingFinalPayment)
+            .toList();
+        final readyForPickup = orders
+            .where((o) => o.order.status == OrderStatus.readyForPickup)
+            .toList();
+        final readyForDelivery =
+            orders.where((o) => o.order.status == OrderStatus.ready).toList();
+        final outForDelivery = orders
+            .where((o) => o.order.status == OrderStatus.outForDelivery)
+            .toList();
+
+        final sections = <Widget>[];
+        void addSection(String label, List<KitchenOrder> items, Color color) {
+          if (items.isEmpty) return;
+          if (sections.isNotEmpty) {
+            sections.add(const SizedBox(height: AppSpacing.lg));
+          }
+          sections.add(
+              _SectionHeader(label: label, count: items.length, color: color));
+          sections.add(const SizedBox(height: AppSpacing.sm));
+          sections
+              .addAll(items.map((ko) => _KitchenOrderCard(kitchenOrder: ko)));
+        }
+
+        addSection('Being Sourced', beingSourced, AppColors.orange);
+        addSection('Scheduled', placed, AppColors.orange);
+        addSection('Preparing', preparing, theme.colorScheme.primary);
+        addSection('Awaiting Final Payment', awaitingPayment, AppColors.info);
+        addSection('Ready for Pickup', readyForPickup, AppColors.emerald);
+        addSection('Ready for Delivery', readyForDelivery, AppColors.emerald);
+        addSection('Out for Delivery', outForDelivery, AppColors.orange);
+
+        return ListView(
+          padding: const EdgeInsets.all(AppSpacing.screenGutter),
+          children: [
+            ...sections,
+            const SizedBox(height: AppSpacing.xl),
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -242,10 +241,7 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
     final nextStatus = switch (order.status) {
       OrderStatus.beingSourced => 'preparing',
       OrderStatus.placed => 'preparing',
-      OrderStatus.preparing =>
-        order.deliveryType == 'pickup'
-          ? 'ready_for_pickup'
-          : 'ready',  // Uniflex delivery: already paid → ready for rider transfer
+      OrderStatus.preparing => 'ready_for_pickup',
       _ => null,
     };
     if (nextStatus == null) return;
@@ -258,14 +254,6 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
     await _run(() => ref
         .read(adminServiceProvider)
         .updateOrderStatus(widget.kitchenOrder.order.id, 'completed'));
-  }
-
-  /// Delivery orders only: the explicit "Transfer to Rider" action
-  /// (Section 12) — pushes the order into the rider job pool.
-  Future<void> _transferToRider() async {
-    await _run(() => ref
-        .read(adminServiceProvider)
-        .transferOrderToRider(widget.kitchenOrder.order.id));
   }
 
   /// Sends the customer a one-off message about this order. Status changes
@@ -323,22 +311,19 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
     final isPartner = order.source == 'partner';
 
     // Partner orders are read-only in the kitchen — no action buttons.
-    final (String, VoidCallback)? action = isPartner ? null : switch (order.status) {
-      OrderStatus.beingSourced => ('Start Preparing', _advance),
-      OrderStatus.placed => ('Start Preparing', _advance),
-      OrderStatus.preparing => (
-          isPickup ? 'Mark Ready for Pickup' : 'Mark Ready for Delivery',
-          _advance
-        ),
-      OrderStatus.awaitingFinalPayment => null,
-      OrderStatus.readyForPickup when isPickup => (
-          'Mark Completed (Picked Up)',
-          _markCompleted
-        ),
-      OrderStatus.ready when !isPickup && order.transferredToRiderAt == null =>
-        ('Transfer to Rider', _transferToRider),
-      _ => null,
-    };
+    final (String, VoidCallback)? action = isPartner
+        ? null
+        : switch (order.status) {
+            OrderStatus.beingSourced => ('Start Preparing', _advance),
+            OrderStatus.placed => ('Start Preparing', _advance),
+            OrderStatus.preparing => ('Mark Ready for Pickup', _advance),
+            OrderStatus.awaitingFinalPayment => null,
+            OrderStatus.readyForPickup when isPickup => (
+                'Mark Completed (Picked Up)',
+                _markCompleted
+              ),
+            _ => null,
+          };
     final nextLabel = action?.$1;
 
     return Card(
@@ -596,65 +581,8 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
                     child: Text(
                       order.notes!,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.7),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-
-          // ── Rider delivery status ──────────────────────────────────────
-          // Shows the rider's current delivery stage so Admin can track
-          // where a dispatched order is at.
-          if (order.status == OrderStatus.ready &&
-              !isPickup &&
-              order.transferredToRiderAt != null) ...[
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Row(
-                children: [
-                  const Icon(Icons.hourglass_top_outlined,
-                      size: 16, color: AppColors.orange),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      'Waiting for a rider to accept…',
-                      style: theme.textTheme.labelMedium
-                          ?.copyWith(color: AppColors.orange),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          if (order.status == OrderStatus.outForDelivery) ...[
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Row(
-                children: [
-                  Icon(
-                    order.deliveryStage == 'picked_up'
-                        ? Icons.delivery_dining
-                        : Icons.two_wheeler_outlined,
-                    size: 16,
-                    color: AppColors.emerald,
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      switch (order.deliveryStage) {
-                        'accepted' => 'Rider assigned — heading to pickup',
-                        'picked_up' => 'Rider has picked up — delivering now',
-                        _ => 'Out for delivery',
-                      },
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: AppColors.emerald,
-                        fontWeight: FontWeight.w600,
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.7),
                       ),
                     ),
                   ),

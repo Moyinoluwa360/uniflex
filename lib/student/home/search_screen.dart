@@ -10,6 +10,7 @@ import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/media/app_image.dart';
 import '../ordering/catalog_screen.dart';
 import '../ordering/product_repository.dart';
+import '../../shared/widgets/inputs/app_text_field.dart';
 
 /// Full-screen search. Debounces input (300 ms), then calls the
 /// `search_products` RPC which returns product name, price, and
@@ -98,7 +99,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.all(AppSpacing.screenGutter),
-            child: TextField(
+            child: AppTextField(
               controller: _controller,
               autofocus: true,
               onChanged: _onChanged,
@@ -135,8 +136,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               child: Text(
                 'No results found.',
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color:
-                      theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                 ),
               ),
             )

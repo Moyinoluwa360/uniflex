@@ -7,8 +7,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
-import '../ordering/order_repository.dart';
-import '../tracking/order_tracking_screen.dart';
+import 'notification_router.dart';
 
 /// The student's notification inbox: automatic order-progress updates plus
 /// any message Admin or their rider sent about a specific order.
@@ -31,10 +30,24 @@ class NotificationsScreen extends ConsumerWidget {
           if (hasUnread)
             TextButton(
               onPressed: () async {
-                await ref
-                    .read(notificationInboxServiceProvider)
-                    .markAllRead();
-                ref.invalidate(notificationInboxProvider);
+                try {
+                  await ref
+                      .read(notificationInboxServiceProvider)
+                      .markAllRead();
+                  // Re-read from the server so the screen shows what is
+                  // really stored (and stays read after reopening).
+                  ref.invalidate(notificationInboxProvider);
+                } catch (_) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                            'Could not mark notifications as read. Please try again.'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
               },
               child: const Text('Mark all read'),
             ),
@@ -117,26 +130,11 @@ class _NotificationTile extends ConsumerWidget {
       borderRadius: BorderRadius.circular(AppRadius.card),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.card),
-        onTap: () async {
-          if (unread) {
-            await ref
-                .read(notificationInboxServiceProvider)
-                .markRead(item.id);
-          }
-          final orderId = item.orderId;
-          if (orderId == null) return;
-
-          // The tracking screen wants the whole order, and a notification
-          // only carries its id — so resolve it first. A null result means
-          // the order is gone; stay put rather than pushing an empty screen.
-          final order = await ref.read(orderByIdProvider(orderId).future);
-          if (order == null || !context.mounted) return;
-          await Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => OrderTrackingScreen(order: order),
-            ),
-          );
-        },
+        onTap: () => openNotificationTarget(
+          context,
+          ref,
+          NotificationTarget.fromNotification(item),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.md),
           child: Row(
@@ -153,9 +151,11 @@ class _NotificationTile extends ConsumerWidget {
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  item.isFromStatusChange
-                      ? Icons.local_shipping_outlined
-                      : Icons.chat_bubble_outline,
+                  item.type == 'final_price'
+                      ? Icons.payments_outlined
+                      : item.isFromStatusChange
+                          ? Icons.local_shipping_outlined
+                          : Icons.chat_bubble_outline,
                   size: 18,
                   color: item.isFromStatusChange
                       ? AppColors.emerald

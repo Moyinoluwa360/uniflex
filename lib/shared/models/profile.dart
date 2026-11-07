@@ -89,7 +89,8 @@ class Profile {
   final bool isActive;
 
   /// True when this admin account is restricted to the kitchen queue only.
-  bool get isKitchenStaff => role == UserRole.admin && adminTier == 'kitchen_staff';
+  bool get isKitchenStaff =>
+      role == UserRole.admin && adminTier == 'kitchen_staff';
 
   /// Points needed to reach the next tier.
   double get spendingToNextTier {

@@ -36,17 +36,24 @@ class AppNavShellScope extends InheritedWidget {
   const AppNavShellScope({
     super.key,
     required this.go,
+    this.currentIndex = 0,
     required super.child,
   });
 
   /// Switch the shell to the tab at [index].
   final void Function(int index) go;
 
+  /// The tab currently showing (tabs live in an IndexedStack, so a tab's
+  /// screen stays built while hidden — it can watch this to refresh when it
+  /// becomes the visible one).
+  final int currentIndex;
+
   static AppNavShellScope? of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<AppNavShellScope>();
 
   @override
-  bool updateShouldNotify(AppNavShellScope oldWidget) => go != oldWidget.go;
+  bool updateShouldNotify(AppNavShellScope oldWidget) =>
+      go != oldWidget.go || currentIndex != oldWidget.currentIndex;
 }
 
 /// Reusable bottom-nav scaffold: [IndexedStack] body + [BottomNavigationBar],
@@ -82,12 +89,11 @@ class _AppBottomNavShellState extends ConsumerState<AppBottomNavShell> {
     }
   }
 
-  Widget _badgedIcon(IconData icon, int tabIndex,
-      {required bool selected}) {
-    final count = widget.badgeCounts != null &&
-            tabIndex < widget.badgeCounts!.length
-        ? widget.badgeCounts![tabIndex]
-        : 0;
+  Widget _badgedIcon(IconData icon, int tabIndex, {required bool selected}) {
+    final count =
+        widget.badgeCounts != null && tabIndex < widget.badgeCounts!.length
+            ? widget.badgeCounts![tabIndex]
+            : 0;
     final child = Icon(icon);
     if (count <= 0) return child;
     return Badge(
@@ -112,6 +118,7 @@ class _AppBottomNavShellState extends ConsumerState<AppBottomNavShell> {
       body: SafeArea(
         child: AppNavShellScope(
           go: _go,
+          currentIndex: _index,
           child: IndexedStack(
             index: _index,
             children: widget.tabs.map((tab) => tab.screen).toList(),

@@ -33,12 +33,11 @@ class VendorManagementScreen extends ConsumerWidget {
       body: vendorsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
-          child: Text('Could not load vendors',
-              style: theme.textTheme.bodyMedium),
+          child:
+              Text('Could not load vendors', style: theme.textTheme.bodyMedium),
         ),
         data: (vendors) {
-          final partners =
-              vendors.where((v) => v.id != _uniflexId).toList();
+          final partners = vendors.where((v) => v.id != _uniflexId).toList();
 
           if (partners.isEmpty) {
             return const Center(
@@ -60,8 +59,7 @@ class VendorManagementScreen extends ConsumerWidget {
                 onEdit: () => _openForm(context, ref, partners[i]),
                 onManageMenu: () => _openMenu(context, ref, partners[i]),
                 onDelete: () => _confirmDelete(context, ref, partners[i]),
-                onToggle: (active) =>
-                    _toggleActive(ref, partners[i], active),
+                onToggle: (active) => _toggleActive(ref, partners[i], active),
               );
             },
           );
@@ -244,8 +242,7 @@ class _VendorCard extends StatelessWidget {
                   },
                   itemBuilder: (_) => const [
                     PopupMenuItem(value: 'edit', child: Text('Edit')),
-                    PopupMenuItem(
-                        value: 'menu', child: Text('Manage Menu')),
+                    PopupMenuItem(value: 'menu', child: Text('Manage Menu')),
                     PopupMenuItem(
                       value: 'delete',
                       child: Text('Delete',
@@ -273,15 +270,13 @@ class _VendorCard extends StatelessWidget {
                   Icon(
                     Icons.phone_outlined,
                     size: 12,
-                    color:
-                        theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                   ),
                   const SizedBox(width: 4),
                   Text(
                     vendor.contact!,
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color:
-                          theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                   ),
                 ],

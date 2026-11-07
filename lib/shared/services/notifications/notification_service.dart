@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -25,9 +27,16 @@ class NotificationService {
   static final _messaging = FirebaseMessaging.instance;
   static final _localNotifications = FlutterLocalNotificationsPlugin();
 
-  /// Payload from the most recent notification tap. Consumed once by the
-  /// shell's initState via [consumePendingNavigation].
-  static Map<String, dynamic>? _pendingNavigation;
+  /// Payload from the most recent notification tap (push OR the local
+  /// banner shown while the app is open). A [ValueNotifier] so a shell that
+  /// is already on screen — the app was only backgrounded — reacts to a
+  /// tap immediately; a shell that mounts later (cold start) reads the
+  /// value once via [consumePendingNavigation].
+  ///
+  /// Keys (all strings): `type`, `notification_id`, `order_id`,
+  /// `group_id`, `conversation_id`.
+  static final ValueNotifier<Map<String, dynamic>?> pendingNavigation =
+      ValueNotifier<Map<String, dynamic>?>(null);
 
   static const _androidChannel = AndroidNotificationChannel(
     'uniflex_high',
@@ -53,6 +62,17 @@ class NotificationService {
       const iosInit = DarwinInitializationSettings();
       await _localNotifications.initialize(
         const InitializationSettings(android: androidInit, iOS: iosInit),
+        // Tapping the in-app banner behaves exactly like tapping a push.
+        onDidReceiveNotificationResponse: (response) {
+          final payload = response.payload;
+          if (payload == null || payload.isEmpty) return;
+          try {
+            final decoded = jsonDecode(payload);
+            if (decoded is Map && decoded.isNotEmpty) {
+              pendingNavigation.value = Map<String, dynamic>.from(decoded);
+            }
+          } catch (_) {}
+        },
       );
 
       // Create the high-importance channel on Android
@@ -61,9 +81,24 @@ class NotificationService {
               AndroidFlutterLocalNotificationsPlugin>()
           ?.createNotificationChannel(_androidChannel);
 
-      // Store token in DB.
-      final token = await _messaging.getToken();
-      if (token != null) await _storeToken(token);
+      // Store token in DB. On iOS the FCM token only exists once Apple has
+      // handed the app its APNs token, so wait briefly for that first. If it
+      // still is not there (or getToken throws), carry on: the listeners
+      // below must still be registered, and onTokenRefresh delivers the
+      // token as soon as it exists.
+      try {
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+          for (var i = 0;
+              i < 20 && await _messaging.getAPNSToken() == null;
+              i++) {
+            await Future<void>.delayed(const Duration(milliseconds: 500));
+          }
+        }
+        final token = await _messaging.getToken();
+        if (token != null) await _storeToken(token);
+      } catch (e) {
+        debugPrint('[NotificationService] token fetch deferred: $e');
+      }
 
       // Update token on refresh.
       _messaging.onTokenRefresh.listen(_storeToken);
@@ -83,6 +118,9 @@ class NotificationService {
       Supabase.instance.client.auth.onAuthStateChange.listen((event) {
         if (event.event == AuthChangeEvent.signedOut) {
           _clearToken();
+          // A tap meant for the previous account must not open anything
+          // for whoever signs in next on this device.
+          pendingNavigation.value = null;
         }
       });
     } catch (e) {
@@ -93,14 +131,14 @@ class NotificationService {
   /// Returns and clears any pending navigation payload from a notification tap.
   /// Call once from the shell's initState (via postFrameCallback).
   static Map<String, dynamic>? consumePendingNavigation() {
-    final nav = _pendingNavigation;
-    _pendingNavigation = null;
+    final nav = pendingNavigation.value;
+    pendingNavigation.value = null;
     return nav;
   }
 
   static void _handleTap(RemoteMessage message) {
     if (message.data.isNotEmpty) {
-      _pendingNavigation = Map<String, dynamic>.from(message.data);
+      pendingNavigation.value = Map<String, dynamic>.from(message.data);
     }
   }
 
@@ -128,14 +166,17 @@ class NotificationService {
   static Future<void> _showLocalNotification(RemoteMessage message) async {
     final notification = message.notification;
     if (notification == null) return;
-    await showLocal(notification.title, notification.body);
+    await showLocal(notification.title, notification.body, data: message.data);
   }
 
-  /// Shows a local (foreground) notification banner. Used directly by
-  /// Section 12's order-status-change listener (see StudentShell) so a
-  /// status update from Supabase Realtime is surfaced immediately while
-  /// the app is open, without waiting on an FCM push round-trip.
-  static Future<void> showLocal(String? title, String? body) async {
+  /// Shows the in-app banner for a push that arrived while the app is
+  /// open. It is only a banner: the notification row already exists in the
+  /// inbox (the server wrote it), so nothing is stored here.
+  static Future<void> showLocal(
+    String? title,
+    String? body, {
+    Map<String, dynamic>? data,
+  }) async {
     if (title == null && body == null) return;
     try {
       await _localNotifications.show(
@@ -153,6 +194,7 @@ class NotificationService {
           ),
           iOS: const DarwinNotificationDetails(),
         ),
+        payload: (data == null || data.isEmpty) ? null : jsonEncode(data),
       );
     } catch (e) {
       debugPrint('[NotificationService] showLocal error: $e');

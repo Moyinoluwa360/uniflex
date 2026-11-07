@@ -12,6 +12,7 @@ import '../../shared/widgets/pin/pin_entry_sheet.dart';
 import '../ordering/cart_provider.dart';
 import '../ordering/order_confirmation_screen.dart';
 import '../services/student_providers.dart';
+import '../../shared/widgets/inputs/app_text_field.dart';
 
 /// Join an existing group order by ID.
 class JoinGroupScreen extends ConsumerStatefulWidget {
@@ -40,8 +41,7 @@ class _JoinGroupScreenState extends ConsumerState<JoinGroupScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-              'Joined! Browse the vendor\'s menu to add your items.'),
+          content: Text('Joined! Browse the vendor\'s menu to add your items.'),
           duration: Duration(seconds: 4),
         ),
       );
@@ -78,7 +78,7 @@ class _JoinGroupScreenState extends ConsumerState<JoinGroupScreen> {
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: AppSpacing.md),
-            TextField(
+            AppTextField(
               controller: _controller,
               decoration: const InputDecoration(
                 hintText: 'Paste group ID here',
@@ -97,8 +97,7 @@ class _JoinGroupScreenState extends ConsumerState<JoinGroupScreen> {
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.pureWhite),
+                            strokeWidth: 2, color: AppColors.pureWhite),
                       )
                     : const Text('Join Group'),
               ),
@@ -127,8 +126,7 @@ class GroupCheckoutScreen extends ConsumerStatefulWidget {
       _GroupCheckoutScreenState();
 }
 
-class _GroupCheckoutScreenState
-    extends ConsumerState<GroupCheckoutScreen> {
+class _GroupCheckoutScreenState extends ConsumerState<GroupCheckoutScreen> {
   bool _isCheckingOut = false;
 
   /// Prompts for the transaction PIN, offering to set one first if this
@@ -194,8 +192,7 @@ class _GroupCheckoutScreenState
 
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) =>
-              OrderConfirmationScreen(order: Order.fromMap(raw)),
+          builder: (_) => OrderConfirmationScreen(order: Order.fromMap(raw)),
         ),
       );
     } catch (e) {
@@ -218,8 +215,7 @@ class _GroupCheckoutScreenState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cart = ref.watch(cartProvider);
-    final membersAsync =
-        ref.watch(groupMembersProvider(widget.groupId));
+    final membersAsync = ref.watch(groupMembersProvider(widget.groupId));
 
     return Scaffold(
       appBar: UniflexAppBar(title: 'Group: ${widget.vendor.name}'),
@@ -264,8 +260,7 @@ class _GroupCheckoutScreenState
               Text(
                 'No items yet — go back to the menu to add items.',
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface
-                      .withValues(alpha: 0.5),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                 ),
               )
             else ...[
@@ -314,8 +309,7 @@ class _GroupCheckoutScreenState
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.pureWhite),
+                              strokeWidth: 2, color: AppColors.pureWhite),
                         )
                       : Text(
                           'Pay My Share  ₦${cart.subtotal.toStringAsFixed(0)}'),

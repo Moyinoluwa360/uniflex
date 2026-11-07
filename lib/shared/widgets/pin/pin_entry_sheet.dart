@@ -6,6 +6,7 @@ import '../../services/auth/auth_providers.dart';
 import '../../services/profile/profile_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
+import '../inputs/app_text_field.dart';
 
 /// Shows a bottom sheet asking the student to enter their 4-digit
 /// transaction PIN. Returns the entered PIN, or `null` if dismissed.
@@ -24,7 +25,8 @@ Future<String?> showEnterPinSheet(
     context: context,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
+      borderRadius:
+          BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
     ),
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setState) {
@@ -44,7 +46,8 @@ Future<String?> showEnterPinSheet(
                 children: [
                   const Icon(Icons.lock_outline, color: AppColors.emerald),
                   const SizedBox(width: AppSpacing.sm),
-                  Expanded(child: Text(title, style: theme.textTheme.titleMedium)),
+                  Expanded(
+                      child: Text(title, style: theme.textTheme.titleMedium)),
                 ],
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -55,7 +58,7 @@ Future<String?> showEnterPinSheet(
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),
-              TextField(
+              AppTextField(
                 controller: controller,
                 autofocus: true,
                 obscureText: true,
@@ -119,8 +122,7 @@ Future<bool> showSetPinSheet(BuildContext context, WidgetRef ref) async {
   // "current PIN" field when changing (vs first-time setup).
   bool hasExisting = false;
   try {
-    hasExisting =
-        await ref.read(profileServiceProvider).hasTransactionPin();
+    hasExisting = await ref.read(profileServiceProvider).hasTransactionPin();
   } catch (_) {
     // If the check itself fails, assume no existing PIN — worst case
     // the server will reject with INVALID_CURRENT_PIN and we surface it.
@@ -140,7 +142,8 @@ Future<bool> showSetPinSheet(BuildContext context, WidgetRef ref) async {
     isDismissible: false,
     enableDrag: false,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
+      borderRadius:
+          BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
     ),
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setState) {
@@ -181,7 +184,8 @@ Future<bool> showSetPinSheet(BuildContext context, WidgetRef ref) async {
           } catch (e) {
             setState(() {
               isSaving = false;
-              error = 'Could not save PIN: ${e.toString().replaceAll('Exception: ', '')}';
+              error =
+                  'Could not save PIN: ${e.toString().replaceAll('Exception: ', '')}';
             });
           }
         }
@@ -215,7 +219,7 @@ Future<bool> showSetPinSheet(BuildContext context, WidgetRef ref) async {
               ),
               const SizedBox(height: AppSpacing.lg),
               if (hasExisting) ...[
-                TextField(
+                AppTextField(
                   controller: currentPinController,
                   autofocus: true,
                   obscureText: true,
@@ -229,14 +233,13 @@ Future<bool> showSetPinSheet(BuildContext context, WidgetRef ref) async {
                     labelText: 'Current PIN',
                     counterText: '',
                     border: OutlineInputBorder(
-                      borderRadius:
-                          BorderRadius.circular(AppRadius.control),
+                      borderRadius: BorderRadius.circular(AppRadius.control),
                     ),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
               ],
-              TextField(
+              AppTextField(
                 controller: pinController,
                 autofocus: !hasExisting,
                 obscureText: true,
@@ -244,7 +247,8 @@ Future<bool> showSetPinSheet(BuildContext context, WidgetRef ref) async {
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 maxLength: 4,
                 textAlign: TextAlign.center,
-                style: theme.textTheme.headlineSmall?.copyWith(letterSpacing: 12),
+                style:
+                    theme.textTheme.headlineSmall?.copyWith(letterSpacing: 12),
                 decoration: InputDecoration(
                   labelText: 'New PIN',
                   counterText: '',
@@ -254,14 +258,15 @@ Future<bool> showSetPinSheet(BuildContext context, WidgetRef ref) async {
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
-              TextField(
+              AppTextField(
                 controller: confirmController,
                 obscureText: true,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 maxLength: 4,
                 textAlign: TextAlign.center,
-                style: theme.textTheme.headlineSmall?.copyWith(letterSpacing: 12),
+                style:
+                    theme.textTheme.headlineSmall?.copyWith(letterSpacing: 12),
                 decoration: InputDecoration(
                   labelText: 'Confirm PIN',
                   counterText: '',

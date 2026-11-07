@@ -19,9 +19,10 @@ import 'splash_screen.dart';
 ///      [CreateAccountScreen] for Student self-signup — the only signup
 ///      path that exists).
 ///   3. Session, but the profile row's `onboarding_complete` is still
-///      false → [CompleteProfileScreen] (Step Two), so a student who
-///      closed the app mid-onboarding resumes exactly there instead of
-///      being sent back through Step One.
+///      false → LEGACY half-made account (made by the pre-Pack-5 flow):
+///      [ResumeOtpScreen] / [CompleteProfileScreen] let it finish. Pack 5
+///      sign-up never creates such accounts — nothing exists until the
+///      last step (see lib/shared/auth/signup/).
 ///   4. Session with a completed profile → [RoleRouter], which loads the
 ///      shell matching `profiles.role` (Student/Rider/Admin).
 ///

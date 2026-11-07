@@ -5,6 +5,7 @@ import 'shared/router/auth_gate.dart';
 import 'shared/theme/app_theme.dart';
 import 'shared/theme/theme_mode_provider.dart';
 import 'shared/widgets/connectivity/connectivity_banner.dart';
+import 'shared/widgets/inputs/keyboard_dismiss.dart';
 
 /// Root widget. Everything auth/role-related happens inside [AuthGate] —
 /// this widget only owns the app-wide theme and MaterialApp shell.
@@ -22,8 +23,12 @@ class UniflexApp extends ConsumerWidget {
       darkTheme: AppTheme.dark,
       themeMode: themeMode,
       home: const AuthGate(),
-      builder: (context, child) =>
-          ConnectivityBanner(child: child ?? const SizedBox.shrink()),
+      // Pack 6: dragging a scroll view dismisses the keyboard (and so any
+      // text selection), and tapping empty space unfocuses the field.
+      scrollBehavior: const AppScrollBehavior(),
+      builder: (context, child) => TapOutsideUnfocus(
+        child: ConnectivityBanner(child: child ?? const SizedBox.shrink()),
+      ),
     );
   }
 }

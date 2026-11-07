@@ -10,6 +10,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/inputs/app_text_field.dart';
 
 /// Saving Plan screen — lets the student set a spending budget for a
 /// chosen period (Daily / Weekly / Monthly).
@@ -110,8 +111,7 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
         child: planAsync.when(
-          loading: () =>
-              const Center(child: CircularProgressIndicator()),
+          loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Center(child: Text('Error: $e')),
           data: (plan) {
             if (plan != null) _populateFromPlan(plan);
@@ -154,9 +154,7 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
                           selectedColor:
                               theme.colorScheme.primary.withValues(alpha: 0.15),
                           labelStyle: theme.textTheme.labelMedium?.copyWith(
-                            color: selected
-                                ? theme.colorScheme.primary
-                                : null,
+                            color: selected ? theme.colorScheme.primary : null,
                             fontWeight: selected ? FontWeight.w600 : null,
                           ),
                         ),
@@ -170,7 +168,7 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
                 // Budget amount
                 Form(
                   key: _formKey,
-                  child: TextFormField(
+                  child: AppTextField(
                     controller: _budgetController,
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: false),
@@ -339,17 +337,14 @@ class _PlanSummaryCard extends StatelessWidget {
                     ? Icons.warning_amber_rounded
                     : Icons.savings_outlined,
                 size: 18,
-                color: overBudget
-                    ? AppColors.error
-                    : theme.colorScheme.primary,
+                color: overBudget ? AppColors.error : theme.colorScheme.primary,
               ),
               const SizedBox(width: AppSpacing.xs),
               Text(
                 plan.periodLabel,
                 style: theme.textTheme.labelMedium?.copyWith(
-                  color: overBudget
-                      ? AppColors.error
-                      : theme.colorScheme.primary,
+                  color:
+                      overBudget ? AppColors.error : theme.colorScheme.primary,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -393,8 +388,7 @@ class _PlanSummaryCard extends StatelessWidget {
                 ? '−₦${(plan.spent - plan.budget).toStringAsFixed(0)}'
                 : '₦${plan.remainingBudget.toStringAsFixed(0)}',
             theme: theme,
-            valueColor:
-                overBudget ? AppColors.error : AppColors.emerald,
+            valueColor: overBudget ? AppColors.error : AppColors.emerald,
             bold: true,
           ),
           const SizedBox(height: AppSpacing.sm),
@@ -441,15 +435,13 @@ class _BudgetRow extends StatelessWidget {
         children: [
           Text(label,
               style: theme.textTheme.bodySmall?.copyWith(
-                color:
-                    theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
               )),
           Text(
             value,
-            style: (bold
-                    ? theme.textTheme.labelMedium
-                    : theme.textTheme.bodySmall)
-                ?.copyWith(
+            style:
+                (bold ? theme.textTheme.labelMedium : theme.textTheme.bodySmall)
+                    ?.copyWith(
               color: valueColor,
               fontWeight: bold ? FontWeight.w700 : null,
             ),

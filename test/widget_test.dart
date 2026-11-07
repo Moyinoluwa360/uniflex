@@ -9,9 +9,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:uniflex/app.dart';
+import 'package:uniflex/shared/auth/signup/signup_draft.dart';
+import 'package:uniflex/shared/services/auth/auth_providers.dart';
 
 /// In-memory stand-in for both of Supabase's default (SharedPreferences-
 /// backed) storages, so these tests never touch platform channels — only
@@ -41,6 +44,9 @@ Future<void> _settleSplash(WidgetTester tester) async {
 }
 
 void main() {
+  // Pack 5: the sign-up screen reads its saved draft from shared preferences.
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   setUpAll(() async {
     await Supabase.initialize(
       url: 'https://example.supabase.co',
@@ -55,7 +61,12 @@ void main() {
   testWidgets('shows the splash wordmark immediately on launch', (
     tester,
   ) async {
-    await tester.pumpWidget(const ProviderScope(child: UniflexApp()));
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        signupSecretStoreProvider.overrideWithValue(MemorySecretStore()),
+      ],
+      child: const UniflexApp(),
+    ));
 
     expect(find.text('Uniflex'), findsOneWidget);
     expect(find.text('Log In'), findsNothing);
@@ -66,7 +77,12 @@ void main() {
   });
 
   testWidgets('lands on Login when there is no session', (tester) async {
-    await tester.pumpWidget(const ProviderScope(child: UniflexApp()));
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        signupSecretStoreProvider.overrideWithValue(MemorySecretStore()),
+      ],
+      child: const UniflexApp(),
+    ));
     await _settleSplash(tester);
 
     expect(find.text('Log In'), findsOneWidget);
@@ -79,13 +95,18 @@ void main() {
   testWidgets('Create Account opens Step One with the three signup fields', (
     tester,
   ) async {
-    await tester.pumpWidget(const ProviderScope(child: UniflexApp()));
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        signupSecretStoreProvider.overrideWithValue(MemorySecretStore()),
+      ],
+      child: const UniflexApp(),
+    ));
     await _settleSplash(tester);
 
     await tester.tap(find.text('Create Account'));
     await tester.pumpAndSettle();
 
-    expect(find.text('1 / 2'), findsOneWidget);
+    expect(find.text('1 / 3'), findsOneWidget);
     expect(find.text('Email address'), findsOneWidget);
     expect(find.text('Password'), findsOneWidget);
     expect(find.text('Phone number'), findsOneWidget);
@@ -94,7 +115,12 @@ void main() {
   testWidgets('Step One rejects a weak password before hitting the network', (
     tester,
   ) async {
-    await tester.pumpWidget(const ProviderScope(child: UniflexApp()));
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        signupSecretStoreProvider.overrideWithValue(MemorySecretStore()),
+      ],
+      child: const UniflexApp(),
+    ));
     await _settleSplash(tester);
 
     await tester.tap(find.text('Create Account'));

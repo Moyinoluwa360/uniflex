@@ -34,7 +34,6 @@ Product _makeProduct({
   bool isAvailable = true,
   String section = 'food',
   String? foodSubsection = 'meal',
-  DateTime? deletedAt,
 }) =>
     Product(
       id: 'p-1',
@@ -191,26 +190,26 @@ void main() {
   // side = min(W, H), top-left at ((W−side)/2, (H−side)/2).
 
   group('Center-crop math', () {
-    int _squareSide(int w, int h) => w < h ? w : h;
-    int _cropX(int w, int h) => (w - _squareSide(w, h)) ~/ 2;
-    int _cropY(int w, int h) => (h - _squareSide(w, h)) ~/ 2;
+    int squareSide(int w, int h) => w < h ? w : h;
+    int cropX(int w, int h) => (w - squareSide(w, h)) ~/ 2;
+    int cropY(int w, int h) => (h - squareSide(w, h)) ~/ 2;
 
     test('landscape 1600×900 → square 900, offset (350, 0)', () {
-      expect(_squareSide(1600, 900), 900);
-      expect(_cropX(1600, 900), 350);
-      expect(_cropY(1600, 900), 0);
+      expect(squareSide(1600, 900), 900);
+      expect(cropX(1600, 900), 350);
+      expect(cropY(1600, 900), 0);
     });
 
     test('portrait 900×1600 → square 900, offset (0, 350)', () {
-      expect(_squareSide(900, 1600), 900);
-      expect(_cropX(900, 1600), 0);
-      expect(_cropY(900, 1600), 350);
+      expect(squareSide(900, 1600), 900);
+      expect(cropX(900, 1600), 0);
+      expect(cropY(900, 1600), 350);
     });
 
     test('already square → side unchanged, offsets 0', () {
-      expect(_squareSide(1200, 1200), 1200);
-      expect(_cropX(1200, 1200), 0);
-      expect(_cropY(1200, 1200), 0);
+      expect(squareSide(1200, 1200), 1200);
+      expect(cropX(1200, 1200), 0);
+      expect(cropY(1200, 1200), 0);
     });
   });
 }

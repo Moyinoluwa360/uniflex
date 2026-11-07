@@ -4,8 +4,6 @@
 //   • DeliveryGroupStatus enum: new riderAccepted value, labels, roundtrip
 //   • DeliveryGroup model: cancelledByStudent, isTerminal, shortId
 //   • GroupCustomerInfo: fromMap, displayName, PIN only when provided
-//   • GroupLineItem: lineTotal, section helpers on GroupVendorItems
-//   • GroupPack: label
 //   • Final-price validation constants (> 0, ≤ 500,000 — mirrors SQL RPC)
 
 import 'package:flutter_test/flutter_test.dart';
@@ -134,22 +132,13 @@ void main() {
       expect(info.displayName, 'Ada Okafor (@ada)');
     });
 
-    test('deliveryPin is null before out_for_delivery (RPC redacts it)', () {
+    test('the rider model has no PIN field at all (Pack 4B)', () {
       final info = GroupCustomerInfo.fromMap({
         'full_name': 'Test',
         'phone': '0700',
-        'delivery_pin': null,
+        'delivery_pin': 'A3F9', // even if a server sent one, it is ignored
       });
-      expect(info.deliveryPin, isNull);
-    });
-
-    test('deliveryPin is populated when RPC returns it', () {
-      final info = GroupCustomerInfo.fromMap({
-        'full_name': 'Test',
-        'phone': '0700',
-        'delivery_pin': 'A3F9',
-      });
-      expect(info.deliveryPin, 'A3F9');
+      expect(info.toString().contains('A3F9'), isFalse);
     });
 
     test('fromMap uses "Customer" fallback for missing full_name', () {
@@ -163,63 +152,8 @@ void main() {
     });
   });
 
-  // ── GroupLineItem & GroupVendorItems helpers ─────────────────────────────
-
-  group('GroupLineItem', () {
-    test('lineTotal = unitPrice × quantity', () {
-      final item = GroupLineItem.fromMap({
-        'product_name': 'Jollof Rice',
-        'quantity': 3,
-        'unit_price': 1200,
-        'section': 'food',
-      });
-      expect(item.lineTotal, 3600.0);
-    });
-
-    test('fromMap defaults section to "others" when missing', () {
-      final item = GroupLineItem.fromMap({
-        'product_name': 'Mystery',
-        'quantity': 1,
-        'unit_price': 500,
-      });
-      expect(item.section, 'others');
-    });
-  });
-
-  group('GroupVendorItems section helpers', () {
-    final vendor = GroupVendorItems(
-      vendorId: 'v1',
-      vendorName: 'Test Vendor',
-      items: [
-        GroupLineItem.fromMap({'product_name': 'Rice', 'quantity': 1, 'unit_price': 500, 'section': 'food'}),
-        GroupLineItem.fromMap({'product_name': 'Coke', 'quantity': 2, 'unit_price': 300, 'section': 'drinks'}),
-        GroupLineItem.fromMap({'product_name': 'Sachet', 'quantity': 1, 'unit_price': 50, 'section': 'others'}),
-      ],
-      packs: [],
-      subtotal: 1150,
-    );
-
-    test('foodItems returns only food section', () {
-      expect(vendor.foodItems.map((i) => i.productName), ['Rice']);
-    });
-
-    test('drinkItems returns only drinks section', () {
-      expect(vendor.drinkItems.map((i) => i.productName), ['Coke']);
-    });
-
-    test('otherItems returns everything else', () {
-      expect(vendor.otherItems.map((i) => i.productName), ['Sachet']);
-    });
-  });
-
-  // ── GroupPack ────────────────────────────────────────────────────────────
-
-  group('GroupPack', () {
-    test('label is 1-indexed ("Pack 1" for packIndex 0)', () {
-      expect(GroupPack(packIndex: 0, items: []).label, 'Pack 1');
-      expect(GroupPack(packIndex: 2, items: []).label, 'Pack 3');
-    });
-  });
+  // (GroupLineItem / GroupVendorItems / GroupPack were superseded in Pack 4B
+  //  by the shared order breakdown — see test/pack_4b_test.dart.)
 
   // ── Final-price validation constants ─────────────────────────────────────
   //

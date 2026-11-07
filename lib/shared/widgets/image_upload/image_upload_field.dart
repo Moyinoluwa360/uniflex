@@ -90,7 +90,8 @@ class _ImageUploadFieldState extends State<ImageUploadField> {
     final processed = await _processImage(raw, file.name);
     if (processed == null) {
       if (mounted) {
-        setState(() => _errorMessage = 'Could not read the image. Try another.');
+        setState(
+            () => _errorMessage = 'Could not read the image. Try another.');
       }
       return;
     }
@@ -117,7 +118,8 @@ class _ImageUploadFieldState extends State<ImageUploadField> {
         final size = min(decoded.width, decoded.height);
         final x = (decoded.width - size) ~/ 2;
         final y = (decoded.height - size) ~/ 2;
-        final cropped = img.copyCrop(decoded, x: x, y: y, width: size, height: size);
+        final cropped =
+            img.copyCrop(decoded, x: x, y: y, width: size, height: size);
         processed = img.copyResize(cropped,
             width: 1200, height: 1200, interpolation: img.Interpolation.linear);
       } else {
@@ -173,7 +175,8 @@ class _ImageUploadFieldState extends State<ImageUploadField> {
       _isUploading = true;
       _errorMessage = null;
     });
-    await _upload(_previewBytes!, '${DateTime.now().millisecondsSinceEpoch}_retry.jpg');
+    await _upload(
+        _previewBytes!, '${DateTime.now().millisecondsSinceEpoch}_retry.jpg');
   }
 
   void _remove() {
@@ -188,7 +191,8 @@ class _ImageUploadFieldState extends State<ImageUploadField> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasImage = _previewBytes != null || (_url != null && _url!.isNotEmpty);
+    final hasImage =
+        _previewBytes != null || (_url != null && _url!.isNotEmpty);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -281,7 +285,7 @@ class _ImageUploadFieldState extends State<ImageUploadField> {
               const SizedBox(width: AppSpacing.sm),
               TextButton(
                 onPressed: _isUploading ? null : _remove,
-                child: Text(
+                child: const Text(
                   'Remove',
                   style: TextStyle(color: AppColors.error),
                 ),

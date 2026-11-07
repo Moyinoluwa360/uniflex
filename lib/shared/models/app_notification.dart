@@ -1,6 +1,6 @@
-/// An entry in the student's notification inbox. Written server-side by the
-/// `notify-user` Edge Function — either automatically from an order status
-/// change, or as a free-text message from Admin or the assigned Rider.
+/// An entry in the user's notification inbox. Written server-side by
+/// database triggers (order events, support messages) and by the
+/// `notify-user` Edge Function (free-text messages from Admin / a rider).
 class AppNotification {
   const AppNotification({
     required this.id,
@@ -8,7 +8,10 @@ class AppNotification {
     required this.body,
     required this.kind,
     required this.createdAt,
+    this.type,
     this.orderId,
+    this.groupId,
+    this.conversationId,
     this.readAt,
   });
 
@@ -18,8 +21,11 @@ class AppNotification {
       title: map['title'] as String,
       body: map['body'] as String,
       kind: map['kind'] as String? ?? 'message',
+      type: map['type'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String).toLocal(),
       orderId: map['order_id'] as String?,
+      groupId: map['group_id'] as String?,
+      conversationId: map['conversation_id'] as String?,
       readAt: map['read_at'] == null
           ? null
           : DateTime.parse(map['read_at'] as String).toLocal(),
@@ -32,10 +38,18 @@ class AppNotification {
 
   /// 'order_status' | 'message'
   final String kind;
+
+  /// Fine-grained event: 'rider_accepted' | 'final_price' | 'customer_paid'
+  /// | 'cancelled_by_customer' | 'cancelled_by_admin' | 'delivered'
+  /// | 'ready_for_pickup' | 'support' | null (older rows).
+  final String? type;
   final DateTime createdAt;
   final String? orderId;
+  final String? groupId;
+  final String? conversationId;
   final DateTime? readAt;
 
   bool get isUnread => readAt == null;
   bool get isFromStatusChange => kind == 'order_status';
+  bool get isSupport => type == 'support';
 }

@@ -48,7 +48,8 @@ class RetrySection extends StatelessWidget {
             const SizedBox(width: AppSpacing.sm),
             Expanded(
               child: Text(message,
-                  style: theme.textTheme.bodySmall?.copyWith(color: mutedColor)),
+                  style:
+                      theme.textTheme.bodySmall?.copyWith(color: mutedColor)),
             ),
             TextButton.icon(
               onPressed: onRetry,

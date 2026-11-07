@@ -23,8 +23,7 @@ class ConnectivityBanner extends ConsumerStatefulWidget {
   final Widget child;
 
   @override
-  ConsumerState<ConnectivityBanner> createState() =>
-      _ConnectivityBannerState();
+  ConsumerState<ConnectivityBanner> createState() => _ConnectivityBannerState();
 }
 
 class _ConnectivityBannerState extends ConsumerState<ConnectivityBanner> {

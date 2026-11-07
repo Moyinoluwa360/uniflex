@@ -5,127 +5,204 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
+import '../../shared/widgets/navigation/refresh_on_tab_visible.dart';
+import '../dashboard/money_cards.dart';
 import '../services/admin_providers.dart';
+import '../services/stats_live.dart';
 
-/// Admin Analytics — fuller metrics than the Dashboard snapshot: user
-/// counts, orders + revenue by period, top items, completion rate, and
-/// per-rider delivery performance.
-class AdminAnalyticsScreen extends ConsumerWidget {
+/// The Analytics tab's position in the super-admin bottom nav.
+const int kAnalyticsTabIndex = 3;
+
+/// Admin Analytics — fuller than the Dashboard: orders by period, fees and
+/// food payments (two separate numbers), completion rate, orders by status,
+/// top-selling items, rider performance and user counts.
+///
+/// All figures come from `get_admin_analytics()` — the same one-entry-per-
+/// checkout, paid-only, Nigerian-day rules as the dashboard.
+class AdminAnalyticsScreen extends ConsumerStatefulWidget {
   const AdminAnalyticsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
+  ConsumerState<AdminAnalyticsScreen> createState() =>
+      _AdminAnalyticsScreenState();
+}
+
+class _AdminAnalyticsScreenState extends ConsumerState<AdminAnalyticsScreen>
+    with StatsLiveRefresh<AdminAnalyticsScreen> {
+  void _refresh() => ref.invalidate(adminAnalyticsProvider);
+
+  Future<void> _pullToRefresh() async {
+    ref.invalidate(adminAnalyticsProvider);
+    try {
+      await ref.read(adminAnalyticsProvider.future);
+    } catch (_) {
+      // The error state is shown by the screen itself.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final analyticsAsync = ref.watch(adminAnalyticsProvider);
+    listenForOrderChanges(_refresh);
+    final data = analyticsAsync.valueOrNull;
 
-    return Scaffold(
-      appBar: UniflexAppBar(
-        title: 'Analytics',
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
-            onPressed: () => ref.invalidate(adminAnalyticsProvider),
-          ),
-        ],
-      ),
-      body: analyticsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => RetrySection(
-          message: 'Could not load analytics.',
-          onRetry: () => ref.invalidate(adminAnalyticsProvider),
-        ),
-        data: (data) => ListView(
-          padding: const EdgeInsets.all(AppSpacing.screenGutter),
-          children: [
-            // ── User counts ──────────────────────────────────────────
-            Text('Users', style: theme.textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.sm),
-            Row(
-              children: [
-                Expanded(
-                  child: _MetricCard(
-                    label: 'Students',
-                    value: '${data['totalStudents'] ?? 0}',
-                    icon: Icons.school_outlined,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.cardGap),
-                Expanded(
-                  child: _MetricCard(
-                    label: 'Riders',
-                    value: '${data['totalRiders'] ?? 0}',
-                    icon: Icons.two_wheeler_outlined,
-                    color: AppColors.orange,
-                  ),
-                ),
-              ],
+    return RefreshOnTabVisible(
+      tabIndex: kAnalyticsTabIndex,
+      onVisible: _refresh,
+      child: Scaffold(
+        appBar: UniflexAppBar(
+          title: 'Analytics',
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Refresh',
+              onPressed: _refresh,
             ),
-
-            const SizedBox(height: AppSpacing.lg),
-
-            // ── Orders ───────────────────────────────────────────────
-            Text('Orders', style: theme.textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.sm),
-            _PeriodRow(
-              label: 'Today',
-              orders: data['ordersToday'] as int? ?? 0,
-              revenue: (data['revenueToday'] as num?)?.toDouble() ?? 0,
-            ),
-            _PeriodRow(
-              label: 'This week',
-              orders: data['ordersThisWeek'] as int? ?? 0,
-              revenue: (data['revenueThisWeek'] as num?)?.toDouble() ?? 0,
-            ),
-            _PeriodRow(
-              label: 'This month',
-              orders: data['ordersThisMonth'] as int? ?? 0,
-              revenue: (data['revenueThisMonth'] as num?)?.toDouble() ?? 0,
-            ),
-
-            const SizedBox(height: AppSpacing.lg),
-
-            // ── Completion rate ───────────────────────────────────────
-            Text('Completion rate', style: theme.textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.sm),
-            _CompletionCard(
-              completed: data['completedCount'] as int? ?? 0,
-              cancelled: data['cancelledCount'] as int? ?? 0,
-            ),
-
-            const SizedBox(height: AppSpacing.lg),
-
-            // ── Status breakdown ─────────────────────────────────────
-            Text('Orders by status (this month)',
-                style: theme.textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.sm),
-            _StatusBreakdownCard(
-                byStatus: data['byStatus'] as Map<String, dynamic>? ?? {}),
-
-            const SizedBox(height: AppSpacing.lg),
-
-            // ── Top-selling items ────────────────────────────────────
-            Text('Top-selling items', style: theme.textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.sm),
-            _TopItemsList(
-                items: (data['topItems'] as List?)?.cast<Map<String, dynamic>>() ?? []),
-
-            const SizedBox(height: AppSpacing.lg),
-
-            // ── Rider performance ────────────────────────────────────
-            Text('Rider performance (this month)',
-                style: theme.textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.sm),
-            _RiderPerformanceList(
-                riders: (data['riderPerformance'] as List?)
-                        ?.cast<Map<String, dynamic>>() ??
-                    []),
-
-            const SizedBox(height: AppSpacing.xl),
           ],
         ),
+        body: data != null
+            ? RefreshIndicator(
+                onRefresh: _pullToRefresh,
+                child: AnalyticsView(data: data),
+              )
+            : analyticsAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => RetrySection(
+                  message: 'Could not load analytics.',
+                  onRetry: _refresh,
+                ),
+                data: (d) => RefreshIndicator(
+                  onRefresh: _pullToRefresh,
+                  child: AnalyticsView(data: d),
+                ),
+              ),
       ),
+    );
+  }
+}
+
+/// Pure rendering of the analytics map (also driven directly by tests).
+class AnalyticsView extends StatelessWidget {
+  const AnalyticsView({super.key, required this.data});
+
+  final Map<String, dynamic> data;
+
+  List<Map<String, dynamic>> _list(String key) =>
+      (data[key] as List?)
+          ?.map((e) => Map<String, dynamic>.from(e as Map))
+          .toList() ??
+      const [];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final users = Map<String, dynamic>.from(data['users'] as Map? ?? {});
+    final byStatus = Map<String, dynamic>.from(data['by_status'] as Map? ?? {});
+    final rate = data['completion_rate'];
+
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(AppSpacing.screenGutter),
+      children: [
+        Text('Orders', style: theme.textTheme.titleMedium),
+        const SizedBox(height: AppSpacing.sm),
+        _PeriodTable(
+          rows: [
+            (
+              'Placed',
+              statNum(data, 'orders_today'),
+              statNum(data, 'orders_week'),
+              statNum(data, 'orders_month')
+            ),
+            (
+              'Completed',
+              statNum(data, 'completed_today'),
+              statNum(data, 'completed_week'),
+              statNum(data, 'completed_month')
+            ),
+            (
+              'Cancelled',
+              statNum(data, 'cancelled_today'),
+              statNum(data, 'cancelled_week'),
+              statNum(data, 'cancelled_month')
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        Text('Money', style: theme.textTheme.titleMedium),
+        const SizedBox(height: AppSpacing.sm),
+        PeriodMoneyCard(
+          title: 'Fees collected',
+          caption:
+              'Delivery / commitment fees, service charges and errand fees',
+          today: statNum(data, 'fees_today'),
+          week: statNum(data, 'fees_week'),
+          month: statNum(data, 'fees_month'),
+          color: kFeesColor,
+          icon: Icons.payments_outlined,
+        ),
+        const SizedBox(height: AppSpacing.cardGap),
+        PeriodMoneyCard(
+          title: 'Food payments',
+          caption: 'Final food payments and pickup order payments',
+          today: statNum(data, 'food_today'),
+          week: statNum(data, 'food_week'),
+          month: statNum(data, 'food_month'),
+          color: kFoodColor,
+          icon: Icons.restaurant_outlined,
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        Text('Completion rate (this month)',
+            style: theme.textTheme.titleMedium),
+        const SizedBox(height: AppSpacing.sm),
+        _CompletionCard(
+          completed: statNum(data, 'completed_month').toInt(),
+          cancelled: statNum(data, 'cancelled_month').toInt(),
+          rate: rate is num ? rate.toDouble() : null,
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        Text('Orders by status (placed this month)',
+            style: theme.textTheme.titleMedium),
+        const SizedBox(height: AppSpacing.sm),
+        _StatusBreakdownCard(byStatus: byStatus),
+        const SizedBox(height: AppSpacing.lg),
+        Text('Top-selling items (completed this month)',
+            style: theme.textTheme.titleMedium),
+        const SizedBox(height: AppSpacing.sm),
+        _TopItemsList(items: _list('top_items')),
+        const SizedBox(height: AppSpacing.lg),
+        Text('Rider performance (completed this month)',
+            style: theme.textTheme.titleMedium),
+        const SizedBox(height: AppSpacing.sm),
+        _RiderPerformanceList(riders: _list('rider_performance')),
+        const SizedBox(height: AppSpacing.lg),
+        Text('Users', style: theme.textTheme.titleMedium),
+        const SizedBox(height: AppSpacing.sm),
+        Row(
+          children: [
+            Expanded(
+              child: _MetricCard(
+                label: 'Students',
+                value: '${statNum(users, 'students').toInt()}',
+                icon: Icons.school_outlined,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.cardGap),
+            Expanded(
+              child: _MetricCard(
+                label: 'Riders',
+                value: '${statNum(users, 'riders').toInt()}',
+                icon: Icons.two_wheeler_outlined,
+                color: AppColors.orange,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+        const StatsFootnote(),
+        const SizedBox(height: AppSpacing.xl),
+      ],
     );
   }
 }
@@ -176,49 +253,52 @@ class _MetricCard extends StatelessWidget {
   }
 }
 
-class _PeriodRow extends StatelessWidget {
-  const _PeriodRow({
-    required this.label,
-    required this.orders,
-    required this.revenue,
-  });
+/// Today / week / month counts as a small table.
+class _PeriodTable extends StatelessWidget {
+  const _PeriodTable({required this.rows});
 
-  final String label;
-  final int orders;
-  final double revenue;
+  final List<(String, num, num, num)> rows;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs + 2),
-      child: Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(AppRadius.card),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(label, style: theme.textTheme.bodyMedium),
+    final head = theme.textTheme.labelSmall?.copyWith(
+      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+      fontWeight: FontWeight.w700,
+    );
+    Widget cell(String t, {TextStyle? style}) => SizedBox(
+          width: 64,
+          child: Text(t, textAlign: TextAlign.end, style: style),
+        );
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+      ),
+      child: Column(
+        children: [
+          Row(children: [
+            const Expanded(child: SizedBox()),
+            cell('Today', style: head),
+            cell('Week', style: head),
+            cell('Month', style: head),
+          ]),
+          const SizedBox(height: AppSpacing.xs),
+          for (final r in rows)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(children: [
+                Expanded(child: Text(r.$1, style: theme.textTheme.bodyMedium)),
+                cell('${r.$2.toInt()}',
+                    style: theme.textTheme.labelLarge
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+                cell('${r.$3.toInt()}', style: theme.textTheme.bodyMedium),
+                cell('${r.$4.toInt()}', style: theme.textTheme.bodyMedium),
+              ]),
             ),
-            Text(
-              '$orders orders',
-              style: theme.textTheme.labelMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Text(
-              '₦${revenue.toStringAsFixed(0)}',
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: AppColors.emerald,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -228,16 +308,19 @@ class _CompletionCard extends StatelessWidget {
   const _CompletionCard({
     required this.completed,
     required this.cancelled,
+    required this.rate,
   });
 
   final int completed;
   final int cancelled;
 
+  /// Percentage 0–100 from the database; null when nothing has finished yet.
+  final double? rate;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final total = completed + cancelled;
-    final rate = total == 0 ? 0.0 : completed / total;
+    final fraction = ((rate ?? 0) / 100).clamp(0.0, 1.0);
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -278,9 +361,8 @@ class _CompletionCard extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(3),
             child: LinearProgressIndicator(
-              value: rate,
-              backgroundColor:
-                  AppColors.error.withValues(alpha: 0.15),
+              value: fraction,
+              backgroundColor: AppColors.error.withValues(alpha: 0.15),
               valueColor:
                   const AlwaysStoppedAnimation<Color>(AppColors.emerald),
               minHeight: 8,
@@ -288,7 +370,10 @@ class _CompletionCard extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            '${(rate * 100).toStringAsFixed(1)}% completion rate',
+            rate == null
+                ? 'No finished orders yet this month'
+                : '${rate!.toStringAsFixed(1)}% completion rate',
+            key: const ValueKey('completion-rate-text'),
             style: theme.textTheme.labelSmall?.copyWith(
               color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
             ),
@@ -304,18 +389,39 @@ class _StatusBreakdownCard extends StatelessWidget {
 
   final Map<String, dynamic> byStatus;
 
+  // Delivery checkouts and pickup/errand orders share one list; statuses
+  // that don't exist for a kind simply stay 0 and are hidden.
+  static const _labels = <String, (String, Color)>{
+    'placed': ('Placed', AppColors.info),
+    'commitment_paid': ('Waiting for rider', AppColors.orange),
+    'rider_accepted': ('Rider accepted', AppColors.warning),
+    'preparing': ('Preparing', AppColors.warning),
+    'being_sourced': ('Being sourced', AppColors.warning),
+    'ready': ('Ready', AppColors.emerald),
+    'ready_for_pickup': ('Ready for pickup', AppColors.emerald),
+    'awaiting_final_payment': ('Awaiting final payment', AppColors.info),
+    'out_for_delivery': ('Out for delivery', AppColors.orange),
+    'completed': ('Completed', AppColors.emerald),
+    'cancelled': ('Cancelled', AppColors.error),
+  };
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final entries = [
-      ('Placed', byStatus['placed'] as int? ?? 0, AppColors.info),
-      ('Preparing', byStatus['preparing'] as int? ?? 0, AppColors.warning),
-      ('Ready', byStatus['ready'] as int? ?? 0, AppColors.emerald),
-      ('Out for Delivery',
-          byStatus['out_for_delivery'] as int? ?? 0, AppColors.orange),
-      ('Completed', byStatus['completed'] as int? ?? 0, AppColors.emerald),
-      ('Cancelled', byStatus['cancelled'] as int? ?? 0, AppColors.error),
+    final entries = <(String, int, Color)>[
+      for (final e in _labels.entries)
+        if (statNum(byStatus, e.key) > 0)
+          (e.value.$1, statNum(byStatus, e.key).toInt(), e.value.$2),
     ];
+
+    if (entries.isEmpty) {
+      return Text(
+        'No orders this month yet.',
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+        ),
+      );
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -373,7 +479,7 @@ class _TopItemsList extends StatelessWidget {
     final theme = Theme.of(context);
     if (items.isEmpty) {
       return Text(
-        'No completed orders yet.',
+        'No completed orders yet this month.',
         style: theme.textTheme.bodySmall?.copyWith(
           color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
         ),
@@ -400,8 +506,8 @@ class _TopItemsList extends StatelessWidget {
                     child: Text(
                       '${i + 1}.',
                       style: theme.textTheme.labelMedium?.copyWith(
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.5),
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.5),
                       ),
                     ),
                   ),
@@ -468,12 +574,12 @@ class _RiderPerformanceList extends StatelessWidget {
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
-                      riders[i]['name'] as String? ?? 'Unknown',
+                      riders[i]['name'] as String? ?? 'Rider',
                       style: theme.textTheme.bodyMedium,
                     ),
                   ),
                   Text(
-                    '${riders[i]['deliveries'] ?? 0} deliveries',
+                    '${riders[i]['completed'] ?? 0} completed',
                     style: theme.textTheme.labelMedium?.copyWith(
                       fontWeight: FontWeight.w600,
                       color: AppColors.emerald,

@@ -31,7 +31,8 @@ Future<PaymentFlowResult> runPaymentFlow({
   required void Function(String) onError,
 }) async {
   // 1. Acknowledgment.
-  final ok = await showAcknowledgmentSheet(context, message: acknowledgeMessage);
+  final ok =
+      await showAcknowledgmentSheet(context, message: acknowledgeMessage);
   if (!ok || !context.mounted) return PaymentFlowResult.cancelled;
 
   // 2. Check / set PIN.
@@ -44,7 +45,8 @@ Future<PaymentFlowResult> runPaymentFlow({
   }
 
   // 3. PIN entry.
-  final pin = await showEnterPinSheet(context, title: pinTitle, subtitle: pinSubtitle);
+  final pin =
+      await showEnterPinSheet(context, title: pinTitle, subtitle: pinSubtitle);
   if (pin == null || !context.mounted) return PaymentFlowResult.cancelled;
 
   // 4. RPC call.

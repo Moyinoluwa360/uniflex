@@ -67,10 +67,10 @@ class SavingPlanService {
     final user = _client.auth.currentUser;
     if (user == null) return;
 
-    await _client
-        .from('saving_plans')
-        .update({'is_active': false, 'updated_at': DateTime.now().toUtc().toIso8601String()})
-        .eq('user_id', user.id);
+    await _client.from('saving_plans').update({
+      'is_active': false,
+      'updated_at': DateTime.now().toUtc().toIso8601String()
+    }).eq('user_id', user.id);
   }
 
   /// Computes the start of the current period (day/week/month) in UTC.

@@ -29,6 +29,7 @@ class AppAccordionCard extends StatelessWidget {
     required this.onTap,
     required this.child,
     this.trailingAction,
+    this.outerPadding,
   });
 
   final Widget leading;
@@ -38,6 +39,11 @@ class AppAccordionCard extends StatelessWidget {
   final VoidCallback onTap;
   final Widget child;
   final Widget? trailingAction;
+
+  /// Space around the card. Defaults to the standard screen gutter; pass
+  /// [EdgeInsets] (e.g. vertical only) when the card sits inside another
+  /// padded container such as a vendor accordion or a ListView.
+  final EdgeInsetsGeometry? outerPadding;
 
   @override
   Widget build(BuildContext context) {
@@ -49,10 +55,11 @@ class AppAccordionCard extends StatelessWidget {
         : theme.colorScheme.outline.withValues(alpha: isDark ? 0.3 : 0.2);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.screenGutter,
-        vertical: AppSpacing.xs,
-      ),
+      padding: outerPadding ??
+          const EdgeInsets.symmetric(
+            horizontal: AppSpacing.screenGutter,
+            vertical: AppSpacing.xs,
+          ),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeInOut,

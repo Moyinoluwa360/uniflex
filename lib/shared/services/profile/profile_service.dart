@@ -23,28 +23,15 @@ class ProfileService {
 
   final SupabaseClient _client;
 
-  /// Creates the bare profiles row right after Step One's Supabase Auth
-  /// user is created, so phone/phone_verified_at have somewhere to land
-  /// before Step Two (Complete Your Profile) runs. Role defaults to
-  /// 'student' and onboarding_complete defaults to false at the database
-  /// level (see supabase/schema.sql).
-  Future<void> createStubProfile({
-    required String userId,
-    required String email,
-    required String phone,
-  }) async {
-    await _client.from('profiles').upsert(
-      {'id': userId, 'email': email, 'phone': phone},
-      onConflict: 'id',
-    );
-  }
+  // Pack 5: createStubProfile() was removed. No profile row is written
+  // before the account is complete; the `signup` Edge Function creates the
+  // profile, wallet, PIN and referral together at the last step. Legacy
+  // stubs created by the old flow are still read via [fetchProfile] and
+  // finished via [completeStudentOnboarding].
 
   Future<Profile?> fetchProfile(String userId) async {
-    final row = await _client
-        .from('profiles')
-        .select()
-        .eq('id', userId)
-        .maybeSingle();
+    final row =
+        await _client.from('profiles').select().eq('id', userId).maybeSingle();
     if (row == null) return null;
     return Profile.fromMap(row);
   }

@@ -3,11 +3,12 @@
 // The one authorized way to notify a customer about their order. Called by
 // the Admin app (kitchen queue) and the Rider app.
 //
-// Two modes:
-//   kind: 'order_status' — the copy is derived here from the order's
-//                          current status, so the wording lives in one
-//                          place instead of being retyped per caller.
-//   kind: 'message'      — free text typed by Admin or the assigned Rider.
+// Pack 4A: the automatic order-status notifications are now written by
+// database triggers, and EVERY inserted notification is pushed by the
+// push-notification function (via a trigger). This function therefore only
+// records the row. Clients still use `kind: 'message'` (free text typed by
+// Admin or the assigned Rider); the old `kind: 'order_status'` mode is no
+// longer called by the app and is kept only for compatibility.
 //
 // Authorization is delegated to can_notify_order(), which allows an active
 // admin, or the rider currently assigned to that order. A student can
@@ -149,7 +150,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: order, error: orderError } = await adminClient
     .from("orders")
-    .select("id, student_id, status, delivery_type, rider_id")
+    .select("id, student_id, status, delivery_type, rider_id, delivery_group_id")
     .eq("id", orderId)
     .maybeSingle();
 
@@ -212,6 +213,10 @@ Deno.serve(async (req: Request) => {
       body: messageBody,
       kind,
       order_id: order.id,
+      // A leg belongs to a delivery group — the group is the one order the
+      // student sees, so the notification should open that.
+      group_id: order.delivery_group_id ?? null,
+      type: "message",
       sent_by: user.id,
     });
 
@@ -220,48 +225,9 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Could not send notification." }, 500);
   }
 
-  // ── Best-effort push ────────────────────────────────────────────────
-  const { data: recipient } = await adminClient
-    .from("profiles")
-    .select("fcm_token")
-    .eq("id", order.student_id)
-    .maybeSingle();
-
-  const token = recipient?.fcm_token as string | null | undefined;
-  if (!token) {
-    return json({ delivered: "inbox_only", reason: "no device token" });
-  }
-
-  try {
-    const pushRes = await fetch(
-      `${supabaseUrl}/functions/v1/send-notification`,
-      {
-        method: "POST",
-        headers: {
-          // send-notification only accepts the service role, so that a
-          // client cannot push to an arbitrary device token.
-          Authorization: `Bearer ${serviceRoleKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          token,
-          title,
-          body: messageBody,
-          data: { order_id: order.id, kind },
-        }),
-      },
-    );
-
-    if (!pushRes.ok) {
-      console.warn(
-        `Push failed for order ${order.id}: ${pushRes.status} ${await pushRes.text()}`,
-      );
-      return json({ delivered: "inbox_only", reason: "push failed" });
-    }
-  } catch (err) {
-    console.warn("Push request threw:", err);
-    return json({ delivered: "inbox_only", reason: "push error" });
-  }
-
-  return json({ delivered: "push" });
+  // ── Push ────────────────────────────────────────────────────────────
+  // Pack 4A: the push is NOT sent from here any more. A database trigger
+  // on public.notifications calls the push-notification function for every
+  // inserted row, so sending it here as well would deliver it twice.
+  return json({ delivered: "queued" });
 });

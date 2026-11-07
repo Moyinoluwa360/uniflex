@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/services/auth/auth_providers.dart';
@@ -9,12 +8,12 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/pin/pin_entry_sheet.dart';
 import '../services/student_providers.dart';
-import '../support/support_chat_screen.dart';
+import '../support/support_options_screen.dart';
 import 'badges_screen.dart';
-import 'gift_screen.dart';
+import '../gifts/gifts_screen.dart';
 import 'membership_card_screen.dart';
 import 'preferences_screen.dart';
-import 'referral_screen.dart';
+import 'refer_a_student_screen.dart';
 import 'scheduled_orders_student_screen.dart';
 
 /// Student profile — rebuilt for Phase 6 with membership, rewards, referral,
@@ -97,8 +96,7 @@ class StudentProfileScreen extends ConsumerWidget {
                             child: Center(
                               child: Text(
                                 initials,
-                                style:
-                                    theme.textTheme.headlineSmall?.copyWith(
+                                style: theme.textTheme.headlineSmall?.copyWith(
                                   color: AppColors.pureWhite,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -118,8 +116,8 @@ class StudentProfileScreen extends ConsumerWidget {
                             Text(
                               profile.fullName!,
                               style: theme.textTheme.bodyMedium?.copyWith(
-                                color: AppColors.pureWhite
-                                    .withValues(alpha: 0.8),
+                                color:
+                                    AppColors.pureWhite.withValues(alpha: 0.8),
                               ),
                             ),
                           const SizedBox(height: AppSpacing.md),
@@ -147,8 +145,8 @@ class StudentProfileScreen extends ConsumerWidget {
                                     const SizedBox(width: 4),
                                     Text(
                                       tier,
-                                      style: theme.textTheme.labelMedium
-                                          ?.copyWith(
+                                      style:
+                                          theme.textTheme.labelMedium?.copyWith(
                                         color: AppColors.pureWhite,
                                         fontWeight: FontWeight.w700,
                                       ),
@@ -182,8 +180,8 @@ class StudentProfileScreen extends ConsumerWidget {
                                         loading: () => '…',
                                         error: (_, __) => '—',
                                       ),
-                                      style: theme.textTheme.labelMedium
-                                          ?.copyWith(
+                                      style:
+                                          theme.textTheme.labelMedium?.copyWith(
                                         color: AppColors.pureWhite,
                                         fontWeight: FontWeight.w600,
                                       ),
@@ -237,23 +235,21 @@ class StudentProfileScreen extends ConsumerWidget {
                         ),
                         _MenuRow(
                           icon: Icons.people_outline,
-                          label: 'Refer a Friend',
-                          onTap: () => _push(
-                              context, ReferralScreen(profile: profile)),
+                          label: 'Refer a student',
+                          onTap: () =>
+                              _push(context, const ReferAStudentScreen()),
                           theme: theme,
                         ),
                         _MenuRow(
                           icon: Icons.card_giftcard_outlined,
-                          label: 'Send a Gift',
-                          onTap: () =>
-                              _push(context, const GiftScreen()),
+                          label: 'Gifts',
+                          onTap: () => _push(context, const GiftsScreen()),
                           theme: theme,
                         ),
                         _MenuRow(
                           icon: Icons.emoji_events_outlined,
                           label: 'My Badges',
-                          onTap: () =>
-                              _push(context, const BadgesScreen()),
+                          onTap: () => _push(context, const BadgesScreen()),
                           theme: theme,
                         ),
                         _MenuRow(
@@ -261,8 +257,7 @@ class StudentProfileScreen extends ConsumerWidget {
                           label: 'Scheduled Orders',
                           showDivider: false,
                           onTap: () => _push(
-                              context,
-                              const ScheduledOrdersStudentScreen()),
+                              context, const ScheduledOrdersStudentScreen()),
                           theme: theme,
                         ),
                       ],
@@ -303,9 +298,6 @@ class StudentProfileScreen extends ConsumerWidget {
                             value: profile.phone!,
                             theme: theme,
                           ),
-                        if (profile.referralCode != null)
-                          _ReferralRow(
-                              code: profile.referralCode!, theme: theme),
                       ],
                     ),
 
@@ -328,8 +320,8 @@ class StudentProfileScreen extends ConsumerWidget {
                               icon: Icons.support_agent_outlined,
                               label: 'Help & Support',
                               badgeCount: unread,
-                              onTap: () => _push(
-                                  context, const SupportChatScreen()),
+                              onTap: () =>
+                                  _push(context, const SupportOptionsScreen()),
                               theme: theme,
                             );
                           },
@@ -354,8 +346,7 @@ class StudentProfileScreen extends ConsumerWidget {
                           labelColor: AppColors.error,
                           showDivider: false,
                           showChevron: false,
-                          onTap: () =>
-                              ref.read(authServiceProvider).signOut(),
+                          onTap: () => ref.read(authServiceProvider).signOut(),
                           theme: theme,
                         ),
                       ],
@@ -373,8 +364,7 @@ class StudentProfileScreen extends ConsumerWidget {
   }
 
   void _push(BuildContext context, Widget screen) {
-    Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => screen));
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
 
   Color _tierColor(String tier) => switch (tier) {
@@ -456,8 +446,7 @@ class _InfoRow extends StatelessWidget {
         children: [
           Icon(icon,
               size: 18,
-              color:
-                  theme.colorScheme.primary.withValues(alpha: 0.7)),
+              color: theme.colorScheme.primary.withValues(alpha: 0.7)),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
@@ -465,8 +454,7 @@ class _InfoRow extends StatelessWidget {
               children: [
                 Text(label,
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurface
-                          .withValues(alpha: 0.5),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                     )),
                 Text(value,
                     style: theme.textTheme.bodyMedium
@@ -514,8 +502,7 @@ class _MenuRow extends StatelessWidget {
                 Icon(icon,
                     size: 20,
                     color: iconColor ??
-                        theme.colorScheme.onSurface
-                            .withValues(alpha: 0.6)),
+                        theme.colorScheme.onSurface.withValues(alpha: 0.6)),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(label,
@@ -525,14 +512,13 @@ class _MenuRow extends StatelessWidget {
                 if (showChevron)
                   Icon(Icons.chevron_right,
                       size: 18,
-                      color: theme.colorScheme.onSurface
-                          .withValues(alpha: 0.3)),
+                      color:
+                          theme.colorScheme.onSurface.withValues(alpha: 0.3)),
               ],
             ),
           ),
         ),
-        if (showDivider)
-          Divider(height: 1, color: theme.dividerColor),
+        if (showDivider) Divider(height: 1, color: theme.dividerColor),
       ],
     );
   }
@@ -585,44 +571,6 @@ class _MenuRowBadged extends StatelessWidget {
           ),
         ),
         Divider(height: 1, color: theme.dividerColor),
-      ],
-    );
-  }
-}
-
-class _ReferralRow extends StatelessWidget {
-  const _ReferralRow({required this.code, required this.theme});
-  final String code;
-  final ThemeData theme;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Icon(Icons.card_giftcard_outlined, size: 18),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Your referral code',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurface
-                          .withValues(alpha: 0.5))),
-              Text(code, style: theme.textTheme.bodyMedium),
-            ],
-          ),
-        ),
-        IconButton(
-          icon: const Icon(Icons.copy_outlined, size: 18),
-          tooltip: 'Copy',
-          onPressed: () {
-            Clipboard.setData(ClipboardData(text: code));
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Referral code copied')),
-            );
-          },
-        ),
       ],
     );
   }

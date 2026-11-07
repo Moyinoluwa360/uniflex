@@ -25,8 +25,8 @@ dependencies:
   # Backend: auth, database, session persistence (Phase 1+)
   supabase_flutter: ^2.5.6
 
-  # Direct REST calls to Termii for phone OTP (Supabase's built-in phone
-  # auth is not used — Termii is the OTP provider per spec)
+  # (Not used for Termii any more: the app never calls Termii or holds its
+  # key — OTPs go through the `signup` / `phone-otp` Edge Functions, Pack 5.)
   http: ^1.2.1
 
   # Paystack payment checkout — renders the Paystack Popup JS inside a
@@ -64,6 +64,10 @@ dependencies:
 
   # Fix Pack 1 — internet connectivity detection (OS change event + probe)
   connectivity_plus: ^6.0.3
+
+  # Pack 5 — the sign-up draft's password lives in the OS keystore/keychain,
+  # never in plain shared preferences.
+  flutter_secure_storage: ^9.2.2
 
 dev_dependencies:
   flutter_test:

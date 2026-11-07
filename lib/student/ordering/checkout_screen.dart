@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/models/delivery_location.dart';
-import '../../shared/models/order.dart';
-import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
@@ -11,11 +9,11 @@ import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../../shared/widgets/navigation/app_bottom_nav_shell.dart';
-import '../../shared/utils/app_error_mapper.dart';
-import '../../shared/widgets/pin/pin_entry_sheet.dart';
+import '../gifts/gift_models.dart';
+import '../gifts/gift_section.dart';
 import 'cart_provider.dart';
 import 'commitment_fee_screen.dart';
-import 'order_confirmation_screen.dart';
+import 'checkout_draft.dart';
 import 'order_repository.dart';
 
 /// Round 8 checkout screen — multi-vendor aware, location-based fees.
@@ -25,8 +23,12 @@ import 'order_repository.dart';
 /// the fee is calculated per vendor using pack brackets:
 ///   fee = location.price × ceil(packs / 3)  (0 packs = 1×).
 ///
-/// Pickup for Uniflex orders uses the existing [placeFoodOrder] RPC
-/// (full payment upfront with PIN).
+/// **Pack 4A:** this screen only collects choices. The bottom button is
+/// "Continue": it validates the form and opens the payment page
+/// ([CommitmentFeeScreen]) with the cart and options held in memory. It
+/// creates nothing in the database, does not clear the cart and does not
+/// touch any order provider — the order is created (and the cart cleared)
+/// only after the student pays on the next page.
 const _studentWalletTabIndex = 2;
 
 class CheckoutScreen extends ConsumerStatefulWidget {
@@ -43,19 +45,27 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final _formKey = GlobalKey<FormState>();
   DateTime? _scheduledFor;
   final _notesController = TextEditingController();
-  bool _isSubmitting = false;
+
+  // Pack 6: "Send as a gift" (food delivery only).
+  bool _giftOn = false;
+  GiftRecipient? _giftRecipient;
+  final _giftMessageController = TextEditingController();
+
+  /// Guards against a second tap while the payment page is open/opening.
+  bool _isContinuing = false;
 
   @override
   void dispose() {
     _locationDetailsController.dispose();
     _notesController.dispose();
+    _giftMessageController.dispose();
     super.dispose();
   }
 
   Future<void> _pickSchedule() async {
     final now = DateTime.now();
-    var next = DateTime(now.year, now.month, now.day,
-        now.hour, now.minute >= 30 ? 30 : 0);
+    var next = DateTime(
+        now.year, now.month, now.day, now.hour, now.minute >= 30 ? 30 : 0);
     while (!next.isAfter(now.add(const Duration(minutes: 29)))) {
       next = next.add(const Duration(minutes: 30));
     }
@@ -93,8 +103,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 const SizedBox(height: AppSpacing.xs),
                 Text("Same-day pre-order — choose when you'd like it ready.",
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface
-                          .withValues(alpha: 0.6),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     )),
                 const SizedBox(height: AppSpacing.md),
                 Wrap(
@@ -121,162 +130,58 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     setState(() => _scheduledFor = picked);
   }
 
-  Future<String?> _collectPin() async {
-    final hasPin =
-        await ref.read(profileServiceProvider).hasTransactionPin();
-    if (!mounted) return null;
-    if (!hasPin) {
-      final didSet = await showSetPinSheet(context, ref);
-      if (!mounted || !didSet) return null;
-    }
-    return showEnterPinSheet(context);
-  }
-
-  Future<void> _confirmOrder() async {
-    if (_isSubmitting) return;
+  /// Validates the form and opens the payment page. Creates nothing.
+  Future<void> _continue() async {
+    if (_isContinuing) return;
     if (!_formKey.currentState!.validate()) return;
 
-    // Delivery requires a selected location.
-    if (!_isPickup && _selectedLocation == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a delivery location.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    setState(() => _isSubmitting = true);
-
-    try {
-      await _doConfirmOrder();
-    } finally {
-      if (mounted) setState(() => _isSubmitting = false);
-    }
-  }
-
-  Future<void> _doConfirmOrder() async {
     final cart = ref.read(cartProvider);
-    final notes = _notesController.text.trim();
+    if (cart.isEmpty) return;
 
-    if (_isPickup) {
-      // Pickup is only available for Uniflex-only carts (enforced by UI).
-      final vendor = cart.vendor;
-      if (vendor == null) return;
-
-      final pin = await _collectPin();
-      if (pin == null || !mounted) return;
-
-      // Build pack data from cart's group.
-      final group = cart.groups[vendor.id];
-      final packs = (group?.packContents ?? [])
-          .map((contents) => {
-                'items': contents.entries
-                    .where((e) => e.value > 0)
-                    .map((e) {
-                      final product = group!.items.firstWhere(
-                        (i) => i.product.id == e.key,
-                        orElse: () => group.items.first,
-                      );
-                      return {
-                        'product_id': e.key,
-                        'product_name': product.product.name,
-                        'quantity': e.value,
-                      };
-                    })
-                    .toList(),
-              })
-          .toList();
-
-      final order = await ref.read(orderNotifierProvider.notifier).placeFoodOrder(
-            vendor: vendor,
-            deliveryType: 'pickup',
-            pin: pin,
-            packs: packs,
-            packFee: group?.packFee ?? 0,
-            deliveryLocation: null,
-            scheduledFor: _scheduledFor,
-            notes: notes.isEmpty ? null : notes,
-          );
-
-      if (!mounted) return;
-      _handleSingleOrderResult(order);
-    } else {
-      // Delivery: multi-vendor flow via delivery_groups.
-      final loc = _selectedLocation!;
-      final details = _locationDetailsController.text.trim();
-
-      final result = await ref
-          .read(orderNotifierProvider.notifier)
-          .placeMultiVendorOrder(
-            deliveryType: 'delivery',
-            deliveryLocation: loc.name,
-            studentNote: notes.isEmpty ? null : notes,
-            scheduledFor: _scheduledFor,
-            deliveryLocationId: loc.id,
-            locationDetails: details.isEmpty ? null : details,
-          );
-
-      if (!mounted) return;
-
-      if (result == null) {
-        final error = ref.read(orderNotifierProvider).error ?? '';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error.isEmpty ? 'Order failed. Please try again.' : error),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        return;
-      }
-
-      // Navigate to commitment fee screen (delivery fee = commitment fee).
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => CommitmentFeeScreen(
-            groupId: result.groupId,
-            commitmentFeeTotal: result.commitmentFeeTotal,
-            vendorCount: result.vendorCount,
-          ),
-        ),
-      );
+    if (!_isPickup && _selectedLocation == null) {
+      _snack('Please select a delivery location.');
+      return;
     }
-  }
-
-  void _handleSingleOrderResult(Order? order) {
-    final notifierState = ref.read(orderNotifierProvider);
-
-    if (order == null) {
-      final error = notifierState.error ?? '';
-      final friendly = error.isEmpty
-          ? 'Order failed. Please try again.'
-          : AppErrorMapper.map(error);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendly),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    if (!_isPickup && _giftOn && _giftRecipient == null) {
+      _snack('Find the student you are sending this to first.');
+      return;
+    }
+    if (_isPickup && !cart.isUniflexOnly) {
+      _snack('Pickup is only available for Uniflex orders.');
+      return;
+    }
+    if (_isPickup &&
+        _scheduledFor != null &&
+        !_scheduledFor!.isAfter(DateTime.now())) {
+      setState(() => _scheduledFor = null);
+      _snack('That pickup time has passed. Pick a new time or order now.');
       return;
     }
 
-    if (notifierState.budgetWarning) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Heads up: this order has put you over your saving plan budget for the current period.',
-          ),
-          behavior: SnackBarBehavior.floating,
-          duration: Duration(seconds: 5),
-        ),
-      );
-    }
+    final draft = CheckoutDraft.fromCart(
+      cart,
+      isPickup: _isPickup,
+      location: _isPickup ? null : _selectedLocation,
+      locationDetails: _isPickup ? null : _locationDetailsController.text,
+      note: _notesController.text,
+      scheduledFor: _isPickup ? _scheduledFor : null,
+      giftRecipient: (_giftOn && !_isPickup) ? _giftRecipient : null,
+      giftMessage: _giftMessageController.text,
+    );
 
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => OrderConfirmationScreen(order: order),
-      ),
+    setState(() => _isContinuing = true);
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => CommitmentFeeScreen(draft: draft)),
+      );
+    } finally {
+      if (mounted) setState(() => _isContinuing = false);
+    }
+  }
+
+  void _snack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
     );
   }
 
@@ -284,15 +189,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cart = ref.watch(cartProvider);
-    final orderState = ref.watch(orderNotifierProvider);
     final balanceAsync = ref.watch(walletBalanceProvider);
     final locationsAsync = ref.watch(deliveryLocationsProvider);
 
     final isUniflexOnly = cart.isUniflexOnly;
 
-    final vendorGroups = cart.groups.values
-        .where((g) => !g.isEmpty)
-        .toList();
+    final vendorGroups = cart.groups.values.where((g) => !g.isEmpty).toList();
 
     // Calculate delivery fee per vendor using pack brackets.
     final locationPrice = _selectedLocation?.price ?? 0;
@@ -346,54 +248,52 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       ...vendorGroups[vi].items.map(
-                        (item) => Padding(
-                          padding:
-                              const EdgeInsets.only(bottom: AppSpacing.xs),
-                          child: Row(
-                            children: [
-                              Text(
-                                '${item.quantity}×',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                  color: theme.colorScheme.onSurface
-                                      .withValues(alpha: 0.55),
-                                ),
+                            (item) => Padding(
+                              padding:
+                                  const EdgeInsets.only(bottom: AppSpacing.xs),
+                              child: Row(
+                                children: [
+                                  Text(
+                                    '${item.quantity}×',
+                                    style:
+                                        theme.textTheme.labelMedium?.copyWith(
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.55),
+                                    ),
+                                  ),
+                                  const SizedBox(width: AppSpacing.sm),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(item.product.name,
+                                            style: theme.textTheme.bodyMedium),
+                                        if (item.optionsSummary.isNotEmpty)
+                                          Text(
+                                            item.optionsSummary,
+                                            style: theme.textTheme.labelSmall
+                                                ?.copyWith(
+                                              color: theme.colorScheme.onSurface
+                                                  .withValues(alpha: 0.5),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  Text(
+                                    '₦${item.lineTotal.toStringAsFixed(0)}',
+                                    style: theme.textTheme.labelMedium,
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: AppSpacing.sm),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Text(item.product.name,
-                                        style: theme.textTheme.bodyMedium),
-                                    if (item.optionsSummary.isNotEmpty)
-                                      Text(
-                                        item.optionsSummary,
-                                        style: theme.textTheme.labelSmall
-                                            ?.copyWith(
-                                          color: theme
-                                              .colorScheme.onSurface
-                                              .withValues(alpha: 0.5),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                              Text(
-                                '₦${item.lineTotal.toStringAsFixed(0)}',
-                                style: theme.textTheme.labelMedium,
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
                       if (vendorGroups[vi].packFee > 0)
                         Padding(
-                          padding:
-                              const EdgeInsets.only(top: AppSpacing.xs),
+                          padding: const EdgeInsets.only(top: AppSpacing.xs),
                           child: Row(
-                            mainAxisAlignment:
-                                MainAxisAlignment.spaceBetween,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
                                 '${vendorGroups[vi].packCount} pack${vendorGroups[vi].packCount > 1 ? 's' : ''}',
@@ -415,8 +315,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Subtotal',
-                            style: theme.textTheme.bodySmall),
+                        Text('Subtotal', style: theme.textTheme.bodySmall),
                         Text(
                           '₦${(cart.subtotal + cart.totalPackFee).toStringAsFixed(0)}',
                           style: theme.textTheme.labelMedium,
@@ -464,8 +363,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               // ── Delivery location dropdown ──────────────────────────
               if (!_isPickup) ...[
                 const SizedBox(height: AppSpacing.lg),
-                Text('Delivery location',
-                    style: theme.textTheme.titleSmall),
+                Text('Delivery location', style: theme.textTheme.titleSmall),
                 const SizedBox(height: AppSpacing.sm),
                 locationsAsync.when(
                   loading: () => const Center(
@@ -480,7 +378,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         ?.copyWith(color: AppColors.error),
                   ),
                   data: (locations) => DropdownButtonFormField<String>(
-                    value: _selectedLocation?.id,
+                    initialValue: _selectedLocation?.id,
+                    isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'Where should we deliver?',
                     ),
@@ -504,7 +403,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         v == null ? 'Select a delivery location' : null,
                   ),
                 ),
-
                 const SizedBox(height: AppSpacing.md),
                 AppTextField(
                   controller: _locationDetailsController,
@@ -513,6 +411,21 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   validator: (v) => (v == null || v.trim().isEmpty)
                       ? 'Describe exactly where to deliver'
                       : null,
+                ),
+              ],
+
+              // ── Send as a gift (food delivery only) ─────────────────
+              if (!_isPickup) ...[
+                const SizedBox(height: AppSpacing.md),
+                GiftSection(
+                  enabled: _giftOn,
+                  recipient: _giftRecipient,
+                  messageController: _giftMessageController,
+                  onEnabledChanged: (v) => setState(() {
+                    _giftOn = v;
+                    if (!v) _giftRecipient = null;
+                  }),
+                  onRecipientChanged: (r) => setState(() => _giftRecipient = r),
                 ),
               ],
 
@@ -579,15 +492,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       )
                     else ...[
                       _TotalRow(
-                        label: 'Commitment fee (delivery)',
-                        value:
-                            '₦${totalDeliveryFee.toStringAsFixed(0)}',
+                        label: 'Delivery fees',
+                        value: '₦${totalDeliveryFee.toStringAsFixed(0)}',
                         bold: true,
                         theme: theme,
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Food cost is paid after items are confirmed.',
+                        'A small service charge is added on the next page. Food is paid after the rider confirms the price.',
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: theme.colorScheme.onSurface
                               .withValues(alpha: 0.5),
@@ -649,17 +561,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                                     ref
                                         .read(shellTabRequestProvider.notifier)
                                         .state = _studentWalletTabIndex;
-                                    Navigator.of(context).popUntil(
-                                        (route) => route.isFirst);
+                                    Navigator.of(context)
+                                        .popUntil((route) => route.isFirst);
                                   },
                                   child: Text(
                                     'Top up your wallet →',
-                                    style: theme.textTheme.bodySmall
-                                        ?.copyWith(
+                                    style: theme.textTheme.bodySmall?.copyWith(
                                       color: AppColors.error,
                                       fontWeight: FontWeight.w600,
-                                      decoration:
-                                          TextDecoration.underline,
+                                      decoration: TextDecoration.underline,
                                     ),
                                   ),
                                 ),
@@ -678,7 +588,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           ),
         ),
       ),
-
       bottomNavigationBar: Padding(
         padding: EdgeInsets.fromLTRB(
           AppSpacing.screenGutter,
@@ -689,14 +598,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               AppSpacing.md,
         ),
         child: PrimaryButton(
-          label: _isPickup
-              ? 'Confirm Order  ₦${(cart.subtotal + cart.totalPackFee).toStringAsFixed(0)}'
-              : 'Place Order (₦${totalDeliveryFee.toStringAsFixed(0)} delivery fee)',
-          icon: _isPickup ? Icons.lock_outline : Icons.shopping_cart_checkout,
-          isLoading: orderState.isLoading || _isSubmitting,
-          onPressed: (hasSufficientBalance && !_isSubmitting)
-              ? _confirmOrder
-              : null,
+          label: 'Continue',
+          icon: Icons.arrow_forward,
+          isLoading: _isContinuing,
+          onPressed: _isContinuing ? null : _continue,
         ),
       ),
     );
@@ -732,8 +637,8 @@ class _ScheduleRow extends StatelessWidget {
         const Icon(Icons.schedule, size: 18),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
-          child: Text('Scheduled for $label',
-              style: theme.textTheme.bodyMedium),
+          child:
+              Text('Scheduled for $label', style: theme.textTheme.bodyMedium),
         ),
         IconButton(
           icon: const Icon(Icons.close, size: 18),
@@ -774,9 +679,7 @@ class _FulfillmentChoice extends StatelessWidget {
               : theme.colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(AppRadius.card),
           border: Border.all(
-            color: selected
-                ? theme.colorScheme.primary
-                : theme.dividerColor,
+            color: selected ? theme.colorScheme.primary : theme.dividerColor,
             width: selected ? 1.5 : 1,
           ),
         ),
@@ -826,11 +729,13 @@ class _TotalRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: bold
-                ? theme.textTheme.titleSmall
-                : theme.textTheme.bodyMedium,
+          Expanded(
+            child: Text(
+              label,
+              style: bold
+                  ? theme.textTheme.titleSmall
+                  : theme.textTheme.bodyMedium,
+            ),
           ),
           Text(
             value,
@@ -838,8 +743,7 @@ class _TotalRow extends StatelessWidget {
                     ? theme.textTheme.titleSmall
                     : theme.textTheme.labelMedium)
                 ?.copyWith(
-              color: valueColor ??
-                  (bold ? theme.colorScheme.primary : null),
+              color: valueColor ?? (bold ? theme.colorScheme.primary : null),
             ),
           ),
         ],

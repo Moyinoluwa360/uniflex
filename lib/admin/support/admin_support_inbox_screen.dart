@@ -7,10 +7,14 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
+import '../services/profile_basics.dart';
 import 'admin_support_chat_screen.dart';
+import '../../shared/widgets/inputs/app_text_field.dart';
 
 /// Admin support inbox — lists all student conversations, newest first.
-/// Filter chips: Open / Resolved / All.  Search by student name or nickname.
+/// Filter chips: Open / Resolved / All.  Each row shows the student's
+/// nickname as the main name with the full name underneath; search matches
+/// nickname, full name or phone.
 class AdminSupportInboxScreen extends ConsumerStatefulWidget {
   const AdminSupportInboxScreen({super.key});
 
@@ -23,8 +27,6 @@ class _AdminSupportInboxScreenState
     extends ConsumerState<AdminSupportInboxScreen> {
   _Filter _filter = _Filter.open;
   String _query = '';
-  // studentId → "nickname (fullName)" display string for search.
-  final Map<String, String> _names = {};
 
   @override
   Widget build(BuildContext context) {
@@ -42,9 +44,9 @@ class _AdminSupportInboxScreenState
               AppSpacing.screenGutter,
               0,
             ),
-            child: TextField(
+            child: AppTextField(
               decoration: InputDecoration(
-                hintText: 'Search by name…',
+                hintText: 'Search by name or phone…',
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(AppRadius.control),
@@ -53,7 +55,7 @@ class _AdminSupportInboxScreenState
                 filled: true,
                 isDense: true,
               ),
-              onChanged: (v) => setState(() => _query = v.toLowerCase()),
+              onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
             ),
           ),
 
@@ -84,18 +86,21 @@ class _AdminSupportInboxScreenState
           // ── List ────────────────────────────────────────────────────
           Expanded(
             child: convAsync.when(
-              loading: () =>
-                  const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => RetrySection(
                 message: 'Could not load conversations.',
-                onRetry: () =>
-                    ref.invalidate(allConversationsProvider),
+                onRetry: () => ref.invalidate(allConversationsProvider),
               ),
               data: (all) {
-                // Pre-load student names for search.
-                _loadNames(all);
+                // Names come from the admin-only profile function (Admin
+                // cannot read other users' profile rows directly).
+                final names = ref
+                        .watch(adminProfileBasicsProvider(
+                            profileIdsKey(all.map((c) => c.studentId))))
+                        .valueOrNull ??
+                    const <String, ProfileBasics>{};
 
-                final filtered = _applyFilter(all);
+                final filtered = _applyFilter(all, names);
 
                 if (filtered.isEmpty) {
                   return _EmptyState(filter: _filter);
@@ -110,6 +115,7 @@ class _AdminSupportInboxScreenState
                       const Divider(height: 1, indent: AppSpacing.screenGutter),
                   itemBuilder: (context, i) => _ConversationTile(
                     conversation: filtered[i],
+                    profile: names[filtered[i].studentId],
                     onTap: () => _openChat(filtered[i]),
                   ),
                 );
@@ -121,31 +127,19 @@ class _AdminSupportInboxScreenState
     );
   }
 
-  void _loadNames(List<SupportConversation> convs) {
-    final service = ref.read(supportChatServiceProvider);
-    for (final c in convs) {
-      if (!_names.containsKey(c.studentId)) {
-        service.fetchStudentProfile(c.studentId).then((p) {
-          if (!mounted || p == null) return;
-          final full = p['full_name'] as String? ?? '';
-          final nick = p['nickname'] as String? ?? '';
-          final display = nick.isNotEmpty ? '$nick $full' : full;
-          setState(() => _names[c.studentId] = display.toLowerCase());
-        });
-      }
-    }
-  }
-
-  List<SupportConversation> _applyFilter(List<SupportConversation> all) {
+  List<SupportConversation> _applyFilter(
+    List<SupportConversation> all,
+    Map<String, ProfileBasics> names,
+  ) {
     return all.where((c) {
       // Status filter.
       if (_filter == _Filter.open && !c.isOpen) return false;
       if (_filter == _Filter.resolved && !c.isResolved) return false;
       // Name / preview search.
       if (_query.isNotEmpty) {
-        final name = _names[c.studentId] ?? '';
+        final byName = names[c.studentId]?.matches(_query) ?? false;
         final preview = c.lastMessagePreview?.toLowerCase() ?? '';
-        if (!name.contains(_query) && !preview.contains(_query)) return false;
+        if (!byName && !preview.contains(_query)) return false;
       }
       return true;
     }).toList();
@@ -174,74 +168,79 @@ extension on _Filter {
 
 // ── Conversation tile ─────────────────────────────────────────────────────────
 
-class _ConversationTile extends ConsumerWidget {
+class _ConversationTile extends StatelessWidget {
   const _ConversationTile({
     required this.conversation,
+    required this.profile,
     required this.onTap,
   });
 
   final SupportConversation conversation;
+  final ProfileBasics? profile;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final conv = conversation;
     final hasUnread = conv.adminUnreadCount > 0;
+    final mainName = profile?.displayName('Student') ?? 'Student';
+    final fullName = profile?.secondaryName;
 
-    return FutureBuilder<Map<String, dynamic>?>(
-      future: ref
-          .read(supportChatServiceProvider)
-          .fetchStudentProfile(conv.studentId),
-      builder: (context, snap) {
-        final profile = snap.data;
-        final fullName = profile?['full_name'] as String? ?? '—';
-        final nickname = profile?['nickname'] as String?;
-
-        return ListTile(
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.screenGutter,
-            vertical: AppSpacing.xs,
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.screenGutter,
+        vertical: AppSpacing.xs,
+      ),
+      onTap: onTap,
+      leading: CircleAvatar(
+        backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.15),
+        child: Text(
+          _initials(mainName),
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.primary,
+            fontWeight: FontWeight.w700,
           ),
-          onTap: onTap,
-          leading: CircleAvatar(
-            backgroundColor:
-                theme.colorScheme.primary.withValues(alpha: 0.15),
+        ),
+      ),
+      title: Row(
+        children: [
+          Expanded(
             child: Text(
-              _initials(nickname ?? fullName),
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: theme.colorScheme.primary,
-                fontWeight: FontWeight.w700,
+              mainName,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: hasUnread ? FontWeight.w700 : FontWeight.w600,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          title: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  nickname != null ? '$nickname ($fullName)' : fullName,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight:
-                        hasUnread ? FontWeight.w700 : FontWeight.w500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+          if (conv.lastMessageAt != null)
+            Text(
+              _timeLabel(conv.lastMessageAt!),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: hasUnread
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                fontWeight: hasUnread ? FontWeight.w600 : FontWeight.normal,
               ),
-              if (conv.lastMessageAt != null)
-                Text(
-                  _timeLabel(conv.lastMessageAt!),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: hasUnread
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                    fontWeight:
-                        hasUnread ? FontWeight.w600 : FontWeight.normal,
-                  ),
-                ),
-            ],
-          ),
-          subtitle: Row(
+            ),
+        ],
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (fullName != null)
+            Text(
+              fullName,
+              key: const ValueKey('inbox-full-name'),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          Row(
             children: [
               Expanded(
                 child: Text(
@@ -250,8 +249,7 @@ class _ConversationTile extends ConsumerWidget {
                     color: hasUnread
                         ? theme.colorScheme.onSurface
                         : theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    fontWeight:
-                        hasUnread ? FontWeight.w500 : FontWeight.normal,
+                    fontWeight: hasUnread ? FontWeight.w500 : FontWeight.normal,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -260,8 +258,8 @@ class _ConversationTile extends ConsumerWidget {
               if (hasUnread)
                 Container(
                   margin: const EdgeInsets.only(left: AppSpacing.xs),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.primary,
                     borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -277,11 +275,10 @@ class _ConversationTile extends ConsumerWidget {
                 ),
               if (conv.isResolved)
                 Padding(
-                  padding:
-                      const EdgeInsets.only(left: AppSpacing.xs),
+                  padding: const EdgeInsets.only(left: AppSpacing.xs),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -289,7 +286,8 @@ class _ConversationTile extends ConsumerWidget {
                     child: Text(
                       'Resolved',
                       style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.5),
                         fontSize: 10,
                       ),
                     ),
@@ -297,13 +295,14 @@ class _ConversationTile extends ConsumerWidget {
                 ),
             ],
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
   String _initials(String name) {
-    final parts = name.trim().split(' ');
+    final parts = name.trim().split(' ').where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '?';
     if (parts.length == 1) return parts[0][0].toUpperCase();
     return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
   }

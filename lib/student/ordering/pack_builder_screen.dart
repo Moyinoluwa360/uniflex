@@ -71,8 +71,7 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
 
   bool _isPackEmpty(int packIndex) {
     final contents = _packContents[packIndex];
-    return contents.isEmpty ||
-        contents.values.every((qty) => qty == 0);
+    return contents.isEmpty || contents.values.every((qty) => qty == 0);
   }
 
   String? _emptyPackError() {
@@ -176,8 +175,8 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
                           : null,
                     ),
                     Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.lg),
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                       child: Text(
                         '$_packCount',
                         style: theme.textTheme.headlineLarge?.copyWith(
@@ -196,8 +195,7 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
                   '₦${widget.vendor.packPrice.toStringAsFixed(0)} per pack'
                   ' · Total: ₦${_totalPackFee.toStringAsFixed(0)}',
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurface
-                        .withValues(alpha: 0.6),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
               ],
@@ -249,8 +247,8 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
               decoration: BoxDecoration(
                 color: AppColors.orange.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(AppRadius.control),
-                border: Border.all(
-                    color: AppColors.orange.withValues(alpha: 0.3)),
+                border:
+                    Border.all(color: AppColors.orange.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -270,8 +268,8 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
                     onPressed: () => _setPackCount(_packCount + 1),
                     style: TextButton.styleFrom(
                       foregroundColor: AppColors.orange,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.sm),
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
                       visualDensity: VisualDensity.compact,
                     ),
                     child: const Text('Add pack'),
@@ -304,8 +302,7 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
                       children: _meals
                           .map((p) => _PackProductTile(
                                 product: p,
-                                quantity:
-                                    _packContents[_activePack][p.id] ?? 0,
+                                quantity: _packContents[_activePack][p.id] ?? 0,
                                 spoonsUsed: spoons,
                                 isMeal: true,
                                 onChanged: (qty) =>
@@ -326,17 +323,14 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
                     isExpanded: _expandedSubsection == 'proteins',
                     onTap: () => setState(() {
                       _expandedSubsection =
-                          _expandedSubsection == 'proteins'
-                              ? null
-                              : 'proteins';
+                          _expandedSubsection == 'proteins' ? null : 'proteins';
                     }),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: _proteins
                           .map((p) => _PackProductTile(
                                 product: p,
-                                quantity:
-                                    _packContents[_activePack][p.id] ?? 0,
+                                quantity: _packContents[_activePack][p.id] ?? 0,
                                 spoonsUsed: spoons,
                                 isMeal: false,
                                 onChanged: (qty) =>
@@ -445,8 +439,7 @@ class _PackProductTile extends StatelessWidget {
                   '₦${product.basePrice.toStringAsFixed(0)}'
                   '${isMeal ? ' · 1 spoon each' : ''}',
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface
-                        .withValues(alpha: 0.55),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
                   ),
                 ),
               ],
@@ -455,9 +448,7 @@ class _PackProductTile extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           if (quantity == 0)
             IconButton(
-              onPressed: atCapacity
-                  ? null
-                  : () => onChanged(1),
+              onPressed: atCapacity ? null : () => onChanged(1),
               icon: const Icon(Icons.add_circle_outline),
               color: atCapacity ? theme.disabledColor : AppColors.orange,
             )
@@ -467,9 +458,7 @@ class _PackProductTile extends StatelessWidget {
               min: 0,
               maxReached: isMeal && atCapacity && quantity > 0,
               onChanged: (v) {
-                if (isMeal &&
-                    v > quantity &&
-                    spoonsUsed >= kPackMealCapacity) {
+                if (isMeal && v > quantity && spoonsUsed >= kPackMealCapacity) {
                   return; // blocked
                 }
                 onChanged(v);
@@ -504,9 +493,7 @@ class _PackCountButton extends StatelessWidget {
         child: Icon(
           icon,
           size: 28,
-          color: enabled
-              ? theme.colorScheme.primary
-              : theme.disabledColor,
+          color: enabled ? theme.colorScheme.primary : theme.disabledColor,
         ),
       ),
     );
@@ -539,14 +526,12 @@ class _CountStepper extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
-            onPressed:
-                value > min ? () => onChanged(value - 1) : null,
+            onPressed: value > min ? () => onChanged(value - 1) : null,
             icon: const Icon(Icons.remove, size: 16),
             color: theme.colorScheme.primary,
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
-            constraints:
-                const BoxConstraints(minWidth: 32, minHeight: 32),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
           SizedBox(
             width: 24,
@@ -559,13 +544,10 @@ class _CountStepper extends StatelessWidget {
           IconButton(
             onPressed: maxReached ? null : () => onChanged(value + 1),
             icon: const Icon(Icons.add, size: 16),
-            color: maxReached
-                ? theme.disabledColor
-                : theme.colorScheme.primary,
+            color: maxReached ? theme.disabledColor : theme.colorScheme.primary,
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
-            constraints:
-                const BoxConstraints(minWidth: 32, minHeight: 32),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
         ],
       ),

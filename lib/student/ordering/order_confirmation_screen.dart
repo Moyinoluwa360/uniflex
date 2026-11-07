@@ -134,8 +134,7 @@ class OrderConfirmationScreen extends StatelessWidget {
                 label: 'Back to Home',
                 onPressed: () {
                   // Pop until we're back at the root (the shell)
-                  Navigator.of(context)
-                      .popUntil((route) => route.isFirst);
+                  Navigator.of(context).popUntil((route) => route.isFirst);
                 },
               ),
             ],

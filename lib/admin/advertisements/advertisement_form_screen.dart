@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/advertisement.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/utils/ad_link.dart';
+import '../../shared/utils/app_error_mapper.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/image_upload/image_upload_field.dart';
@@ -32,7 +34,6 @@ class _AdvertisementFormScreenState
 
   late bool _isDark;
   late bool _isActive;
-  late AdLinkType _linkType;
   String? _imageUrl;
   DateTime? _startsAt;
   DateTime? _endsAt;
@@ -49,14 +50,12 @@ class _AdvertisementFormScreenState
     _orderCtrl = TextEditingController(text: '${ad?.sortOrder ?? 0}');
     _isDark = ad?.isDark ?? false;
     _isActive = ad?.isActive ?? true;
-    // Map legacy vendor/wallet types to none — only none and url are
-    // valid going forward (SQL migration converts existing DB rows too).
-    _linkType = (ad?.linkType == AdLinkType.url) ? AdLinkType.url : AdLinkType.none;
     _imageUrl = ad?.imageUrl;
     _startsAt = ad?.startsAt;
     _endsAt = ad?.endsAt;
     _urlCtrl = TextEditingController(
-      text: ad?.linkType == AdLinkType.url ? (ad?.linkValue ?? '') : '',
+      // Existing ads keep their link; old vendor/wallet targets show empty.
+      text: ad?.webLink ?? '',
     );
   }
 
@@ -103,32 +102,33 @@ class _AdvertisementFormScreenState
     setState(() => _isSaving = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      // Auto-prepend https:// if the admin typed a bare domain.
-      String? linkValue;
-      if (_linkType == AdLinkType.url) {
-        var raw = _urlCtrl.text.trim();
-        if (raw.isNotEmpty && !raw.startsWith('http')) raw = 'https://$raw';
-        linkValue = raw.isEmpty ? null : raw;
-      }
+      // The link is optional. A bare domain gets https:// added; the
+      // validator already rejected anything that is not a web address.
+      final linkValue = normalizeAdLink(_urlCtrl.text);
 
       await ref.read(adminServiceProvider).upsertAdvertisement(
-        id: widget.existing?.id,
-        title: _titleCtrl.text.trim(),
-        subtitle: _subtitleCtrl.text.trim(),
-        isDark: _isDark,
-        isActive: _isActive,
-        sortOrder: int.tryParse(_orderCtrl.text.trim()) ?? 0,
-        imageUrl: _imageUrl,
-        linkType: _linkType,
-        linkValue: linkValue,
-        startsAt: _startsAt,
-        endsAt: _endsAt,
-      );
+            id: widget.existing?.id,
+            title: _titleCtrl.text.trim(),
+            subtitle: _subtitleCtrl.text.trim(),
+            isDark: _isDark,
+            isActive: _isActive,
+            sortOrder: int.tryParse(_orderCtrl.text.trim()) ?? 0,
+            imageUrl: _imageUrl,
+            linkType: linkValue == null ? AdLinkType.none : AdLinkType.url,
+            linkValue: linkValue,
+            startsAt: _startsAt,
+            endsAt: _endsAt,
+          );
 
       ref.invalidate(adminAdvertisementsProvider);
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Could not save: $e')));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Could not save the ad. ${AppErrorMapper.map(e)}'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -185,7 +185,9 @@ class _AdvertisementFormScreenState
               ImageUploadField(
                 initialUrl: _imageUrl,
                 cropToSquare: false,
-                hint: 'Recommended size: 1200 × 460 px (landscape, ~2.6:1 ratio).',
+                hint:
+                    'Recommended size: 1200 × 460 px (landscape, ~2.6:1 ratio). '
+                    'Students see the whole image when they tap the ad.',
                 uploadFn: ref.read(adminServiceProvider).uploadAdImage,
                 onChanged: (url) => setState(() => _imageUrl = url),
               ),
@@ -211,41 +213,24 @@ class _AdvertisementFormScreenState
               ),
 
               const SizedBox(height: AppSpacing.lg),
-              Text('Tapping the ad', style: theme.textTheme.titleSmall),
+              Text('Link (optional)', style: theme.textTheme.titleSmall),
               const SizedBox(height: AppSpacing.sm),
-              DropdownButtonFormField<AdLinkType>(
-                value: _linkType,
-                items: const [
-                  DropdownMenuItem(
-                      value: AdLinkType.none, child: Text('Does nothing')),
-                  DropdownMenuItem(
-                      value: AdLinkType.url, child: Text('Opens a website')),
-                ],
-                onChanged: (v) =>
-                    setState(() => _linkType = v ?? AdLinkType.none),
+              AppTextField(
+                key: const ValueKey('ad-link-field'),
+                controller: _urlCtrl,
+                hint: 'example.com or https://example.com',
+                keyboardType: TextInputType.url,
+                validator: validateAdLink,
               ),
-
-              if (_linkType == AdLinkType.url) ...[
-                const SizedBox(height: AppSpacing.md),
-                AppTextField(
-                  controller: _urlCtrl,
-                  label: 'Website link',
-                  hint: 'https://example.com',
-                  keyboardType: TextInputType.url,
-                  validator: (v) {
-                    final raw = (v ?? '').trim();
-                    if (raw.isEmpty) return 'Enter a link';
-                    // Accept bare domains — https:// is auto-prepended on save.
-                    final toCheck =
-                        raw.startsWith('http') ? raw : 'https://$raw';
-                    final uri = Uri.tryParse(toCheck);
-                    if (uri == null || uri.host.isEmpty) {
-                      return 'Enter a valid web address';
-                    }
-                    return null;
-                  },
+              const SizedBox(height: 4),
+              Text(
+                'Tapping an ad shows the full image in a popup. If you add a '
+                'link, the popup gets a "Visit" button that opens it in the '
+                'browser. Leave empty for no button.',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
-              ],
+              ),
 
               const SizedBox(height: AppSpacing.lg),
               Text('Schedule (optional)', style: theme.textTheme.titleSmall),
@@ -347,8 +332,7 @@ class _AdPreview extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (hasImage)
-              AppImage(url: imageUrl, fit: BoxFit.cover),
+            if (hasImage) AppImage(url: imageUrl, fit: BoxFit.cover),
             if (hasImage)
               DecoratedBox(
                 decoration: BoxDecoration(

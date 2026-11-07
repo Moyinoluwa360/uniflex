@@ -3,29 +3,32 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../shared/models/delivery_group.dart';
+import '../../shared/order_breakdown/order_breakdown_widget.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/utils/app_error_mapper.dart';
-import '../../shared/widgets/accordions/app_accordion_card.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
-import '../pool/pool_group.dart';
 import '../services/rider_providers.dart';
 import '../services/rider_service.dart';
+import 'delivery_complete_screen.dart';
+import 'rider_job.dart';
+import '../../shared/widgets/inputs/app_text_field.dart';
 
 class FoodJobScreen extends ConsumerStatefulWidget {
-  /// Open in preview mode (from pool — group not yet accepted).
-  FoodJobScreen.fromPool({super.key, required this.poolGroup})
-      : groupId = poolGroup!.group.id,
+  /// Open in preview mode (from the pool — not yet accepted).
+  FoodJobScreen.fromPool({super.key, required RiderJob job})
+      : groupId = job.id,
+        previewJob = job,
         isPreview = true;
 
-  /// Open as active job (group already accepted by this rider).
+  /// Open as an active job (already accepted by this rider).
   const FoodJobScreen.active({super.key, required this.groupId})
-      : poolGroup = null,
+      : previewJob = null,
         isPreview = false;
 
   final String groupId;
-  final PoolGroup? poolGroup;
+  final RiderJob? previewJob;
   final bool isPreview;
 
   @override
@@ -35,33 +38,11 @@ class FoodJobScreen extends ConsumerStatefulWidget {
 class _FoodJobScreenState extends ConsumerState<FoodJobScreen> {
   bool _isAccepting = false;
 
-  // Track which accordion is expanded (vendor index).
-  int? _expandedVendorIndex;
-
-  @override
-  void initState() {
-    super.initState();
-    if (!widget.isPreview) {
-      // Listen for terminal state and auto-pop.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _checkTerminalState();
-      });
-    }
-  }
-
-  void _checkTerminalState() {
-    final group = ref.read(groupDetailProvider(widget.groupId)).valueOrNull;
-    if (group != null && group.isTerminal) {
-      if (mounted) Navigator.of(context).pop();
-    }
-  }
-
   Future<void> _accept() async {
     setState(() => _isAccepting = true);
     try {
-      await ref
-          .read(riderServiceProvider)
-          .acceptDeliveryGroup(widget.groupId);
+      await ref.read(riderServiceProvider).acceptDeliveryGroup(widget.groupId);
+      ref.invalidate(riderStatsProvider);
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
@@ -70,6 +51,7 @@ class _FoodJobScreenState extends ConsumerState<FoodJobScreen> {
         );
       }
     } catch (e) {
+      debugPrint('[FoodJob] accept failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(AppErrorMapper.map(e))),
@@ -81,16 +63,15 @@ class _FoodJobScreenState extends ConsumerState<FoodJobScreen> {
   }
 
   Future<void> _showEnterPriceSheet({bool isCorrection = false}) async {
-    final customerAsync =
-        ref.read(groupCustomerInfoProvider(widget.groupId));
+    final customerAsync = ref.read(groupCustomerInfoProvider(widget.groupId));
     final customerName =
         customerAsync.valueOrNull?.displayName ?? 'the customer';
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-            top: Radius.circular(AppRadius.sheet)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
       ),
       builder: (ctx) => _EnterPriceSheet(
         groupId: widget.groupId,
@@ -101,34 +82,44 @@ class _FoodJobScreenState extends ConsumerState<FoodJobScreen> {
   }
 
   Future<void> _showDeliveryPinSheet() async {
-    await showModalBottomSheet(
+    final ok = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-            top: Radius.circular(AppRadius.sheet)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
       ),
       builder: (ctx) => _DeliveryPinSheet(groupId: widget.groupId),
+    );
+    if (ok == true && mounted) {
+      // Server stamped completed_at; show the summary instead of vanishing.
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => DeliveryCompleteScreen(jobId: widget.groupId),
+        ),
+      );
+    }
+  }
+
+  Widget _itemsSection(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Order items',
+            style: theme.textTheme.labelLarge
+                ?.copyWith(fontWeight: FontWeight.w700)),
+        const SizedBox(height: AppSpacing.sm),
+        OrderBreakdown(orderId: widget.groupId),
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final itemsAsync = ref.watch(groupItemsProvider(widget.groupId));
 
     if (!widget.isPreview) {
       final groupAsync = ref.watch(groupDetailProvider(widget.groupId));
-
-      // Auto-pop on terminal state.
-      groupAsync.whenData((group) {
-        if (group != null && group.isTerminal) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) Navigator.of(context).pop();
-          });
-        }
-      });
-
       final customerAsync =
           ref.watch(groupCustomerInfoProvider(widget.groupId));
 
@@ -139,18 +130,20 @@ class _FoodJobScreenState extends ConsumerState<FoodJobScreen> {
         ),
         body: groupAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => RetrySection(
-            message: 'Could not load job details.',
-            onRetry: () {
-              ref.invalidate(groupDetailProvider(widget.groupId));
-            },
-          ),
+          error: (e, _) {
+            debugPrint('[FoodJob] group load error: $e');
+            return RetrySection(
+              message: 'Could not load job details.',
+              onRetry: () =>
+                  ref.invalidate(groupDetailProvider(widget.groupId)),
+            );
+          },
           data: (g) {
             if (g == null) {
-              return const Center(child: CircularProgressIndicator());
+              return _NotFoundView(onBack: () => Navigator.of(context).pop());
             }
 
-            // Cancelled by student.
+            // Cancelled by the student after the final price was sent.
             if (g.status == DeliveryGroupStatus.cancelled &&
                 g.cancelledByStudent) {
               return _CancelledByStudentView(
@@ -169,11 +162,14 @@ class _FoodJobScreenState extends ConsumerState<FoodJobScreen> {
                       AppSpacing.xl,
                     ),
                     children: [
-                      // Status stepper.
                       _StatusStepper(status: g.status),
                       const SizedBox(height: AppSpacing.lg),
-
-                      // Customer card.
+                      _InfoCard(
+                        icon: Icons.tag,
+                        label: 'Order ID',
+                        value: '#${g.id.substring(0, 8).toUpperCase()}',
+                      ),
+                      const SizedBox(height: AppSpacing.md),
                       customerAsync.when(
                         loading: () => const _CustomerCardShimmer(),
                         error: (e, _) => RetrySection(
@@ -182,23 +178,18 @@ class _FoodJobScreenState extends ConsumerState<FoodJobScreen> {
                           onRetry: () => ref.invalidate(
                               groupCustomerInfoProvider(widget.groupId)),
                         ),
-                        data: (info) => _CustomerCard(info: info),
+                        data: (info) => RiderCustomerCard(info: info),
                       ),
                       const SizedBox(height: AppSpacing.md),
-
-                      // Vendor breakdown.
-                      _buildVendorSection(theme, itemsAsync),
+                      _itemsSection(theme),
                       const SizedBox(height: AppSpacing.md),
-
-                      // Drop-off location.
                       _InfoCard(
                         icon: Icons.location_on_outlined,
                         label: 'Drop-off',
                         value: g.deliveryLocation ?? '—',
                       ),
-
-                      // Student note.
-                      if (g.studentNote != null) ...[
+                      if (g.studentNote != null &&
+                          g.studentNote!.trim().isNotEmpty) ...[
                         const SizedBox(height: AppSpacing.sm),
                         _InfoCard(
                           icon: Icons.sticky_note_2_outlined,
@@ -223,10 +214,8 @@ class _FoodJobScreenState extends ConsumerState<FoodJobScreen> {
       );
     }
 
-    // ── Preview mode (from pool) ──────────────────────────────────────
-    final poolGroup = widget.poolGroup!;
-    final group = poolGroup.group;
-
+    // ── Preview mode (from the pool) ──────────────────────────────────
+    final job = widget.previewJob!;
     return Scaffold(
       appBar: UniflexAppBar(
         title: 'Job Details',
@@ -243,36 +232,34 @@ class _FoodJobScreenState extends ConsumerState<FoodJobScreen> {
                 AppSpacing.xl,
               ),
               children: [
-                // Vendor breakdown.
-                _buildVendorSection(theme, itemsAsync),
+                if (job.isGift) ...[
+                  const _InfoCard(
+                    icon: Icons.card_giftcard_outlined,
+                    label: 'GIFT',
+                    value: 'Paid by one student, delivered to another. '
+                        'You see both contacts after you accept.',
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                ],
+                _itemsSection(theme),
                 const SizedBox(height: AppSpacing.md),
-
-                // Drop-off location.
                 _InfoCard(
                   icon: Icons.location_on_outlined,
                   label: 'Drop-off',
-                  value: group.deliveryLocation ?? '—',
+                  value: job.deliveryLocation ?? '—',
                 ),
-
-                // Student note.
-                if (group.studentNote != null) ...[
+                if (job.studentNote != null &&
+                    job.studentNote!.trim().isNotEmpty) ...[
                   const SizedBox(height: AppSpacing.sm),
                   _InfoCard(
                     icon: Icons.sticky_note_2_outlined,
                     label: 'Note',
-                    value: group.studentNote!,
+                    value: job.studentNote!,
                   ),
                 ],
-
-                const SizedBox(height: AppSpacing.lg),
-
-                // Total section.
-                _TotalSection(poolGroup: poolGroup),
               ],
             ),
           ),
-
-          // Accept button.
           Padding(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.screenGutter,
@@ -302,72 +289,34 @@ class _FoodJobScreenState extends ConsumerState<FoodJobScreen> {
       ),
     );
   }
+}
 
-  Widget _buildVendorSection(
-      ThemeData theme, AsyncValue<List<GroupVendorItems>> itemsAsync) {
-    return itemsAsync.when(
-      loading: () => const _VendorShimmer(),
-      error: (e, _) => RetrySection(
-        message: 'Could not load item details.',
-        onRetry: () => ref.invalidate(groupItemsProvider(widget.groupId)),
-      ),
-      data: (vendors) {
-        if (vendors.isEmpty) {
-          return const SizedBox.shrink();
-        }
+/// Shown instead of an endless spinner when the job cannot be found.
+class _NotFoundView extends StatelessWidget {
+  const _NotFoundView({required this.onBack});
 
-        // Single vendor: flat list.
-        if (vendors.length == 1) {
-          return _VendorItemsBlock(
-            vendor: vendors.first,
-            isFlat: true,
-          );
-        }
+  final VoidCallback onBack;
 
-        // Multiple vendors: accordions (all closed initially).
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.screenGutter),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'Vendors (${vendors.length})',
-              style: theme.textTheme.labelLarge?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            ...List.generate(vendors.length, (i) {
-              final vendor = vendors[i];
-              final isExpanded = _expandedVendorIndex == i;
-              final totalItems = vendor.items.length +
-                  vendor.packs.fold<int>(
-                      0, (sum, p) => sum + p.items.length);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: AppAccordionCard(
-                  leading: buildAccordionLeadingIcon(
-                    context: context,
-                    icon: Icons.storefront_outlined,
-                    color: AppColors.emerald,
-                  ),
-                  title: vendor.vendorName,
-                  subtitle: vendor.vendorLocation ??
-                      '$totalItems item${totalItems == 1 ? '' : 's'}',
-                  isExpanded: isExpanded,
-                  onTap: () => setState(() {
-                    _expandedVendorIndex = isExpanded ? null : i;
-                  }),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
-                        vertical: AppSpacing.sm),
-                    child: _VendorItemsContent(vendor: vendor),
-                  ),
-                ),
-              );
-            }),
+            Icon(Icons.search_off,
+                size: 40,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.4)),
+            const SizedBox(height: AppSpacing.md),
+            Text('This job is no longer available.',
+                style: theme.textTheme.titleSmall, textAlign: TextAlign.center),
+            const SizedBox(height: AppSpacing.lg),
+            OutlinedButton(onPressed: onBack, child: const Text('Go back')),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
 }
@@ -381,8 +330,8 @@ class _FoodBadgeChip extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(right: AppSpacing.md),
       child: Container(
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.sm, vertical: 3),
+        padding:
+            const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 3),
         decoration: BoxDecoration(
           color: AppColors.emerald.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -430,8 +379,7 @@ class _StatusStepper extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.emerald.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(
-            color: AppColors.emerald.withValues(alpha: 0.2)),
+        border: Border.all(color: AppColors.emerald.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: List.generate(_steps.length * 2 - 1, (i) {
@@ -489,10 +437,8 @@ class _StatusStepper extends StatelessWidget {
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: isDone || isCurrent
                         ? AppColors.emerald
-                        : theme.colorScheme.onSurface
-                            .withValues(alpha: 0.4),
-                    fontWeight:
-                        isCurrent ? FontWeight.w700 : FontWeight.normal,
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                    fontWeight: isCurrent ? FontWeight.w700 : FontWeight.normal,
                     fontSize: 10,
                   ),
                   textAlign: TextAlign.center,
@@ -508,10 +454,84 @@ class _StatusStepper extends StatelessWidget {
 
 // ── Customer card ─────────────────────────────────────────────────────────────
 
-class _CustomerCard extends StatelessWidget {
-  const _CustomerCard({required this.info});
+/// The accepted rider's view of who they are serving. A gift shows two
+/// cards ("Deliver to" + "Paid by"), each with Call and WhatsApp.
+class RiderCustomerCard extends StatelessWidget {
+  const RiderCustomerCard({super.key, required this.info});
 
   final GroupCustomerInfo info;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!info.isGift) {
+      return _ContactCard(
+        label: 'Customer',
+        fullName: info.fullName,
+        nickname: info.nickname,
+        email: info.email,
+        locationDetails: info.locationDetails,
+        phone: info.phone,
+      );
+    }
+    // Gift: the food goes to the recipient, the sender paid. Both can be
+    // contacted (rider already accepted — the server refuses before that).
+    final to = info.giftRecipient!;
+    final by = info.giftSender;
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _ContactCard(
+          key: const ValueKey('deliver-to-card'),
+          label: 'Deliver to',
+          fullName: to.fullName,
+          nickname: to.nickname,
+          email: to.email,
+          locationDetails: to.locationDetails ?? info.locationDetails,
+          phone: to.phone,
+        ),
+        if (by != null) ...[
+          const SizedBox(height: AppSpacing.md),
+          _ContactCard(
+            key: const ValueKey('paid-by-card'),
+            label: 'Paid by',
+            fullName: by.fullName,
+            nickname: by.nickname,
+            email: by.email,
+            phone: by.phone,
+          ),
+        ],
+        const SizedBox(height: AppSpacing.sm),
+        Text(
+          'This is a gift. Ask ${to.nickname ?? to.fullName} for the '
+          'delivery PIN when you hand over the food.',
+          key: const ValueKey('gift-pin-note'),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ContactCard extends StatelessWidget {
+  const _ContactCard({
+    super.key,
+    required this.label,
+    required this.fullName,
+    this.nickname,
+    this.email,
+    this.locationDetails,
+    this.phone = '',
+  });
+
+  final String label;
+  final String fullName;
+  final String? nickname;
+  final String? email;
+  final String? locationDetails;
+  final String phone;
 
   void _callPhone(BuildContext context, String phone) async {
     final uri = Uri.parse('tel:$phone');
@@ -559,7 +579,7 @@ class _CustomerCard extends StatelessWidget {
                   size: 16, color: AppColors.emerald),
               const SizedBox(width: AppSpacing.sm),
               Text(
-                'Customer',
+                label,
                 style: theme.textTheme.labelMedium?.copyWith(
                   color: AppColors.emerald,
                   fontWeight: FontWeight.w600,
@@ -569,77 +589,75 @@ class _CustomerCard extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            info.fullName,
+            fullName,
             style: theme.textTheme.titleSmall
                 ?.copyWith(fontWeight: FontWeight.w700),
           ),
-          if (info.nickname != null) ...[
+          if (nickname != null) ...[
             const SizedBox(height: 2),
             Text(
-              '@${info.nickname}',
+              '@$nickname',
               style: theme.textTheme.bodySmall?.copyWith(
-                color:
-                    theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
               ),
             ),
           ],
-          if (info.email != null) ...[
+          if (email != null) ...[
             const SizedBox(height: 2),
             Text(
-              info.email!,
+              email!,
               style: theme.textTheme.bodySmall?.copyWith(
-                color:
-                    theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
               ),
             ),
           ],
-          if (info.locationDetails != null) ...[
+          if (locationDetails != null) ...[
             const SizedBox(height: AppSpacing.sm),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(Icons.info_outline,
                     size: 14,
-                    color: theme.colorScheme.onSurface
-                        .withValues(alpha: 0.5)),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    info.locationDetails!,
+                    locationDetails!,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface
-                          .withValues(alpha: 0.6),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                   ),
                 ),
               ],
             ),
           ],
-          const SizedBox(height: AppSpacing.md),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _callPhone(context, info.phone),
-                  icon: const Icon(Icons.phone_outlined, size: 16),
-                  label: const Text('Call'),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _openWhatsApp(context, info.phone),
-                  icon: const Icon(Icons.chat_outlined, size: 16),
-                  label: const Text('WhatsApp'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF25D366),
-                    side: const BorderSide(
-                        color: Color(0xFF25D366), width: 1),
+          if (phone.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _callPhone(context, phone),
+                    icon: const Icon(Icons.phone_outlined, size: 16),
+                    label: const Text('Call'),
                   ),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openWhatsApp(context, phone),
+                    icon: const Icon(Icons.chat_outlined, size: 16),
+                    label: const Text('WhatsApp'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF25D366),
+                      side:
+                          const BorderSide(color: Color(0xFF25D366), width: 1),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -656,255 +674,7 @@ class _CustomerCardShimmer extends StatelessWidget {
       height: 120,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppRadius.card),
-        color: theme.colorScheme.surfaceContainerHighest
-            .withValues(alpha: 0.4),
-      ),
-    );
-  }
-}
-
-// ── Vendor items block ────────────────────────────────────────────────────────
-
-class _VendorItemsBlock extends StatelessWidget {
-  const _VendorItemsBlock({
-    required this.vendor,
-    this.isFlat = false,
-  });
-
-  final GroupVendorItems vendor;
-  final bool isFlat;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: theme.dividerColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (isFlat) ...[
-            Row(
-              children: [
-                const Icon(Icons.storefront_outlined,
-                    size: 16, color: AppColors.emerald),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Text(
-                    vendor.vendorName,
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ],
-            ),
-            if (vendor.vendorLocation != null) ...[
-              const SizedBox(height: 2),
-              Padding(
-                padding:
-                    const EdgeInsets.only(left: AppSpacing.md + 8),
-                child: Text(
-                  vendor.vendorLocation!,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface
-                        .withValues(alpha: 0.5),
-                  ),
-                ),
-              ),
-            ],
-            const SizedBox(height: AppSpacing.md),
-          ],
-          _VendorItemsContent(vendor: vendor),
-        ],
-      ),
-    );
-  }
-}
-
-class _VendorItemsContent extends StatelessWidget {
-  const _VendorItemsContent({required this.vendor});
-
-  final GroupVendorItems vendor;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final sections = <Widget>[];
-
-    // Packs.
-    for (final pack in vendor.packs) {
-      sections.add(_SectionHeader(label: pack.label));
-      for (final item in pack.items) {
-        sections.add(_ItemRow(
-          name: item.productName,
-          qty: item.quantity,
-          price: null,
-        ));
-      }
-    }
-
-    // Food items (not in a pack).
-    final foodItems = vendor.foodItems;
-    if (foodItems.isNotEmpty) {
-      if (vendor.packs.isEmpty) {
-        sections.add(_SectionHeader(label: 'Items'));
-      }
-      for (final item in foodItems) {
-        sections.add(_ItemRow(
-          name: item.productName,
-          qty: item.quantity,
-          price: item.unitPrice,
-        ));
-      }
-    }
-
-    // Drinks.
-    final drinkItems = vendor.drinkItems;
-    if (drinkItems.isNotEmpty) {
-      sections.add(_SectionHeader(label: 'Drinks'));
-      for (final item in drinkItems) {
-        sections.add(_ItemRow(
-          name: item.productName,
-          qty: item.quantity,
-          price: item.unitPrice,
-        ));
-      }
-    }
-
-    // Others.
-    final otherItems = vendor.otherItems;
-    if (otherItems.isNotEmpty) {
-      sections.add(_SectionHeader(label: 'Others'));
-      for (final item in otherItems) {
-        sections.add(_ItemRow(
-          name: item.productName,
-          qty: item.quantity,
-          price: item.unitPrice,
-        ));
-      }
-    }
-
-    if (sections.isEmpty) {
-      return Text(
-        'No items',
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: sections,
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(
-          top: AppSpacing.sm, bottom: AppSpacing.xs),
-      child: Text(
-        label,
-        style: theme.textTheme.labelSmall?.copyWith(
-          fontWeight: FontWeight.w700,
-          color:
-              theme.colorScheme.onSurface.withValues(alpha: 0.6),
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
-}
-
-class _ItemRow extends StatelessWidget {
-  const _ItemRow({
-    required this.name,
-    required this.qty,
-    this.price,
-  });
-
-  final String name;
-  final int qty;
-  final double? price;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding:
-          const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-      child: Row(
-        children: [
-          Container(
-            width: 20,
-            height: 20,
-            decoration: BoxDecoration(
-              color: AppColors.emerald.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Center(
-              child: Text(
-                '$qty',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: AppColors.emerald,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Text(
-              name,
-              style: theme.textTheme.bodySmall,
-            ),
-          ),
-          if (price != null)
-            Text(
-              '₦${price!.toStringAsFixed(0)}',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurface
-                    .withValues(alpha: 0.6),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _VendorShimmer extends StatelessWidget {
-  const _VendorShimmer();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      children: List.generate(
-        3,
-        (_) => Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-          child: Container(
-            height: 48,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppRadius.card),
-              color: theme.colorScheme.surfaceContainerHighest
-                  .withValues(alpha: 0.4),
-            ),
-          ),
-        ),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
       ),
     );
   }
@@ -937,8 +707,7 @@ class _InfoCard extends StatelessWidget {
         children: [
           Icon(icon,
               size: 18,
-              color:
-                  theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
@@ -947,107 +716,13 @@ class _InfoCard extends StatelessWidget {
                 Text(
                   label,
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurface
-                        .withValues(alpha: 0.5),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(value, style: theme.textTheme.bodyMedium),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Total section (preview only) ──────────────────────────────────────────────
-
-class _TotalSection extends ConsumerWidget {
-  const _TotalSection({required this.poolGroup});
-
-  final PoolGroup poolGroup;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final group = poolGroup.group;
-
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.emerald.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border:
-            Border.all(color: AppColors.emerald.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Totals',
-            style: theme.textTheme.labelMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Pack fee',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface
-                        .withValues(alpha: 0.6),
-                  )),
-              Text(
-                '₦${group.commitmentFeeTotal.toStringAsFixed(0)}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface
-                      .withValues(alpha: 0.6),
-                ),
-              ),
-            ],
-          ),
-          if (group.finalAmount != null) ...[
-            const SizedBox(height: 4),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Items total',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface
-                          .withValues(alpha: 0.6),
-                    )),
-                Text(
-                  '₦${group.finalAmount!.toStringAsFixed(0)}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface
-                        .withValues(alpha: 0.6),
-                  ),
-                ),
-              ],
-            ),
-          ],
-          const Divider(height: AppSpacing.md),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Total',
-                style: theme.textTheme.labelLarge
-                    ?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              Text(
-                group.finalAmount != null
-                    ? '₦${(group.commitmentFeeTotal + group.finalAmount!).toStringAsFixed(0)}'
-                    : 'TBD after sourcing',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  color: AppColors.emerald,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
           ),
         ],
       ),
@@ -1169,8 +844,7 @@ class _BottomActionBar extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.cancel_outlined,
-                    color: AppColors.error),
+                const Icon(Icons.cancel_outlined, color: AppColors.error),
                 const SizedBox(width: AppSpacing.sm),
                 Text(
                   'Order cancelled',
@@ -1224,8 +898,7 @@ class _CancelledByStudentView extends StatelessWidget {
             Text(
               'This order was declined after you sent the final price.',
               style: theme.textTheme.bodyMedium?.copyWith(
-                color:
-                    theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
               ),
               textAlign: TextAlign.center,
             ),
@@ -1281,8 +954,7 @@ class _EnterPriceSheetState extends ConsumerState<_EnterPriceSheet> {
 
     if (amount > 500000) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Amount cannot exceed ₦500,000.')),
+        const SnackBar(content: Text('Amount cannot exceed ₦500,000.')),
       );
       return;
     }
@@ -1352,12 +1024,11 @@ class _EnterPriceSheetState extends ConsumerState<_EnterPriceSheet> {
           Text(
             'Enter the total amount you paid across all vendors.',
             style: theme.textTheme.bodyMedium?.copyWith(
-              color:
-                  theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
-          TextField(
+          AppTextField(
             controller: _controller,
             keyboardType: TextInputType.number,
             maxLength: 8,
@@ -1380,8 +1051,7 @@ class _EnterPriceSheetState extends ConsumerState<_EnterPriceSheet> {
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.pureWhite),
+                          strokeWidth: 2, color: AppColors.pureWhite),
                     )
                   : const Text('Send to customer'),
             ),
@@ -1400,8 +1070,7 @@ class _DeliveryPinSheet extends ConsumerStatefulWidget {
   final String groupId;
 
   @override
-  ConsumerState<_DeliveryPinSheet> createState() =>
-      _DeliveryPinSheetState();
+  ConsumerState<_DeliveryPinSheet> createState() => _DeliveryPinSheetState();
 }
 
 class _DeliveryPinSheetState extends ConsumerState<_DeliveryPinSheet> {
@@ -1418,8 +1087,7 @@ class _DeliveryPinSheetState extends ConsumerState<_DeliveryPinSheet> {
     final pin = _controller.text.trim().toUpperCase();
     if (pin.length != 4) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Please enter a 4-character PIN.')),
+        const SnackBar(content: Text('Please enter a 4-character PIN.')),
       );
       return;
     }
@@ -1430,10 +1098,7 @@ class _DeliveryPinSheetState extends ConsumerState<_DeliveryPinSheet> {
           .read(riderServiceProvider)
           .verifyGroupDelivery(widget.groupId, pin);
       ref.invalidate(riderStatsProvider);
-      if (mounted) {
-        Navigator.of(context).pop(); // close sheet
-        Navigator.of(context).pop(); // pop job screen
-      }
+      if (mounted) Navigator.of(context).pop(true); // job screen shows summary
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1468,12 +1133,11 @@ class _DeliveryPinSheetState extends ConsumerState<_DeliveryPinSheet> {
           Text(
             'Ask the customer for their 4-digit PIN.',
             style: theme.textTheme.bodyMedium?.copyWith(
-              color:
-                  theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
-          TextField(
+          AppTextField(
             controller: _controller,
             maxLength: 4,
             textCapitalization: TextCapitalization.characters,
@@ -1492,8 +1156,7 @@ class _DeliveryPinSheetState extends ConsumerState<_DeliveryPinSheet> {
               if (upper != v) {
                 _controller.value = _controller.value.copyWith(
                   text: upper,
-                  selection:
-                      TextSelection.collapsed(offset: upper.length),
+                  selection: TextSelection.collapsed(offset: upper.length),
                 );
               }
             },
@@ -1509,8 +1172,7 @@ class _DeliveryPinSheetState extends ConsumerState<_DeliveryPinSheet> {
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.pureWhite),
+                          strokeWidth: 2, color: AppColors.pureWhite),
                     )
                   : const Text('Confirm delivery'),
             ),

@@ -16,14 +16,17 @@ class BadgesScreen extends ConsumerWidget {
     'first_order',
     'ten_orders',
     'fifty_orders',
-    'first_referral',
-    'ten_referrals',
     'gifter',
     'silver_tier',
     'gold_tier',
     'platinum_tier',
     'birthday_bonus',
   ];
+
+  /// Referral badges are not shown to students any more (Pack 4C): referral
+  /// is handled through Admin, so nothing on the student side talks about
+  /// referral counts or goals.
+  static const _hiddenCodes = {'first_referral', 'ten_referrals'};
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -35,7 +38,9 @@ class BadgesScreen extends ConsumerWidget {
       body: badgesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Could not load: $e')),
-        data: (earned) {
+        data: (allEarned) {
+          final earned =
+              allEarned.where((a) => !_hiddenCodes.contains(a.code)).toList();
           final earnedCodes = earned.map((a) => a.code).toSet();
           final earnedCount = earnedCodes.length;
 
@@ -53,11 +58,9 @@ class BadgesScreen extends ConsumerWidget {
                         padding: const EdgeInsets.all(AppSpacing.md),
                         decoration: BoxDecoration(
                           color: AppColors.emerald.withValues(alpha: 0.08),
-                          borderRadius:
-                              BorderRadius.circular(AppRadius.card),
+                          borderRadius: BorderRadius.circular(AppRadius.card),
                           border: Border.all(
-                              color:
-                                  AppColors.emerald.withValues(alpha: 0.3)),
+                              color: AppColors.emerald.withValues(alpha: 0.3)),
                         ),
                         child: Row(
                           children: [
@@ -110,8 +113,7 @@ class BadgesScreen extends ConsumerWidget {
                   AppSpacing.xl,
                 ),
                 sliver: SliverGrid(
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
                     childAspectRatio: 1.3,
                     crossAxisSpacing: AppSpacing.sm,
@@ -147,22 +149,8 @@ class BadgesScreen extends ConsumerWidget {
       'description': 'Place your first order'
     },
     'ten_orders': {'name': 'Regular', 'description': 'Place 10 orders'},
-    'fifty_orders': {
-      'name': 'Super Regular',
-      'description': 'Place 50 orders'
-    },
-    'first_referral': {
-      'name': 'Connector',
-      'description': 'Refer your first friend'
-    },
-    'ten_referrals': {
-      'name': 'Ambassador',
-      'description': 'Refer 10 friends'
-    },
-    'gifter': {
-      'name': 'Gifter',
-      'description': 'Send your first food gift'
-    },
+    'fifty_orders': {'name': 'Super Regular', 'description': 'Place 50 orders'},
+    'gifter': {'name': 'Gifter', 'description': 'Send your first food gift'},
     'silver_tier': {
       'name': 'Silver Member',
       'description': 'Reach Silver tier (₦5,000+)'
@@ -219,8 +207,7 @@ class _BadgeChip extends StatelessWidget {
           children: [
             Icon(Icons.emoji_events,
                 size: 16,
-                color:
-                    earned ? AppColors.emerald : theme.colorScheme.outline),
+                color: earned ? AppColors.emerald : theme.colorScheme.outline),
             const SizedBox(width: 4),
             Text(
               name,
@@ -262,14 +249,12 @@ class _UnearnedBadgeTile extends StatelessWidget {
         children: [
           Icon(Icons.lock_outline,
               size: 24,
-              color:
-                  theme.colorScheme.onSurface.withValues(alpha: 0.25)),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.25)),
           const SizedBox(height: 4),
           Text(
             name,
             style: theme.textTheme.labelSmall?.copyWith(
-              color:
-                  theme.colorScheme.onSurface.withValues(alpha: 0.4),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
               fontWeight: FontWeight.w600,
             ),
             textAlign: TextAlign.center,
@@ -279,8 +264,7 @@ class _UnearnedBadgeTile extends StatelessWidget {
           Text(
             description,
             style: theme.textTheme.bodySmall?.copyWith(
-              color:
-                  theme.colorScheme.onSurface.withValues(alpha: 0.3),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
               fontSize: 10,
             ),
             textAlign: TextAlign.center,

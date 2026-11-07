@@ -2,6 +2,484 @@
 
 All notable changes to this project are documented here, phase by phase.
 
+## Pack 6 — Food gifting ("Send as a gift") + stuck text-selection fix (2026-11-07)
+
+Last of the five packs. A gift is a normal food delivery order with a different
+recipient — no new order system or payment flow. **Applied to live 2026-11-07:**
+`pack_6.sql` run, `pack_6_test.sql` on live = 61/61 pass (rolled back; no leftover
+gift rows or lookups). No Edge Function redeploy needed.
+
+### What the old Gift feature did (and what happened to it)
+`Profile → Send a Gift` opened a two-tab screen (Send Gift / History). The send
+tab looked a student up by **matric number** and called the `send_gift` RPC,
+which took a vendor, a client-supplied item list and a client-supplied
+`total_amount`, debited the sender's wallet and made a normal order in the
+recipient's name; History read `get_gifts()`. Problems: it trusted a
+client-sent price, used matric numbers for lookup, and the recipient had no
+dedicated view. **Removed:** the menu entry, `GiftScreen`, `Gift` model,
+`giftsProvider`, `StudentService.sendGift/getGifts`. **Left unused in the
+database (nothing deleted):** `gifts` table, `get_gifts()`, `send_gift()`
+(execute revoked from clients), `orders.gifted_by`.
+
+### Added
+- `supabase/pack_6.sql` (one additive block, safe to run once; ordering inside it:
+  columns → tables/RLS/realtime → helpers → lookup → publish → create → sync trigger
+  → rider/pool functions → revokes) and `supabase/pack_6_test.sql` (rolled-back).
+- Sender: "Send as a gift" at checkout (delivery only), recipient by registration
+  email → Find → nickname + masked email → Change; optional message ≤ 200.
+- Recipient: notifications (in-app + push) on gift / on its way / delivered /
+  cancelled; Orders cards "Gift from <nickname>"; `GiftReceivedScreen` with live
+  status, message, items **without prices** and the delivery PIN; reads only the
+  `gift_deliveries` mirror table.
+- Profile → **Gifts** (Sent / Received tabs, empty states).
+- Rider: GIFT tag; after accepting, **Deliver to** + **Paid by** cards with
+  Call/WhatsApp; never matric numbers; nothing personal before accepting.
+- Admin: GIFT tag, sender (paid), recipient, message.
+- `OrderBreakdown` / `OrderBreakdownView` gain `showPrices: false`.
+- Friendly errors: `GIFT_SELF`, `GIFT_RECIPIENT_NOT_FOUND`, `GIFT_MESSAGE_TOO_LONG`.
+
+### Fixed — selection highlight stuck on screen (all text fields)
+Root cause: on phones Flutter does not unfocus a text field when you touch
+elsewhere, so it kept its highlight/handles/toolbar; the app never unfocused
+fields. `AppTextField` now unfocuses on tap-outside and collapses its selection
+on any focus loss; `AppScrollBehavior` dismisses on scroll-drag app-wide;
+`TapOutsideUnfocus` unfocuses on empty-screen taps; 18 raw fields moved onto
+`AppTextField` with unchanged looks (list in ARCHITECTURE.md).
+
+### Tests
+`test/pack_6_test.dart` (28 widget/unit tests). Full suite 316 pass; the 3
+`catalog_sections_test.dart` failures are the same stale ones as before.
+
+## Pack 5 — Sign-up rebuilt: 3 steps, account created only at the very end (2026-11-07)
+
+Do-only-5 pack. Orders, riders, Admin screens and gifting were not touched.
+**Applied to live 2026-11-07:** `pack_5.sql` run (46/46 checks pass on live,
+rolled back, no leftovers) and `signup` deployed; no-SMS smoke calls behave
+(taken email → 409, bad proof → 400, no code → 410). The phone unique index was
+skipped by its guard because two old test stubs share a verified phone; the
+prechecks still enforce it. Cleanup block NOT run. Real-SMS check still needs
+the two-phone list in BEFORE_YOU_BUILD §6.
+
+### Why the app stayed on step one although the SMS arrived
+
+Traced in code (`create_account_screen.dart` `_submit`, `auth_gate.dart`,
+`resume_otp_screen.dart`, `phone-otp/index.ts`) and against the live
+`otp_send_log`:
+
+1. The old Step One did a lot *before* it showed the code screen: `signUp`
+   (which also **signs the person in**), upsert a stub `profiles` row, fetch the
+   profile, then send the SMS — and navigation to the code screen was the very
+   last line, reached only after the Edge Function answered.
+2. Signing in fired the auth-state event; `currentProfileProvider` re-resolved
+   and `AuthGate` — still alive *underneath* the pushed sign-up route — swapped
+   to `ResumeOtpScreen`, whose `initState` **auto-sends another SMS**. Confirmed
+   in live data: two `otp_send_log` rows 32 ms apart for one brand-new account
+   (2026-11-01 03:35:33). Two texts, two different codes; the code screen only
+   knew the first.
+3. Nothing bounded the wait. The client call had no timeout; the function only
+   answers after Termii's reply plus a DB insert, and Termii hands the SMS to
+   the carrier *before* it replies — so a slow or lost reply means "SMS
+   arrived, spinner never ends". Any error after that point printed "Account
+   created, but the verification code could not be sent…" on step one. The
+   "already registered" retry path signed in and popped to the root and never
+   went to the code screen at all.
+
+**Not provable from here:** which of (2)/(3) fired on the reporter's phone —
+that needs the Edge Function logs or a device. The cause is the design
+(irreversible side effects and a session created *before* the SMS, navigation
+depending on a chain of calls and on provider state instead of on the send
+result); the rebuild removes all three: no session exists during steps 1–2,
+one SMS per tap (server reserves the send atomically), 25 s client timeout, and
+step 1 → 2 happens only on the server's "sent" answer.
+
+### New flow
+
+1. **Your details** — email, password, confirm, phone (`0803…` or `+234803…`).
+   The server checks email and phone are free **before any SMS**
+   (`EMAIL_TAKEN`, `EMAIL_STUCK`, `PHONE_TAKEN`), then sends; on any failure the
+   person stays here with a short message.
+2. **Verify phone** — masked number, 6-digit code, Resend disabled 60 s with a
+   countdown, "Change number" (back to step 1, everything filled; the new number
+   is re-checked and gets a fresh code; the old verification is discarded).
+   A correct code creates **no account** — the server returns a one-time
+   *proof* (random token, only its SHA-256 stored, tied to that phone, 30 min,
+   single use).
+3. **Final details** — nickname (live availability), full name, matric
+   (optional, live), school, DOB, referral (live), PIN + confirm. "Finish setup"
+   makes **one** server call that checks the proof, re-checks everything,
+   creates the auth user (email pre-confirmed) and — in one Postgres transaction —
+   profile, wallet, referral, hashed PIN; any failure rolls back and deletes the
+   auth user. The app then signs in and `AuthGate` shows the Student shell.
+
+Draft on the phone: step, fields, proof, last-send time in shared preferences;
+**password in the OS keystore only** (`flutter_secure_storage`); **PIN never
+stored**; expires 24 h after the last save; cleared on success / "Start over";
+"Create account" resumes at the saved step; proof expired at step 3 → back to
+step 2 with the rest kept; changing email/phone drops the proof.
+
+### Limits (all enforced in Postgres, keyed per phone / IP / device)
+
+60 s between sends to a number · 5 sends per number per 24 h · 20 sends/h per IP
+· 10 sends/h per device · 5 tries per code (and 40 verify calls/h per IP) ·
+40 availability checks per 10 min per IP · 15 sign-ups/h per IP · a failed
+Termii call is cancelled and never counts · codes expire after 10 min.
+
+### SQL — run order
+
+1. `supabase/pack_5.sql` (additive, safe to run once; re-run harmless): 2 new
+   tables (`signup_events`, `signup_phone_verifications`, RLS on, no client
+   grants), `pack5_*` functions (**service_role only** — anon/authenticated
+   cannot execute them), a partial unique index on verified phones (skipped with
+   a NOTICE if live already has duplicates).
+2. Optional checks: `pack_5_test.sql` (46 checks, rolled back),
+   `pack_5_legacy_accounts.sql` (read-only list of half-made accounts).
+3. **Never run without approval:** `pack_5_cleanup_DO_NOT_RUN_until_approved.sql`
+   (removes stuck stubs ≥ 14 days old with no orders and a zero wallet; it ends
+   in `ROLLBACK` so running it by accident changes nothing).
+
+### To go live (owner)
+
+- Run `pack_5.sql`, then `supabase functions deploy signup` (JWT verification
+  stays on; the app sends its anon key). Secret: `TERMII_API_KEY` (already set
+  for `phone-otp`; the same value is reused — nothing new to create).
+- `phone-otp` stays deployed (legacy half-made accounts use it).
+- Order matters: deploy SQL first, function second, then build the app.
+
+### Termii key
+
+Checked: the app never calls Termii and the key is not in the bundle (`.env`
+has only Supabase URL/anon key; `.env` is the only bundled asset). The key is an
+Edge Function secret only. Removed stale text that said otherwise (README
+"`TERMII_API_KEY` is required" and a `pubspec.yaml` comment). A plaintext
+Termii key exists in the **gitignored** `.env.tooling` / `.env.backup-preaudit`
+files on this PC — not tracked, not bundled; consider deleting them and
+rotating the key if the PC is shared.
+
+### Code
+
+- New: `lib/shared/auth/signup/` (`signup_draft`, `signup_api`,
+  `signup_flow_controller`, `signup_final_step`, `signup_widgets`),
+  `supabase/functions/signup/index.ts`, `supabase/pack_5*.sql`.
+- Rebuilt: `create_account_screen.dart` (host + step 1), `verify_phone_screen.dart`.
+- Removed: `AuthService.signUpWithEmail`, `ProfileService.createStubProfile`
+  (nothing may create an account or stub before the end now).
+- Changed: `AppErrorMapper` (sign-up refusals, timeouts), `auth_providers.dart`,
+  `pubspec.yaml` (+`flutter_secure_storage`).
+- Legacy kept working: `AuthGate`, `ResumeOtpScreen`, `CompleteProfileScreen`,
+  `phone-otp`, `complete_student_onboarding()`.
+
+### Tests
+
+`flutter analyze` clean. `test/pack_5_test.dart`: 45 pass (draft store, every
+step transition, resend cooldown, Change number, proof expiry, resume,
+friendly messages, and widget tests of the exact bug: SMS sent → code screen
+shown; send fails → stays on step 1). `supabase/pack_5_test.sql`: 46/46 pass
+on the local Postgres copy (refusals: no/expired/other-phone/reused proof,
+taken email/phone/nickname/matric; all-or-nothing with a forced late failure;
+every send/attempt limit; anon/authenticated cannot call anything). Full suite:
+288 pass, 3 fail — the same 3 stale `catalog_sections_test.dart` tests as before
+this pack. `widget_test.dart` was updated (`1 / 2` → `1 / 3`, mock prefs and
+in-memory secret store).
+
+**Not testable here:** the deployed Edge Function end to end (Termii, the auth
+admin API, HTTP statuses) and real SMS — needs the two-phone checklist in
+`BEFORE_YOU_BUILD.md` §6. I also could not re-probe the live database this
+session (the CLI's temporary login role returned 403), so live
+`auth.users` triggers and duplicate phone numbers were not checked; the SQL is
+written to cope with both (profile insert is an upsert; the unique index is
+guarded).
+
+### Decisions beyond the prompt
+
+- One Edge Function `signup` (actions `send`/`verify`/`complete`) instead of
+  two; `phone-otp` untouched.
+- Auth user via the admin API with a compensating delete, rather than writing
+  GoTrue's tables from SQL (fragile across versions).
+- A phone is "taken" only if **verified** on another account; an unverified
+  legacy stub does not block it. Side effect: legacy `phone-otp` can now refuse
+  to verify a number that is already verified elsewhere.
+- `TOO_SOON` at step 1 counts as "a code is on its way" and moves on.
+- Draft expiry counts from the last save; the app treats the proof as expired at
+  29 min. If the keystore loses the password, resume lands on step 1.
+- Step 2 system-back = Change number; step 3 back leaves and keeps the draft.
+- Lost reply on "Finish setup": retry gets `PROOF_USED`; the app tries to sign
+  in with the typed credentials and, if that works, treats it as created.
+- Availability checks for nickname / matric / referral use the existing
+  anon-callable RPCs, so those can still be probed one value at a time (as
+  before); email/phone checks are rate-limited server-side.
+- The unused `http` dependency was left in `pubspec.yaml`.
+
+## Pack 4C — Admin menu sections, support options & names, rider name, stats rebuilt, ads popup & carousel, referral cleanup (2026-11-07)
+
+Do-only-4C pack. Registration, gifting and the rider app were not touched.
+SQL: `supabase/pack_4c.sql` (additive, safe to run once; re-running is
+harmless). Edge Functions: none changed. Tests: `test/pack_4c_test.dart` (48),
+`supabase/pack_4c_test.sql` (33 checks, rolled back),
+`supabase/pack_4c_metric_check.sql` (raw tables vs dashboard function).
+
+### Fixed (root causes)
+
+- **Admin names blank / no rider name.** `profiles` RLS only lets a user read
+  their own row, so every Admin screen that read a student or rider profile
+  got nothing: blank names in the support inbox, "Unknown" riders in
+  analytics, and the order cards simply never looked the rider up (they only
+  tested `rider_id != null` and printed "Rider assigned"). New admin-only
+  function `admin_profile_basics(uuid[])` + `adminProfileBasicsProvider`.
+- **Menu sections disagreed.** Admin grouped by the old free-text `category`
+  (and mapped "Food" to Others) while students group by `section` /
+  `food_subsection`; the partner screen was a flat list; the partner
+  availability switch re-saved the item without its section. One
+  `VendorMenuManager` for Uniflex and every partner, grouped like students.
+- **Dashboard / analytics.** Still leg-based: Uniflex-only, UTC days,
+  `created_at` for completions, unpaid and cancelled mixed in, group items
+  missing, revenue = sum of leg totals (food + fees blurred), pending = only
+  placed/preparing, no live refresh. Rebuilt on one `_stat_entries()` (one row
+  per paid checkout, errands included, Africa/Lagos days, single
+  `completed_at`/`cancelled_at`); fees collected and food payments are two
+  separate numbers; the screens only render what the functions return.
+
+### Added
+
+- Admin menu: Meals / Proteins-Toppings / Drinks / Others, each with its own
+  "+ Add" (no category choice), availability, edit, remove, photo, vendor
+  pack price — same widget for Uniflex and partners.
+- Support: inbox rows + chat header show nickname with full name underneath;
+  search by nickname, full name or phone. Student Help & Support → Live chat
+  or WhatsApp (`wa.me`, prefilled "Hi, this is <nickname>." + short order id
+  from an order). Admin: Manage → Support settings (one WhatsApp number;
+  `0803…` / `+234803…` accepted; stored as international digits). No number →
+  WhatsApp hidden and live chat opens directly.
+- Order cards and details (deliveries and errands) show the rider's name once
+  accepted; "Waiting for rider" before.
+- Dashboard: Orders today, Pending / in progress, Completed today, Cancelled
+  today, Fees collected and Food payments (today / week / month). Analytics:
+  periods, completion rate, orders by status, top items, rider performance,
+  users. Refresh on tab open, pull-to-refresh, refresh button and when orders
+  change. `delivery_groups.final_paid_at` (stamped once by trigger; back-filled)
+  dates final food payments.
+- Ads: tapping any ad opens a centred rounded popup (whole image, X and
+  outside-tap close, "Visit" only when the ad has a link). Form: image + one
+  optional link (http/https, `https://` auto-added); "tap action" removed;
+  existing links kept. Carousel: auto-advance 5 s, 0.8 s slide, loops, pauses
+  while touched, dots; a single ad stays still.
+- Referral (student side): own code, amounts, counts, leaderboard and referral
+  badges removed. "Refer a student" says to contact Admin and opens Help &
+  Support. Registration and Admin referral codes unchanged.
+
+### Notes
+
+- Carousel bug caught by its test before release: starting an endless pager
+  at page 10000 showed ad `10000 % n`, not ad 0; it now starts on a multiple of
+  the ad count.
+- `dart fix --apply` was run so `flutter analyze` is clean (mechanical lint
+  fixes in a few untouched files).
+
+## Pack 4B — One order breakdown everywhere, rider app fixes, one-entry-per-checkout history (2026-11-07)
+
+Do-only-4B pack. Registration, gifting and the Admin menu/ads/analytics/support
+screens were not touched. Part B (old-logic audit) is a report only — see
+`PACK_4B_AUDIT.md`; nothing was removed.
+
+### Fixed (root causes)
+
+- **A1 "Could not load item details".** `get_group_items` aggregated
+  `jsonb_agg(vendor_row order by vendor_name)` — `vendor_row` is not a column
+  of the sub-select, so every call on a real group raised `column
+  "vendor_row" does not exist`. Riders have no SELECT policy on `order_items`
+  / `order_packs`, so there was no fallback; the screen swallowed the error
+  into the friendly message. Fix: `get_order_breakdown` (works before and
+  after accepting) and the provider now logs the real error in debug.
+- **A2 Admin "Pack 1 ₦0" + flat list; student vendor dropdown empty.**
+  `order_packs` never stored a price (only `orders.pack_fee` in total), so
+  Admin read `price` = null → ₦0, and listed items flat. The student screen
+  loaded the legs with `select()` only — no `order_items` — so each vendor
+  dropdown had nothing to show. Fix: `order_packs.price` (back-filled from
+  `pack_fee / pack_count`, set on insert) and ONE `get_order_breakdown` +
+  `OrderBreakdown` widget used by rider preview, rider active job, Admin and
+  student.
+- **A3 Rider Home "Active delivery" loads forever.** The Home banner opened a
+  legacy stub with an *order* id, which redirected to `FoodJobScreen.active`
+  keyed by a *group* id; the group lookup returned null and the screen showed
+  a spinner for that case forever. Also the Home list only knew errands. Fix:
+  null → "no longer available" view; Home "Active jobs" card from
+  `rider_active_jobs()`; the Jobs tab is pool-only.
+- **A4 three history entries / later group time.** History merged
+  `delivery_records` (one per vendor part) with the group → 3 rows for a
+  2-vendor delivery. The group had no completion time of its own, so screens
+  used generic `updated_at`/created times, which move on later writes, and
+  `DateTime.parse` UTC values were shown with their UTC hour. Fix: one
+  `completed_at`/`cancelled_at` (`timestamptz`) stamped once with the server
+  `now()` on group, parts and records in the PIN transaction (immutable
+  afterwards); all screens read it through `.toLocal()`.
+
+### Added
+
+- `supabase/pack_4b.sql`: `get_order_breakdown`, `rider_job_pool`,
+  `rider_active_jobs`, `rider_history`, `rider_history_item`, rewritten
+  `get_rider_stats` / `get_dashboard_stats` (count checkouts), job cap of 3
+  inside `accept_delivery_group` / `accept_order` (advisory lock +
+  `ACTIVE_JOB_LIMIT`), single-timestamp triggers, privacy of customer info
+  after a job ends.
+- Rider: Home "Active jobs" card + chooser, Active lists, "Delivery complete"
+  screen, read-only history details (no phone/email), "Cancelled by customer".
+- Student: "Delivered" card with the time on tracking.
+- Tests: `test/pack_4b_test.dart` (33 widget/unit tests),
+  `supabase/pack_4b_test.sql` (60 checks, rolled back).
+
+### Not done / decisions
+
+- Part B: report + unapplied `pack_4b_removal_PENDING_APPROVAL.sql`.
+- Finding for the owner: assigned riders can still read `delivery_pin` and fee
+  columns directly from the tables (RLS) — see `PACK_4B_AUDIT.md` #1.
+
+### Pack 4B follow-up — approved removals + rider lockdown (2026-11-07)
+
+- **Security:** an assigned rider could read `delivery_pin`, the fee columns
+  and a customer's other order data straight from `delivery_groups` /
+  `orders` (RLS allowed the row, and RLS cannot hide columns). Riders now have
+  **no** read policy on `delivery_groups`, `orders` or `errand_requests`. They
+  use `rider_job_pool / rider_active_jobs / rider_history(_item) /
+  rider_group_detail / get_order_breakdown / get_group_customer_info`. Live
+  refresh comes from `rider_job_signals` (ids only, riders-only read, pruned
+  hourly) plus a 45 s safety refetch.
+- **Removed (R1–R4, R7):** `get_group_items`, the sourcing / flag-item /
+  custom-item functions and tables, `cancel_delivery_group_before_accept`,
+  `any_riders_available`, `_delivery_fee_from_settings`, the
+  `check_group_ready` kitchen→group trigger (it could flip a group to
+  awaiting-payment with no rider or price), and `delivery_records` (verify
+  functions no longer write it). `pack_4b.sql` must not be re-run after this
+  (its back-fill reads `delivery_records`).
+- **R8:** `_after_order_placed` counts `total_orders` once per checkout. Old
+  counts were not rewritten.
+- **Kitchen queue** lists only pickup orders (no delivery parts); the
+  "Transfer to Rider" and rider-status UI were removed. `transfer_order_to_rider`
+  still exists in SQL, unused.
+- **Dart:** deleted the redirect stubs, `delivery_record`, `pool_group`,
+  `pool_order`, `adjust_order_screen`, `custom_order_item` and the custom-item
+  helpers. Student order list never shows a vendor part on its own.
+- Tests: SQL 69/69 (rider reads no table rows, PIN unreadable, students/admin
+  unaffected, counting, trigger gone); Dart 195 pass (+ same 3 old failures).
+- Not done: R9 (test accounts), `around` / standalone-food sourcing Dart branches.
+
+## Pack 4A — Payment-first checkout, ₦30 service charge, one notification pipeline, support chat repair, cart notice (2026-11-07)
+
+Do-only-4A pack. Rider screens, Admin screens (except the new Service charge
+page), registration and gifting were not touched.
+
+### Fixed (root causes)
+
+- **The checkout button created the order before it was paid.** "Place order"
+  called `placeMultiVendorOrder`, which wrote a `delivery_groups` row + one
+  `orders` leg per vendor (status `placed`, unpaid), **cleared the cart** and
+  invalidated the order providers — and only then opened the Commitment Fee
+  page, where paying finally moved the group to `commitment_paid` (the rider
+  pool). Nothing in Admin lists, the kitchen queue, student lists or analytics
+  filtered by payment status, so the unpaid legs showed up as a half-formed
+  order. Fix: the button is now **Continue** and only validates; the order is
+  created by a single paid RPC after PIN + debit. Backing out, a wrong PIN or
+  a low balance leave nothing behind and the cart intact.
+- **No notification when the rider sent the final price.** Order
+  notifications came only from client code (Kitchen/Rider screens calling
+  `notify-user` after a *standalone-order* status change, plus a local banner
+  in `StudentShell` while the app was open). The Fix Pack 2 delivery-group
+  flow (accept, set price, pay, decline, deliver) never called either, and
+  `notify-user` only understood `orders` ids. Fix: database triggers now write
+  the inbox row and a second trigger pushes it.
+- **Support chat: direct message and Admin reply failed; order attach showed
+  no chip.** `support_chat.sql` created `send_support_message(text, uuid,
+  uuid)`; `fix_pack_1.sql` then created `send_support_message(text, uuid,
+  uuid, uuid)` — a *second* function. Any call that omits `p_group_id`
+  (direct student message, Admin reply, order-only message) matches both, and
+  PostgREST answers "could not choose the best candidate function". Only the
+  group-attached call matched one overload, so it "went through" — and its
+  chip never showed because both bubbles looked at `order_id` only, never
+  `delivery_group_id`. (Reproduced on a real Postgres: `function
+  send_support_message(p_body => unknown) is not unique`.) Fix: `pack_4a.sql`
+  drops every overload and creates exactly one of each support function; both
+  bubbles show the chip for an order **or** a group; Admin taps it to open the
+  order.
+- **"Your cart was cleared…" appeared on a brand-new cart.** Not a persisted
+  flag: `CartNotifier._expiredOnLoad` was an in-memory flag set when a stale
+  saved cart was dropped at startup and **never reset**, and the provider
+  lives for the whole app session, so `CartScreen` re-showed the snackbar
+  every time it opened. Removed entirely; expired carts clear silently.
+- **First-time "Set PIN" was ambiguous.** Found while testing:
+  `set_transaction_pin` also existed twice, `(text)` and `(text, text
+  default null)`, so a call sending only `p_pin` could not resolve. The pack
+  keeps one. (Same bug class as the support chat.)
+
+### Added
+
+- **Payment page** (`CommitmentFeeScreen`, rebuilt on the shared
+  `runPaymentFlow`): each vendor's delivery fee as its own line, the service
+  charge once, the total, wallet balance with a top-up prompt. Pickup shows
+  the full food amount only.
+- **Three atomic RPCs** — `create_paid_delivery_order`,
+  `create_paid_pickup_order`, `create_paid_errand`. Each: idempotency check →
+  PIN → server-computed amounts → wallet lock + balance check → debit →
+  create everything. Idempotency via `order_payment_attempts` (one UUID per
+  payment page; a repeated key returns the existing order). The client sends
+  choices only (ids, quantities, pack allocation, location id); the errand fee
+  now comes from `errand_categories`, not the client.
+- **₦30 service charge**, admin-editable (`app_settings`, `get_service_charge`,
+  `admin_set_service_charge`), once per delivery/errand, never on pickup,
+  stored on each order. **Manage → Service charge** screen.
+- **Notification pipeline** — triggers on `delivery_groups` / `orders` /
+  `support_messages` → `queue_notification()` → `notifications` row →
+  `notifications_push` trigger → `push-notification` Edge Function. Events:
+  rider accepted, final price (and every change), customer paid, cancelled
+  by customer / by admin, delivered, ready for pickup, support messages.
+  Push taps (including a cold start and a merely-backgrounded app) route to
+  the right screen and mark the notification read; the in-app banner shows
+  without storing a duplicate. `notifications` gained `type`, `group_id`,
+  `conversation_id`.
+- **One-time cart notice**: "Your cart will be cleared 1 hour after your last
+  change." — first add to an empty cart only (`CartNoticeListener`).
+- Legacy unpaid orders are flagged `is_paid = false` and hidden by
+  RESTRICTIVE RLS (orders + delivery_groups) and the dashboard stats RPC;
+  `pack_4a_queries.sql` lists them and has an optional "mark cancelled".
+- `supabase/pack_4a.sql`, `pack_4a_test.sql` (76 checks, rolls back),
+  `pack_4a_queries.sql`; `functions/push-notification/`;
+  `test/pack_4a_test.dart` (24 tests).
+
+### Changed
+
+- `notify-user` no longer pushes by itself (the trigger does) and attaches
+  `group_id`; clients no longer call it for status changes
+  (`notifyOrderStatus` removed from `AdminService` / `RiderService`).
+- `StudentShell`'s order-status local-notification listener removed.
+- `get_dashboard_stats` ignores unpaid orders.
+- Checkout: location dropdown is `isExpanded`; total rows no longer overflow
+  on long vendor names.
+
+### Removed
+
+- Client: `placeFoodOrder`, `placeMultiVendorOrder`, `placePartnerFoodOrder`,
+  `placeErrandRequest(Staged)`, `OrderNotifier`/`OrderPlacementState`,
+  `MultiVendorOrderResult`, the old `CommitmentFeeScreen` modes, the dead
+  `errand_screen.dart`, and the "cart was cleared" snackbar.
+- Server (functions only, no data): `place_multi_vendor_order`,
+  `pay_group_commitment_fee`, `pay_commitment_fee`, `place_errand_order`,
+  `place_errand_with_payment`, `place_around_order`,
+  `place_around_with_payment`, `place_partner_food_order`,
+  `place_food_order_with_payment`.
+
+### Now unused (kept, nothing dropped)
+
+`delivery_groups` status `placed` for new rows, `pay_final_amount` /
+`confirm_sourced_items` (legacy single-order flow), Edge Function
+`support-notify` (replaced by `push-notification`), `notify-user`'s
+`order_status` mode, `delivery_settings` campus/hostel fee keys.
+
+### Known / not done here
+
+- Rider screens do not route push taps yet and there is no rider inbox
+  (rider notification rows are stored and pushed) — Pack 4B.
+- `send_gift` and `checkout_group_order` each exist as two overloads in the
+  repo's SQL history (same ambiguity risk); gifting was out of scope.
+- 3 tests in `test/catalog_sections_test.dart` fail on the commit before this
+  pack too (stale since the Round 8 accordion UI).
+
 ## Fix Pack 3 — Image Upload, Advertisements & Soft Delete (2026-11-05)
 
 ### Fixed

@@ -41,9 +41,10 @@ cp .env.example .env
 ```
 
 Then fill in real values in `.env` as each service is wired up.
-`SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `TERMII_API_KEY` are required as
-of Phase 1 (auth and phone OTP won't work without them); the rest can
-stay blank until their phase. Before testing sign-up/login against a
+`SUPABASE_URL` and `SUPABASE_ANON_KEY` are required (the app will not start
+without them); the rest can stay blank until their phase. The Termii key is
+NOT an app setting: it lives only as the `TERMII_API_KEY` secret on the
+`signup` and `phone-otp` Edge Functions and is never bundled in the app. Before testing sign-up/login against a
 real Supabase project, run `supabase/schema.sql` once in that project's
 SQL editor — see the comments at the top of that file. See
 `.env.example` for the full list of keys and what each is for.

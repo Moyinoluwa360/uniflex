@@ -1,3 +1,4 @@
+import '../utils/local_time.dart';
 import 'order_item.dart';
 
 /// Status of an order, mirroring the `status` check constraint on the
@@ -90,6 +91,8 @@ class Order {
     this.commitmentFeeAmount = 0,
     this.finalAmount,
     this.finalPaymentPaid = false,
+    this.completedAt,
+    this.cancelledAt,
   });
 
   factory Order.fromMap(Map<String, dynamic> map) {
@@ -100,7 +103,7 @@ class Order {
       source: map['source'] as String,
       type: map['type'] as String,
       totalAmount: (map['total_amount'] as num).toDouble(),
-      createdAt: DateTime.parse(map['created_at'] as String),
+      createdAt: DateTime.parse(map['created_at'] as String).toLocal(),
       vendorId: map['vendor_id'] as String?,
       vendorName: map['vendors'] != null
           ? (map['vendors'] as Map<String, dynamic>)['name'] as String?
@@ -129,6 +132,8 @@ class Order {
           (map['commitment_fee_amount'] as num?)?.toDouble() ?? 0,
       finalAmount: (map['final_amount'] as num?)?.toDouble(),
       finalPaymentPaid: map['final_payment_paid'] as bool? ?? false,
+      completedAt: parseServerTime(map['completed_at']),
+      cancelledAt: parseServerTime(map['cancelled_at']),
     );
   }
 
@@ -145,6 +150,12 @@ class Order {
 
   final double totalAmount;
   final DateTime createdAt;
+
+  /// Server time (now()) stamped ONCE when the order completed / was
+  /// cancelled, in the phone's local time. The only completion time anyone
+  /// should display.
+  final DateTime? completedAt;
+  final DateTime? cancelledAt;
   final String? vendorId;
   final String? vendorName;
 
@@ -213,7 +224,8 @@ class Order {
   bool get isFood => type == 'food';
   bool get isErrand => type == 'errand' || type == 'around';
   bool get isAround => isErrand;
-  bool get isForDelivery => deliveryType == 'delivery' ||
+  bool get isForDelivery =>
+      deliveryType == 'delivery' ||
       deliveryType == 'campus_delivery' ||
       deliveryType == 'hostel_delivery';
   bool get isScheduled => scheduledFor != null;
@@ -235,6 +247,8 @@ class Order {
       type: type,
       totalAmount: totalAmount,
       createdAt: createdAt,
+      completedAt: completedAt,
+      cancelledAt: cancelledAt,
       vendorId: vendorId,
       vendorName: vendorName,
       deliveryType: deliveryType,

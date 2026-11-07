@@ -1,269 +1,256 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/models/order.dart';
-import '../../shared/services/auth/auth_providers.dart';
-import '../../shared/utils/app_error_mapper.dart';
-import '../../shared/services/supabase/supabase_providers.dart';
+import '../../shared/services/saving_plan/saving_plan_providers.dart';
+import '../../shared/services/settings/service_charge_provider.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/utils/uuid_v4.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/buttons/secondary_button.dart';
-import '../../shared/widgets/pin/pin_entry_sheet.dart';
-import '../../shared/widgets/sheets/acknowledgment_sheet.dart';
+import '../../shared/widgets/navigation/app_bottom_nav_shell.dart';
+import '../../shared/widgets/payment/run_payment_flow.dart';
+import '../tracking/order_tracking_screen.dart';
+import 'cart_provider.dart';
+import 'checkout_draft.dart';
 import 'order_confirmation_screen.dart';
+import 'order_payment_repository.dart';
 import 'order_repository.dart';
 
-/// Commitment fee screen — supports two modes:
+const _studentWalletTabIndex = 2;
+
+/// The payment page (Pack 4A rebuild of the old "commitment fee" page).
 ///
-/// 1. **Delivery group** (Round 7): [groupId] + fee params provided.
-///    Calls `pay_group_commitment_fee` RPC.
-/// 2. **Single order** (Around/legacy): [order] provided.
-///    Calls `pay_commitment_fee` RPC.
+/// Shows the student exactly what they are about to pay:
+///   * delivery: each vendor's delivery fee as its own line, the service
+///     charge once, and the total;
+///   * pickup (Uniflex-only cart): the full food amount — no delivery fee,
+///     no service charge.
+///
+/// Paying runs the shared payment step ([runPaymentFlow]: note → PIN) and
+/// then makes ONE server call that verifies the PIN, computes every amount,
+/// debits the wallet and creates the whole order. Only after that call
+/// succeeds is the cart cleared. Backing out, a wrong PIN or an
+/// insufficient balance create nothing and leave the cart intact.
 class CommitmentFeeScreen extends ConsumerStatefulWidget {
-  /// Delivery group mode (Round 7/8 multi-vendor flow).
-  const CommitmentFeeScreen({
-    super.key,
-    required this.groupId,
-    required this.commitmentFeeTotal,
-    required this.vendorCount,
-  }) : order = null;
+  const CommitmentFeeScreen({super.key, required this.draft});
 
-  /// Single-order mode (Errand requests, legacy partner orders).
-  const CommitmentFeeScreen.forOrder({
-    super.key,
-    required this.order,
-  })  : groupId = null,
-       commitmentFeeTotal = 0,
-       vendorCount = 0;
-
-  // Delivery group mode params.
-  final String? groupId;
-  final double commitmentFeeTotal;
-  final int vendorCount;
-
-  // Single-order mode param.
-  final Order? order;
-
-  bool get _isGroupMode => groupId != null;
+  /// The checkout choices, held in memory. Nothing exists server-side yet.
+  final CheckoutDraft draft;
 
   @override
   ConsumerState<CommitmentFeeScreen> createState() =>
       _CommitmentFeeScreenState();
 }
 
-const _singleOrderCommitmentFee = 300.0;
-
 class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
-  bool _isLoading = false;
+  /// One key per payment page. Re-sent unchanged on every retry from this
+  /// page, so if the network drops after the server created the order and
+  /// the student taps Pay again, the server returns that same order
+  /// instead of creating (and charging for) a second one.
+  final String _idempotencyKey = newUuidV4();
+
+  /// Set synchronously on tap, before any await, so rapid taps on a laggy
+  /// phone can never start two payments.
+  bool _inFlight = false;
   bool _isSubmitting = false;
   String? _error;
+  bool _errorIsBalance = false;
 
-  double get _fee => widget._isGroupMode
-      ? widget.commitmentFeeTotal
-      : _singleOrderCommitmentFee;
+  CheckoutDraft get _draft => widget.draft;
 
-  bool get _isErrand =>
-      !widget._isGroupMode && (widget.order?.isErrand ?? false);
+  String get _ackMessage {
+    if (_draft.isPickup) {
+      return "You're paying for your order now. It will be prepared for "
+          'pickup.';
+    }
+    if (_draft.isGift) {
+      return "You're paying the delivery fee and service charge for a gift to "
+          '${_draft.giftRecipient!.nickname}. You also pay for the food after '
+          'the rider confirms the price. They are told as soon as you pay.';
+    }
+    return "You're paying the delivery fee and service charge. Your food is "
+        'paid after the rider confirms the price.';
+  }
 
-  Future<void> _pay() async {
-    if (_isSubmitting) return;
-    setState(() => _isSubmitting = true);
+  Future<void> _pay(CheckoutQuote quote) async {
+    if (_inFlight) return;
+    _inFlight = true;
+    setState(() => _error = null);
+
+    // Captured now so the follow-up work (clearing the cart, refreshing
+    // wallet/orders) still runs if the page is closed mid-payment.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final repo = container.read(orderPaymentRepositoryProvider);
+    PaidOrderResult? paid;
 
     try {
-      final msg = _isErrand
-          ? "You're paying the errand fee. A rider will be assigned to "
-              'handle your request.'
-          : 'This fee is non-refundable and will be deducted from your wallet '
-              'immediately. A rider will be dispatched to source your items.';
+      final result = await runPaymentFlow(
+        context: context,
+        ref: ref,
+        acknowledgeMessage: _ackMessage,
+        pinTitle:
+            _draft.isPickup ? 'Confirm payment' : 'Confirm delivery payment',
+        pinSubtitle:
+            'Enter your 4-digit PIN to pay ₦${quote.total.toStringAsFixed(0)}.',
+        setSubmitting: (v) {
+          if (mounted) setState(() => _isSubmitting = v);
+        },
+        onError: (message) {
+          if (mounted) setState(() => _error = message);
+        },
+        onConfirm: (pin) async {
+          try {
+            paid = _draft.isPickup
+                ? await repo.payPickup(
+                    idempotencyKey: _idempotencyKey,
+                    pin: pin,
+                    draft: _draft,
+                  )
+                : await repo.payDelivery(
+                    idempotencyKey: _idempotencyKey,
+                    pin: pin,
+                    draft: _draft,
+                  );
+          } catch (e) {
+            _errorIsBalance = e.toString().contains('INSUFFICIENT_BALANCE');
+            rethrow;
+          }
+        },
+      );
 
-      final ok = await showAcknowledgmentSheet(context, message: msg);
-      if (!ok || !mounted) {
-        setState(() => _isSubmitting = false);
-        return;
-      }
-      await _doPay();
-    } catch (_) {
+      if (result != PaymentFlowResult.success || paid == null) return;
+
+      // ── Paid. Only now does the cart go. ───────────────────────────
+      container.read(cartProvider.notifier).clear();
+      container.invalidate(walletBalanceProvider);
+      container.invalidate(walletInfoProvider);
+      container.invalidate(walletTransactionsProvider);
+      container.invalidate(studentOrdersProvider);
+      container.invalidate(studentDeliveryGroupsProvider);
+      container.invalidate(activeSavingPlanProvider);
+
+      if (!mounted) return;
+      await _showOutcome(container, paid!);
+    } finally {
+      _inFlight = false;
       if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
-  Future<void> _doPay() async {
-    final hasPin =
-        await ref.read(profileServiceProvider).hasTransactionPin();
-    if (!mounted) return;
+  Future<void> _showOutcome(
+      ProviderContainer container, PaidOrderResult r) async {
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
 
-    if (!hasPin) {
-      final didSet = await showSetPinSheet(context, ref);
-      if (!mounted || !didSet) return;
+    if (_draft.isPickup) {
+      final v = _draft.vendors.first;
+      final order = Order(
+        id: r.orderId,
+        studentId: '',
+        vendorId: v.vendorId,
+        vendorName: v.vendorName,
+        source: 'uniflex',
+        type: 'food',
+        status: OrderStatus.placed,
+        deliveryType: 'pickup',
+        totalAmount: r.totalCharged,
+        estimatedTime: _draft.scheduledFor != null ? 'Scheduled' : '20–30 min',
+        scheduledFor: _draft.scheduledFor,
+        packCount: v.packCount,
+        packFee: v.packFee,
+        createdAt: DateTime.now(),
+      );
+      if (r.planOverBudget) {
+        messenger.showSnackBar(const SnackBar(
+          content: Text(
+              'Heads up: this order has put you over your saving plan budget for the current period.'),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 5),
+        ));
+      }
+      await navigator.pushReplacement(
+        MaterialPageRoute(
+            builder: (_) => OrderConfirmationScreen(order: order)),
+      );
+      return;
     }
 
-    final pin = await showEnterPinSheet(
-      context,
-      title: 'Confirm commitment fee',
-      subtitle:
-          'Enter your 4-digit PIN to pay ₦${_fee.toStringAsFixed(0)} and dispatch a rider.',
-    );
-    if (pin == null || !mounted) return;
-
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
+    // Delivery: go to the order's tracking screen (one checkout = one order).
     try {
-      final client = ref.read(supabaseClientProvider);
-
-      if (widget._isGroupMode) {
-        await client.rpc('pay_group_commitment_fee', params: {
-          'p_group_id': widget.groupId,
-          'p_pin': pin,
-        });
-      } else {
-        await client.rpc('pay_commitment_fee', params: {
-          'p_order_id': widget.order!.id,
-          'p_pin': pin,
-        });
-      }
-
-      ref.invalidate(walletBalanceProvider);
-      ref.invalidate(walletInfoProvider);
-      ref.invalidate(walletTransactionsProvider);
-      ref.invalidate(studentOrdersProvider);
-
-      if (!mounted) return;
-
-      if (widget._isGroupMode) {
-        // Pop to root — student lands on orders list.
-        Navigator.of(context).popUntil((route) => route.isFirst);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content:
-                Text('Order confirmed! A rider will be dispatched shortly.'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      } else {
-        // Single-order mode: navigate to order confirmation.
-        final updatedOrder = widget.order!.copyWith(
-          status: OrderStatus.beingSourced,
-          commitmentFeePaid: true,
-          commitmentFeeAmount: _singleOrderCommitmentFee,
-        );
-        Navigator.of(context).pushReplacement(
+      final group = await container
+          .read(groupByIdProvider(r.orderId).future)
+          .timeout(const Duration(seconds: 8));
+      if (group != null) {
+        navigator.popUntil((route) => route.isFirst);
+        await navigator.push(
           MaterialPageRoute(
-            builder: (_) => OrderConfirmationScreen(order: updatedOrder),
-          ),
+              builder: (_) => OrderTrackingScreen.forGroup(group: group)),
         );
+        return;
       }
-    } on PostgrestException catch (e) {
-      final msg = _mapError(e.message);
-      setState(() {
-        _isLoading = false;
-        _error = msg;
-      });
-    } catch (e) {
-      final msg = _mapError(e.toString());
-      setState(() {
-        _isLoading = false;
-        _error = msg;
-      });
+    } catch (_) {
+      // Fall through to the simple confirmation below.
     }
+    navigator.popUntil((route) => route.isFirst);
+    messenger.showSnackBar(const SnackBar(
+      content: Text('Order confirmed! A rider will be dispatched shortly.'),
+      behavior: SnackBarBehavior.floating,
+    ));
   }
 
-  String _mapError(String raw) {
-    if (raw.contains('INSUFFICIENT_BALANCE')) {
-      return 'Insufficient wallet balance. Please top up and try again.';
-    }
-    if (raw.contains('PIN_LOCKED')) {
-      return 'Too many wrong attempts — PIN is locked for 15 minutes.';
-    }
-    if (raw.contains('PIN_NOT_SET')) {
-      return 'No transaction PIN set. Please set one first.';
-    }
-    if (raw.contains('INVALID_PIN')) {
-      return 'Incorrect PIN. Please try again.';
-    }
-    if (raw.contains('Already paid') ||
-        raw.contains('Commitment fee already paid')) {
-      return 'Commitment fee already paid for this order.';
-    }
-    if (raw.contains('not in placed state') ||
-        raw.contains('not available')) {
-      return 'This order can no longer accept a commitment fee.';
-    }
-    if (raw.contains('does not apply to Uniflex')) {
-      return 'Uniflex orders do not require a commitment fee.';
-    }
-    if (raw.contains('Wallet not found')) {
-      return 'Wallet not found. Please contact support.';
-    }
-    if (raw.contains('crypt')) {
-      return 'Server configuration error. Please contact support. (ref: crypt)';
-    }
-    return AppErrorMapper.map(raw);
+  void _goToWallet() {
+    ref.read(shellTabRequestProvider.notifier).state = _studentWalletTabIndex;
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final balanceAsync = ref.watch(walletBalanceProvider);
-    final balance = balanceAsync.valueOrNull ?? 0.0;
-    final fee = _fee;
-    final hasSufficientBalance = balance >= fee;
+    final serviceAsync = ref.watch(serviceChargeProvider);
+    final isPickup = _draft.isPickup;
 
-    return Scaffold(
-      appBar: const UniflexAppBar(title: 'Commitment Fee'),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.screenGutter),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Info banner ─────────────────────────────────────────────
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: BoxDecoration(
-                color: AppColors.info.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(AppRadius.card),
-                border:
-                    Border.all(color: AppColors.info.withValues(alpha: 0.3)),
+    // Pickup has no service charge, so it never waits on the setting.
+    final serviceCharge = isPickup ? 0.0 : (serviceAsync.valueOrNull ?? 0.0);
+    final feesReady = isPickup || serviceAsync.hasValue;
+    final quote = quoteFor(_draft, serviceCharge);
+
+    final balance = balanceAsync.valueOrNull;
+    final insufficient = feesReady && balance != null && balance < quote.total;
+
+    return PopScope(
+      // Don't let a back-swipe close the page while money is moving.
+      canPop: !_inFlight,
+      child: Scaffold(
+        appBar: UniflexAppBar(title: isPickup ? 'Payment' : 'Pay delivery fee'),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(AppSpacing.screenGutter),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _InfoBanner(
+                text: isPickup
+                    ? 'You pay the full food amount now. There is no delivery '
+                        'fee or service charge for pickup.'
+                    : 'You pay the delivery fee and a small service charge '
+                        'now, and a rider is dispatched. You pay for the food '
+                        'after the rider confirms the price.',
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.info_outline,
-                      color: AppColors.info, size: 20),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      widget._isGroupMode
-                          ? 'A commitment fee covers the delivery cost and dispatches a rider. '
-                            'The rider will source your items and confirm the final cost before delivery. '
-                            'This fee is non-refundable.'
-                          : _isErrand
-                              ? 'This fee covers the cost of the errand. '
-                                'Your rider will call you to confirm the details.'
-                              : 'A ₦${fee.toStringAsFixed(0)} commitment fee is required to dispatch a rider. '
-                                'The rider will source your items and confirm the final cost before delivery. '
-                                'This fee is non-refundable.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppColors.info,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: AppSpacing.lg),
-
-            // ── Order reference (single-order mode only) ────────────────
-            if (!widget._isGroupMode && widget.order != null) ...[
-              Text('Order', style: theme.textTheme.titleSmall),
+              if (_draft.isGift) ...[
+                const SizedBox(height: AppSpacing.md),
+                _InfoBanner(
+                  key: const ValueKey('gift-pay-banner'),
+                  text: '🎁 Gift for ${_draft.giftRecipient!.nickname} '
+                      '(${_draft.giftRecipient!.maskedEmail}). You pay and '
+                      'you can cancel; they only receive the food.',
+                ),
+              ],
+              const SizedBox(height: AppSpacing.lg),
+              Text('Payment', style: theme.textTheme.titleSmall),
               const SizedBox(height: AppSpacing.sm),
               Container(
                 width: double.infinity,
@@ -273,204 +260,219 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
                   borderRadius: BorderRadius.circular(AppRadius.card),
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      widget.order!.shortId,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.w700,
+                    for (final line in quote.lines)
+                      _FeeRow(
+                        label: line.label,
+                        value: '₦${line.amount.toStringAsFixed(0)}',
+                        theme: theme,
                       ),
+                    if (!isPickup)
+                      serviceAsync.when(
+                        data: (v) => _FeeRow(
+                          label: 'Service charge',
+                          value: '₦${v.toStringAsFixed(0)}',
+                          theme: theme,
+                        ),
+                        loading: () => const SizedBox(
+                          height: 24,
+                          child: Center(
+                            child: SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        ),
+                        error: (_, __) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Could not load the service charge.',
+                                  style: theme.textTheme.bodySmall
+                                      ?.copyWith(color: AppColors.error),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () =>
+                                    ref.invalidate(serviceChargeProvider),
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    const Divider(height: AppSpacing.lg),
+                    _FeeRow(
+                      label: 'Total',
+                      value: feesReady
+                          ? '₦${quote.total.toStringAsFixed(0)}'
+                          : '—',
+                      theme: theme,
+                      bold: true,
                     ),
-                    if (widget.order!.vendorName != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        'from ${widget.order!.vendorName}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: 0.6),
+                    if (!isPickup) ...[
+                      const SizedBox(height: AppSpacing.xs),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Food is paid after the rider confirms the price.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface
+                                .withValues(alpha: 0.5),
+                          ),
                         ),
                       ),
                     ],
-                    const SizedBox(height: AppSpacing.sm),
-                    Text(
-                      widget.order!.isErrand
-                          ? 'Errand request'
-                          : 'Partner vendor order',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.5),
+                    const Divider(height: AppSpacing.lg),
+                    balanceAsync.when(
+                      data: (b) => _FeeRow(
+                        label: 'Wallet balance',
+                        value: '₦${(b ?? 0).toStringAsFixed(0)}',
+                        theme: theme,
+                        valueColor:
+                            insufficient ? AppColors.error : AppColors.emerald,
                       ),
+                      loading: () => const SizedBox(
+                        height: 20,
+                        child: Center(
+                            child: CircularProgressIndicator(strokeWidth: 2)),
+                      ),
+                      error: (_, __) => const SizedBox.shrink(),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              if (insufficient || _errorIsBalance) ...[
+                const SizedBox(height: AppSpacing.sm),
+                _ErrorBox(
+                  text: 'Your wallet balance is not enough to pay this.',
+                  action: TextButton(
+                    onPressed: _goToWallet,
+                    child: const Text('Top up your wallet →'),
+                  ),
+                ),
+              ],
+              if (_error != null && !(insufficient || _errorIsBalance)) ...[
+                const SizedBox(height: AppSpacing.sm),
+                _ErrorBox(text: _error!),
+              ],
+              const SizedBox(height: AppSpacing.xl),
+              Text(
+                'Nothing is ordered until you pay. If you go back, your cart '
+                'stays exactly as it is.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
             ],
-
-            // ── Fee breakdown ───────────────────────────────────────────
-            Text('Payment', style: theme.textTheme.titleSmall),
-            const SizedBox(height: AppSpacing.sm),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(AppRadius.card),
-              ),
-              child: Column(
-                children: [
-                  if (widget._isGroupMode && widget.vendorCount > 1)
-                    _FeeRow(
-                      label:
-                          'Delivery fee (${widget.vendorCount} vendors)',
-                      value:
-                          '₦${widget.commitmentFeeTotal.toStringAsFixed(0)}',
-                      theme: theme,
-                      bold: false,
-                    ),
-                  _FeeRow(
-                    label: widget._isGroupMode
-                        ? 'Total commitment fee'
-                        : 'Commitment fee',
-                    value: '₦${fee.toStringAsFixed(0)}',
-                    theme: theme,
-                    bold: true,
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    _isErrand
-                        ? 'This covers the rider completing your errand request.'
-                        : 'This covers the rider going to source your items. '
-                          'You will pay the actual food cost separately once the rider confirms what is available.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface
-                          .withValues(alpha: 0.5),
-                    ),
-                  ),
-                  const Divider(height: AppSpacing.lg),
-                  balanceAsync.when(
-                    data: (b) => _FeeRow(
-                      label: 'Wallet balance',
-                      value: '₦${(b ?? 0).toStringAsFixed(0)}',
-                      theme: theme,
-                      bold: false,
-                      valueColor: hasSufficientBalance
-                          ? AppColors.emerald
-                          : AppColors.error,
-                    ),
-                    loading: () => const SizedBox(
-                      height: 20,
-                      child: Center(
-                          child: CircularProgressIndicator(strokeWidth: 2)),
-                    ),
-                    error: (_, __) => const SizedBox.shrink(),
-                  ),
-                ],
-              ),
+          ),
+        ),
+        bottomNavigationBar: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.screenGutter,
+              AppSpacing.sm,
+              AppSpacing.screenGutter,
+              AppSpacing.md,
             ),
-
-            // ── Insufficient balance warning ─────────────────────────────
-            if (!hasSufficientBalance && balanceAsync.hasValue) ...[
-              const SizedBox(height: AppSpacing.sm),
-              Container(
-                padding: const EdgeInsets.all(AppSpacing.sm),
-                decoration: BoxDecoration(
-                  color: AppColors.error.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(AppRadius.card),
-                  border: Border.all(
-                      color: AppColors.error.withValues(alpha: 0.3)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                PrimaryButton(
+                  label: feesReady
+                      ? 'Pay ₦${quote.total.toStringAsFixed(0)}'
+                      : 'Pay',
+                  icon: Icons.lock_outline,
+                  isLoading: _isSubmitting,
+                  onPressed: (feesReady && !insufficient && !_isSubmitting)
+                      ? () => _pay(quote)
+                      : null,
                 ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.warning_amber_rounded,
-                        color: AppColors.error, size: 18),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        'Insufficient balance to pay the commitment fee. '
-                        'Please top up your wallet.',
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: AppColors.error),
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: AppSpacing.sm),
+                SecondaryButton(
+                  label: 'Go back (do not pay yet)',
+                  onPressed:
+                      _isSubmitting ? null : () => Navigator.of(context).pop(),
                 ),
-              ),
-            ],
-
-            // ── Error ────────────────────────────────────────────────────
-            if (_error != null) ...[
-              const SizedBox(height: AppSpacing.sm),
-              Container(
-                padding: const EdgeInsets.all(AppSpacing.sm),
-                decoration: BoxDecoration(
-                  color: AppColors.error.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(AppRadius.card),
-                  border: Border.all(
-                      color: AppColors.error.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.error_outline,
-                        color: AppColors.error, size: 18),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        _error!,
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: AppColors.error),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-
-            const SizedBox(height: AppSpacing.xl),
-
-            Text(
-              'If you go back without paying, your order will remain in "placed" state '
-              'and no rider will be dispatched.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color:
-                    theme.colorScheme.onSurface.withValues(alpha: 0.45),
-              ),
+              ],
             ),
-
-            const SizedBox(height: AppSpacing.xl),
-          ],
+          ),
         ),
       ),
+    );
+  }
+}
 
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.screenGutter,
-            AppSpacing.sm,
-            AppSpacing.screenGutter,
-            AppSpacing.md,
+class _InfoBanner extends StatelessWidget {
+  const _InfoBanner({super.key, required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.info.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.info.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline, color: AppColors.info, size: 20),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodySmall?.copyWith(color: AppColors.info),
+            ),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+        ],
+      ),
+    );
+  }
+}
+
+class _ErrorBox extends StatelessWidget {
+  const _ErrorBox({required this.text, this.action});
+  final String text;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: AppColors.error.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              PrimaryButton(
-                label:
-                    'Pay ₦${fee.toStringAsFixed(0)} and dispatch rider',
-                icon: Icons.send_outlined,
-                isLoading: _isLoading || _isSubmitting,
-                onPressed:
-                    (hasSufficientBalance && !_isLoading && !_isSubmitting) ? _pay : null,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              SecondaryButton(
-                label: 'Go back (do not pay yet)',
-                onPressed:
-                    _isLoading ? null : () => Navigator.of(context).pop(),
+              const Icon(Icons.error_outline, color: AppColors.error, size: 18),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  text,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: AppColors.error),
+                ),
               ),
             ],
           ),
-        ),
+          if (action != null) action!,
+        ],
       ),
     );
   }
@@ -481,7 +483,7 @@ class _FeeRow extends StatelessWidget {
     required this.label,
     required this.value,
     required this.theme,
-    required this.bold,
+    this.bold = false,
     this.valueColor,
   });
 
@@ -493,24 +495,30 @@ class _FeeRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style:
-              bold ? theme.textTheme.titleSmall : theme.textTheme.bodyMedium,
-        ),
-        Text(
-          value,
-          style: (bold
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: bold
                   ? theme.textTheme.titleSmall
-                  : theme.textTheme.labelMedium)
-              ?.copyWith(
-            color: valueColor ?? (bold ? theme.colorScheme.primary : null),
+                  : theme.textTheme.bodyMedium,
+            ),
           ),
-        ),
-      ],
+          Text(
+            value,
+            style: (bold
+                    ? theme.textTheme.titleSmall
+                    : theme.textTheme.labelMedium)
+                ?.copyWith(
+              color: valueColor ?? (bold ? theme.colorScheme.primary : null),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -41,7 +41,8 @@ class _ErrandCategoryFormScreenState
     _titleCtrl = TextEditingController(text: c?.title ?? '');
     _subtitleCtrl = TextEditingController(text: c?.subtitle ?? '');
     _descriptionCtrl = TextEditingController(text: c?.description ?? '');
-    _feeCtrl = TextEditingController(text: c != null ? c.flatFee.toStringAsFixed(0) : '');
+    _feeCtrl = TextEditingController(
+        text: c != null ? c.flatFee.toStringAsFixed(0) : '');
     _sortOrderCtrl = TextEditingController(text: '${c?.sortOrder ?? 0}');
     _iconName = c?.iconName ?? ErrandCategoryData.availableIconNames.first;
     _isActive = c?.isActive ?? true;
@@ -66,7 +67,9 @@ class _ErrandCategoryFormScreenState
         .trim()
         .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
         .replaceAll(RegExp(r'^_+|_+$'), '');
-    return base.isEmpty ? 'category_${DateTime.now().millisecondsSinceEpoch}' : base;
+    return base.isEmpty
+        ? 'category_${DateTime.now().millisecondsSinceEpoch}'
+        : base;
   }
 
   Future<void> _save() async {
@@ -103,7 +106,8 @@ class _ErrandCategoryFormScreenState
     final isEditing = widget.category != null;
 
     return Scaffold(
-      appBar: UniflexAppBar(title: isEditing ? 'Edit Category' : 'New Category'),
+      appBar:
+          UniflexAppBar(title: isEditing ? 'Edit Category' : 'New Category'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
         child: Form(
@@ -195,7 +199,8 @@ class _ErrandCategoryFormScreenState
                               ? 'Visible to students'
                               : 'Hidden from the student Errand tab',
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            color: theme.colorScheme.onSurface
+                                .withValues(alpha: 0.6),
                           ),
                         ),
                       ],
@@ -211,7 +216,7 @@ class _ErrandCategoryFormScreenState
               const SizedBox(height: AppSpacing.xl),
               PrimaryButton(
                 label: isEditing ? 'Save Changes' : 'Add Category',
-                  icon: Icons.check,
+                icon: Icons.check,
                 isLoading: _isSaving,
                 onPressed: _save,
               ),

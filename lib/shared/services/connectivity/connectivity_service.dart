@@ -34,8 +34,7 @@ class ConnectivityService {
     // Listen to connectivity changes and re-probe on each change.
     Connectivity().onConnectivityChanged.listen((results) async {
       // `results` is List<ConnectivityResult> in connectivity_plus ≥ 5.
-      final hasNetwork = results
-          .any((r) => r != ConnectivityResult.none);
+      final hasNetwork = results.any((r) => r != ConnectivityResult.none);
 
       if (!hasNetwork) {
         _emit(false);

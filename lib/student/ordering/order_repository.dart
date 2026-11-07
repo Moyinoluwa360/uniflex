@@ -1,16 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../shared/models/custom_order_item.dart';
 import '../../shared/models/delivery_group.dart';
 import '../../shared/models/delivery_location.dart';
 import '../../shared/models/order.dart';
 import '../../shared/models/order_item.dart';
-import '../../shared/models/vendor.dart';
-import '../../shared/services/saving_plan/saving_plan_providers.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
-import '../../shared/services/wallet/wallet_providers.dart';
-import 'cart_provider.dart';
+import '../gifts/gift_models.dart';
 
 // ---------------------------------------------------------------------------
 // Read providers
@@ -136,23 +132,39 @@ Stream<List<DeliveryGroup>> _streamStudentDeliveryGroups(
 /// A unified entry for the student orders screen — either a standalone
 /// Order (pickup / errand) or a DeliveryGroup (delivery orders).
 class StudentOrderEntry {
-  const StudentOrderEntry.fromOrder(this.order) : group = null;
-  const StudentOrderEntry.fromGroup(this.group) : order = null;
+  const StudentOrderEntry.fromOrder(this.order)
+      : group = null,
+        gift = null;
+  const StudentOrderEntry.fromGroup(this.group)
+      : order = null,
+        gift = null;
+
+  /// A gift this student RECEIVES (recipient-only mirror; no prices).
+  const StudentOrderEntry.fromGift(this.gift)
+      : order = null,
+        group = null;
 
   final Order? order;
   final DeliveryGroup? group;
+  final GiftDelivery? gift;
 
   bool get isGroup => group != null;
-  String get id => isGroup ? group!.id : order!.id;
-  String get shortId => isGroup ? group!.shortId : order!.shortId;
-  DateTime get createdAt => isGroup ? group!.createdAt : order!.createdAt;
+  bool get isGift => gift != null;
+  String get id => isGift ? gift!.groupId : (isGroup ? group!.id : order!.id);
+  String get shortId =>
+      isGift ? gift!.shortId : (isGroup ? group!.shortId : order!.shortId);
+  DateTime get createdAt => isGift
+      ? gift!.createdAt
+      : (isGroup ? group!.createdAt : order!.createdAt);
 
-  bool get isTerminal =>
-      isGroup ? group!.isTerminal : order!.status.isTerminal;
+  bool get isTerminal => isGift
+      ? gift!.isEnded
+      : (isGroup ? group!.isTerminal : order!.status.isTerminal);
 
   bool get isActive => !isTerminal;
 
   String get statusLabel {
+    if (isGift) return gift!.statusLabel;
     if (isGroup) return group!.status.label;
     return order!.status.label;
   }
@@ -185,8 +197,7 @@ Stream<DeliveryGroup?> _streamGroupById(
   try {
     final stream = client
         .from('delivery_groups')
-        .stream(primaryKey: ['id'])
-        .eq('id', groupId);
+        .stream(primaryKey: ['id']).eq('id', groupId);
 
     await for (final _ in stream) {
       yield await fetch();
@@ -194,41 +205,22 @@ Stream<DeliveryGroup?> _streamGroupById(
   } catch (_) {}
 }
 
-/// Order legs belonging to a delivery group, with vendor names attached.
-/// Used by the group tracking screen to show per-vendor breakdowns.
-final groupLegsForStudentProvider =
-    FutureProvider.family<List<Order>, String>((ref, groupId) async {
-  final client = ref.watch(supabaseClientProvider);
-  final rows = await client
-      .from('orders')
-      .select()
-      .eq('delivery_group_id', groupId)
-      .order('created_at');
-  return _attachVendorNames(client, rows);
-});
-
 /// A single order by ID, live via Supabase Realtime, with its line items
 /// populated. Used by the tracking screen — a Kitchen/rider status change
 /// now reaches this screen without the student tapping refresh.
-final orderByIdProvider =
-    StreamProvider.family<Order?, String>((ref, orderId) {
+final orderByIdProvider = StreamProvider.family<Order?, String>((ref, orderId) {
   final client = ref.watch(supabaseClientProvider);
   return _streamOrderById(client, orderId);
 });
 
 Stream<Order?> _streamOrderById(SupabaseClient client, String orderId) async* {
   Future<Order?> fetchOrder() async {
-    final rows = await client
-        .from('orders')
-        .select()
-        .eq('id', orderId)
-        .limit(1);
+    final rows =
+        await client.from('orders').select().eq('id', orderId).limit(1);
     if (rows.isEmpty) return null;
     final withVendor = (await _attachVendorNames(client, [rows.first])).first;
-    final items = await client
-        .from('order_items')
-        .select()
-        .eq('order_id', orderId);
+    final items =
+        await client.from('order_items').select().eq('order_id', orderId);
     return withVendor.copyWith(
       items: items.map((m) => OrderItem.fromMap(m)).toList(),
     );
@@ -266,7 +258,8 @@ final orderRiderInfoProvider =
 
 /// Fetches the delivery settings map from the server.
 /// Keys: 'campus_delivery_fee', 'hostel_delivery_fee', 'pack_meal_capacity'.
-final deliverySettingsProvider = FutureProvider<Map<String, String>>((ref) async {
+final deliverySettingsProvider =
+    FutureProvider<Map<String, String>>((ref) async {
   final client = ref.watch(supabaseClientProvider);
   final result = await client.rpc('get_delivery_settings');
   final raw = Map<String, dynamic>.from(result as Map);
@@ -298,536 +291,11 @@ final deliveryLocationsProvider =
   return rows.map((m) => DeliveryLocation.fromMap(m)).toList();
 });
 
-/// Pack-bracket calculation: how many brackets a vendor's packs fill.
-/// 0 packs (drinks/others only) → 1×, 1–3 → 1×, 4–6 → 2×, 7–9 → 3×, etc.
-int packBrackets(int foodPacks) =>
-    foodPacks <= 0 ? 1 : ((foodPacks + 2) ~/ 3);
-
-/// Delivery fee for one vendor given the location price and pack count.
-double vendorDeliveryFee(double locationPrice, int foodPacks) =>
-    locationPrice * packBrackets(foodPacks);
-
 // ---------------------------------------------------------------------------
-// Write notifier
+// Order creation lives in order_payment_repository.dart (Pack 4A): there is
+// no "place the order now, pay later" path any more. packBrackets() and
+// vendorDeliveryFee() moved to checkout_draft.dart.
 // ---------------------------------------------------------------------------
-
-/// Result state for order placement. [order] is non-null on success.
-/// [budgetWarning] is true when the order succeeded but caused the
-/// active saving plan budget to be exceeded for the current period.
-class OrderPlacementState {
-  const OrderPlacementState({
-    this.isLoading = false,
-    this.order,
-    this.error,
-    this.budgetWarning = false,
-  });
-  final bool isLoading;
-  final Order? order;
-  final String? error;
-
-  /// True when the order went through but the saving plan budget was
-  /// exceeded. The UI shows a soft warning — the order is never blocked.
-  final bool budgetWarning;
-
-  bool get isSuccess => order != null;
-}
-
-/// Result from [placeMultiVendorOrder] — contains the delivery group info
-/// needed by CommitmentFeeScreen.
-class MultiVendorOrderResult {
-  const MultiVendorOrderResult({
-    required this.groupId,
-    required this.commitmentFeeTotal,
-    required this.vendorCount,
-  });
-
-  final String groupId;
-  final double commitmentFeeTotal;
-  final int vendorCount;
-}
-
-/// Handles placing both food orders and Around requests.
-///
-/// Both methods call SECURITY DEFINER Postgres RPCs that atomically:
-///   1. Row-lock and check the wallet balance (no double-spend)
-///   2. Deduct the wallet
-///   3. Create the order and related rows
-///   4. Record a debit wallet_transaction
-///   5. Update the active saving plan's spent counter (lazy period reset)
-///
-/// After a successful placement the cart is cleared and wallet / order
-/// providers are invalidated so UIs refresh automatically.
-class OrderNotifier extends Notifier<OrderPlacementState> {
-  @override
-  OrderPlacementState build() => const OrderPlacementState();
-
-  /// Places a food order for all items currently in the cart.
-  ///
-  /// [pin] is the student's transaction PIN, verified server-side before
-  /// any wallet funds move (see Section 6 — Order confirmation PIN).
-  /// [packs] is the pack allocation built at checkout (Section 11) — a
-  /// list of `{'items': [{'product_id', 'product_name', 'quantity'}]}`
-  /// maps, one per pack; [packFee] is `packs.length * vendor.packPrice`,
-  /// already folded into the total the caller computed.
-  Future<Order?> placeFoodOrder({
-    required Vendor vendor,
-    required String deliveryType, // 'pickup' | 'campus_delivery' | 'hostel_delivery'
-    required String pin,
-    String? deliveryLocation,
-    DateTime? scheduledFor,
-    bool isBulk = false,
-    double bulkDiscountPct = 0,
-    List<Map<String, dynamic>> packs = const [],
-    double packFee = 0,
-    String? notes,
-  }) async {
-    final cart = ref.read(cartProvider);
-    if (cart.isEmpty) return null;
-
-    state = const OrderPlacementState(isLoading: true);
-
-    try {
-      final client = ref.read(supabaseClientProvider);
-      final total =
-          cart.subtotal + vendor.deliveryFeeFor(deliveryType) + packFee;
-
-      // Build the JSONB line-items array expected by the RPC.
-      final lineItems = cart.items
-          .map((item) => {
-                'product_id': item.product.id,
-                'product_name': item.product.name,
-                'quantity': item.quantity,
-                'unit_price': item.unitTotal,
-                'selected_options':
-                    item.selectedOptions.map((o) => o.toJson()).toList(),
-              })
-          .toList();
-
-      final result = await client.rpc(
-        'place_food_order_with_payment',
-        params: {
-          'p_vendor_id': vendor.id,
-          'p_source': vendor.isUniflex ? 'uniflex' : 'partner',
-          'p_delivery_type': deliveryType,
-          'p_delivery_location': deliveryLocation,
-          'p_total_amount': total,
-          'p_estimated_time': scheduledFor != null ? 'Scheduled' : '20–30 min',
-          'p_line_items': lineItems,
-          if (scheduledFor != null)
-            'p_scheduled_for': scheduledFor.toUtc().toIso8601String(),
-          if (isBulk) 'p_is_bulk': isBulk,
-          if (bulkDiscountPct > 0) 'p_bulk_discount_pct': bulkDiscountPct,
-          'p_pin': pin,
-          'p_pack_fee': packFee,
-          'p_packs': packs,
-          if (notes != null && notes.isNotEmpty) 'p_notes': notes,
-        },
-      ) as Map<String, dynamic>;
-
-      // PIN problems come back as a payload rather than an exception, so
-      // the server can commit the failed-attempt counter that drives the
-      // lockout — a raise would roll it back. See _check_transaction_pin().
-      final rpcError = result['error'] as String?;
-      if (rpcError != null) {
-        state = OrderPlacementState(error: _mapError(rpcError));
-        return null;
-      }
-
-      final orderId = result['order_id'] as String;
-      final planOverBudget = result['plan_over_budget'] as bool? ?? false;
-
-      // Reconstruct a minimal Order for the confirmation screen.
-      // The full row will be re-fetched by orderByIdProvider on the
-      // tracking screen.
-      final order = Order(
-        id: orderId,
-        studentId: client.auth.currentUser!.id,
-        vendorId: vendor.id,
-        vendorName: vendor.name,
-        source: vendor.isUniflex ? 'uniflex' : 'partner',
-        type: 'food',
-        status: OrderStatus.placed,
-        deliveryType: deliveryType,
-        deliveryLocation: deliveryLocation,
-        totalAmount: total,
-        estimatedTime: scheduledFor != null ? 'Scheduled' : '20–30 min',
-        scheduledFor: scheduledFor,
-        isBulk: isBulk,
-        bulkDiscountPct: bulkDiscountPct,
-        packCount: packs.length,
-        packFee: packFee,
-        createdAt: DateTime.now(),
-      );
-
-      ref.read(cartProvider.notifier).clear();
-      ref.invalidate(studentOrdersProvider);
-      ref.invalidate(walletBalanceProvider);
-      ref.invalidate(walletInfoProvider);
-      ref.invalidate(walletTransactionsProvider);
-      ref.invalidate(activeSavingPlanProvider);
-
-      state = OrderPlacementState(order: order, budgetWarning: planOverBudget);
-      return order;
-    } catch (e) {
-      state = OrderPlacementState(error: _mapError(e.toString()));
-      return null;
-    }
-  }
-
-  /// Places a partner vendor food order WITHOUT wallet deduction.
-  /// The student pays only the ₦300 commitment fee next (via
-  /// CommitmentFeeScreen), then the actual food cost once the rider
-  /// confirms availability (via pay_final_amount).
-  Future<Order?> placePartnerFoodOrder({
-    required Vendor vendor,
-    required String deliveryType,
-    String? deliveryLocation,
-    DateTime? scheduledFor,
-    List<Map<String, dynamic>> packs = const [],
-    double packFee = 0,
-    String? notes,
-  }) async {
-    final cart = ref.read(cartProvider);
-    if (cart.isEmpty) return null;
-
-    state = const OrderPlacementState(isLoading: true);
-
-    try {
-      final client = ref.read(supabaseClientProvider);
-      final total =
-          cart.subtotal + vendor.deliveryFeeFor(deliveryType) + packFee;
-
-      final lineItems = cart.items
-          .map((item) => {
-                'product_id': item.product.id,
-                'product_name': item.product.name,
-                'quantity': item.quantity,
-                'unit_price': item.unitTotal,
-                'selected_options':
-                    item.selectedOptions.map((o) => o.toJson()).toList(),
-              })
-          .toList();
-
-      final result = await client.rpc(
-        'place_partner_food_order',
-        params: {
-          'p_vendor_id': vendor.id,
-          'p_delivery_type': deliveryType,
-          'p_delivery_location': deliveryLocation,
-          'p_total_amount': total,
-          'p_estimated_time': scheduledFor != null ? 'Scheduled' : '20–30 min',
-          'p_line_items': lineItems,
-          if (scheduledFor != null)
-            'p_scheduled_for': scheduledFor.toUtc().toIso8601String(),
-          'p_pack_fee': packFee,
-          'p_packs': packs,
-          if (notes != null && notes.isNotEmpty) 'p_notes': notes,
-        },
-      ) as Map<String, dynamic>;
-
-      final orderId = result['order_id'] as String;
-
-      final order = Order(
-        id: orderId,
-        studentId: client.auth.currentUser!.id,
-        vendorId: vendor.id,
-        vendorName: vendor.name,
-        source: 'partner',
-        type: 'food',
-        status: OrderStatus.placed,
-        deliveryType: deliveryType,
-        deliveryLocation: deliveryLocation,
-        totalAmount: total,
-        estimatedTime: scheduledFor != null ? 'Scheduled' : '20–30 min',
-        scheduledFor: scheduledFor,
-        packCount: packs.length,
-        packFee: packFee,
-        createdAt: DateTime.now(),
-      );
-
-      ref.read(cartProvider.notifier).clear();
-      ref.invalidate(studentOrdersProvider);
-
-      state = OrderPlacementState(order: order);
-      return order;
-    } catch (e) {
-      state = OrderPlacementState(error: _mapError(e.toString()));
-      return null;
-    }
-  }
-
-  /// Round 7: Places a multi-vendor delivery order via delivery_groups.
-  /// Creates a delivery group parent + one order leg per vendor.
-  /// No wallet deduction at this step — the commitment fee is paid
-  /// separately via [pay_group_commitment_fee].
-  ///
-  /// Returns a [MultiVendorOrderResult] on success, or null on failure.
-  Future<MultiVendorOrderResult?> placeMultiVendorOrder({
-    required String deliveryType,
-    String? deliveryLocation,
-    String? studentNote,
-    DateTime? scheduledFor,
-    String? deliveryLocationId,
-    String? locationDetails,
-  }) async {
-    final cart = ref.read(cartProvider);
-    if (cart.isEmpty) return null;
-
-    state = const OrderPlacementState(isLoading: true);
-
-    try {
-      final client = ref.read(supabaseClientProvider);
-
-      // Build per-vendor legs from the cart groups.
-      final legs = <Map<String, dynamic>>[];
-      for (final group in cart.groups.values) {
-        if (group.isEmpty) continue;
-
-        final lineItems = group.items
-            .map((item) => {
-                  'product_id': item.product.id,
-                  'product_name': item.product.name,
-                  'quantity': item.quantity,
-                  'unit_price': item.unitTotal,
-                  'selected_options':
-                      item.selectedOptions.map((o) => o.toJson()).toList(),
-                })
-            .toList();
-
-        // Build pack data from the cart group's packContents.
-        final packs = group.packContents
-            .map((contents) => {
-                  'items': contents.entries
-                      .where((e) => e.value > 0)
-                      .map((e) {
-                        final product = group.items.firstWhere(
-                          (i) => i.product.id == e.key,
-                          orElse: () => group.items.first,
-                        );
-                        return {
-                          'product_id': e.key,
-                          'product_name': product.product.name,
-                          'quantity': e.value,
-                        };
-                      })
-                      .toList(),
-                })
-            .toList();
-
-        legs.add({
-          'vendor_id': group.vendor.id,
-          'source': group.vendor.isUniflex ? 'uniflex' : 'partner',
-          'total_amount': group.totalWithPacks,
-          'estimated_time': scheduledFor != null ? 'Scheduled' : '20–30 min',
-          'line_items': lineItems,
-          'packs': packs,
-          'pack_fee': group.packFee,
-        });
-      }
-
-      final result = await client.rpc(
-        'place_multi_vendor_order',
-        params: {
-          'p_delivery_type': deliveryType,
-          'p_delivery_location': deliveryLocation,
-          'p_student_note': studentNote,
-          if (scheduledFor != null)
-            'p_scheduled_for': scheduledFor.toUtc().toIso8601String(),
-          'p_legs': legs,
-          if (deliveryLocationId != null)
-            'p_delivery_location_id': deliveryLocationId,
-          if (locationDetails != null)
-            'p_location_details': locationDetails,
-        },
-      ) as Map<String, dynamic>;
-
-      final groupId = result['group_id'] as String;
-      final commitmentFee =
-          (result['commitment_fee_total'] as num?)?.toDouble() ?? 0;
-      final vendorCount = result['vendor_count'] as int? ?? legs.length;
-
-      ref.read(cartProvider.notifier).clear();
-      ref.invalidate(studentOrdersProvider);
-
-      state = const OrderPlacementState();
-      return MultiVendorOrderResult(
-        groupId: groupId,
-        commitmentFeeTotal: commitmentFee,
-        vendorCount: vendorCount,
-      );
-    } catch (e) {
-      state = OrderPlacementState(error: _mapError(e.toString()));
-      return null;
-    }
-  }
-
-  /// Places an Errand request and deducts the fee in one atomic step.
-  /// [categoryKey] and [fee] come from the admin-configurable
-  /// `errand_categories` table rather than a hardcoded enum.
-  Future<Order?> placeErrandRequest({
-    required String categoryKey,
-    required double fee,
-    required String pickupLocation,
-    required String dropoffLocation,
-    required String itemDescription,
-    required String pin,
-    String? deliveryLocationId,
-    String? locationDetails,
-  }) async {
-    state = const OrderPlacementState(isLoading: true);
-    try {
-      final client = ref.read(supabaseClientProvider);
-
-      final result = await client.rpc(
-        'place_errand_with_payment',
-        params: {
-          'p_category': categoryKey,
-          'p_pickup_location': pickupLocation,
-          'p_dropoff_location': dropoffLocation,
-          'p_item_description': itemDescription,
-          'p_flat_fee': fee,
-          'p_pin': pin,
-          if (deliveryLocationId != null)
-            'p_delivery_location_id': deliveryLocationId,
-          if (locationDetails != null && locationDetails.isNotEmpty)
-            'p_location_details': locationDetails,
-        },
-      ) as Map<String, dynamic>;
-
-      final orderId = result['order_id'] as String;
-
-      final order = Order(
-        id: orderId,
-        studentId: client.auth.currentUser!.id,
-        source: 'uniflex',
-        type: 'errand',
-        status: OrderStatus.placed,
-        deliveryType: 'delivery',
-        totalAmount: fee,
-        estimatedTime: '15–25 min',
-        createdAt: DateTime.now(),
-      );
-
-      ref.invalidate(studentOrdersProvider);
-      ref.invalidate(walletBalanceProvider);
-      ref.invalidate(walletInfoProvider);
-      ref.invalidate(walletTransactionsProvider);
-
-      state = OrderPlacementState(order: order);
-      return order;
-    } catch (e) {
-      state = OrderPlacementState(error: _mapError(e.toString()));
-      return null;
-    }
-  }
-
-  /// Places an Errand request without upfront payment.
-  /// Used by the staged commitment-fee flow — the commitment fee
-  /// and the errand fee are paid via [pay_commitment_fee] and
-  /// [pay_final_amount] respectively.
-  Future<Order?> placeErrandRequestStaged({
-    required String categoryKey,
-    required double flatFee,
-    required String pickupLocation,
-    required String dropoffLocation,
-    required String itemDescription,
-    String? notes,
-    String? deliveryLocationId,
-    String? locationDetails,
-  }) async {
-    state = const OrderPlacementState(isLoading: true);
-    try {
-      final client = ref.read(supabaseClientProvider);
-
-      final result = await client.rpc(
-        'place_errand_order',
-        params: {
-          'p_category': categoryKey,
-          'p_pickup_location': pickupLocation,
-          'p_dropoff_location': dropoffLocation,
-          'p_item_description': itemDescription,
-          'p_flat_fee': flatFee,
-          if (notes != null && notes.isNotEmpty) 'p_notes': notes,
-          if (deliveryLocationId != null)
-            'p_delivery_location_id': deliveryLocationId,
-          if (locationDetails != null)
-            'p_location_details': locationDetails,
-        },
-      ) as Map<String, dynamic>;
-
-      final orderId = result['order_id'] as String;
-
-      final order = Order(
-        id: orderId,
-        studentId: client.auth.currentUser!.id,
-        source: 'uniflex',
-        type: 'errand',
-        status: OrderStatus.placed,
-        deliveryType: 'delivery',
-        totalAmount: flatFee,
-        estimatedTime: '15–25 min',
-        createdAt: DateTime.now(),
-      );
-
-      ref.invalidate(studentOrdersProvider);
-
-      state = OrderPlacementState(order: order);
-      return order;
-    } catch (e) {
-      state = OrderPlacementState(error: _mapError(e.toString()));
-      return null;
-    }
-  }
-
-  /// Translates server error codes into user-facing error strings. The
-  /// sentinel values 'insufficient_balance' / 'invalid_pin' are detected by
-  /// the UI to show tailored feedback rather than a generic message.
-  ///
-  /// Anything unrecognised falls back to a generic line: raw Postgres
-  /// exception text used to be shown to students verbatim, which leaked
-  /// internal schema detail and read as gibberish to them.
-  String _mapError(String raw) {
-    if (raw.contains('INSUFFICIENT_BALANCE')) return 'insufficient_balance';
-    if (raw.contains('INVALID_PIN')) return 'invalid_pin';
-    if (raw.contains('PIN_LOCKED')) {
-      return 'Too many incorrect PIN attempts. Try again in 15 minutes.';
-    }
-    if (raw.contains('PIN_NOT_SET')) {
-      return 'Set up your transaction PIN before placing an order.';
-    }
-    if (raw.contains('TOTAL_MISMATCH')) {
-      return 'Prices changed while you were checking out. '
-          'Please review your cart and try again.';
-    }
-    if (raw.contains('PRODUCT_UNAVAILABLE')) {
-      return 'One of the items in your cart is no longer available.';
-    }
-    if (raw.contains('PRODUCT_NOT_FOUND') ||
-        raw.contains('PRODUCT_VENDOR_MISMATCH')) {
-      return 'One of the items in your cart is no longer on the menu.';
-    }
-    if (raw.contains('CATEGORY_INACTIVE') ||
-        raw.contains('CATEGORY_NOT_FOUND')) {
-      return 'That service is not available right now.';
-    }
-    if (raw.contains('SCHEDULE_IN_PAST')) {
-      return 'Pick a scheduled time in the future.';
-    }
-    if (raw.contains('EMPTY_ORDER')) return 'Your cart is empty.';
-    if (raw.contains('WALLET_NOT_FOUND')) {
-      return 'Wallet not found — please contact support.';
-    }
-    if (raw.contains('crypt')) {
-      return 'Server configuration error — please contact support. (ref: crypt)';
-    }
-    return 'Order failed: $raw';
-  }
-
-  void reset() => state = const OrderPlacementState();
-}
-
-final orderNotifierProvider =
-    NotifierProvider<OrderNotifier, OrderPlacementState>(OrderNotifier.new);
 
 // ---------------------------------------------------------------------------
 // Student cancel (A3 — before rider accepts)
@@ -846,8 +314,8 @@ Future<void> cancelOrder(WidgetRef ref, String orderId) async {
 /// Invalidates [studentDeliveryGroupsProvider] on success.
 Future<void> cancelDeliveryGroup(WidgetRef ref, String groupId) async {
   final client = ref.read(supabaseClientProvider);
-  await client.rpc('student_cancel_delivery_group',
-      params: {'p_group_id': groupId});
+  await client
+      .rpc('student_cancel_delivery_group', params: {'p_group_id': groupId});
   ref.invalidate(studentDeliveryGroupsProvider);
 }
 
@@ -860,34 +328,4 @@ String mapCancelError(String raw) {
     return 'This order is already completed or cancelled.';
   }
   return 'Could not cancel. Please try again.';
-}
-
-// ---------------------------------------------------------------------------
-// Custom order items (C3 — rider adds, student approves/rejects)
-// ---------------------------------------------------------------------------
-
-/// Streams pending custom items for a specific order. Used on the
-/// order tracking screen so the student can approve/reject in real time.
-final pendingCustomItemsProvider =
-    StreamProvider.family<List<CustomOrderItem>, String>((ref, orderId) {
-  final client = ref.watch(supabaseClientProvider);
-
-  return client
-      .from('order_custom_items')
-      .stream(primaryKey: ['id'])
-      .eq('order_id', orderId)
-      .map((rows) => rows
-          .map((m) => CustomOrderItem.fromMap(m))
-          .where((item) => item.isPending)
-          .toList());
-});
-
-/// Approve a custom item added by the rider.
-Future<void> approveCustomItem(SupabaseClient client, String itemId) async {
-  await client.rpc('approve_custom_item', params: {'p_item_id': itemId});
-}
-
-/// Reject a custom item added by the rider.
-Future<void> rejectCustomItem(SupabaseClient client, String itemId) async {
-  await client.rpc('reject_custom_item', params: {'p_item_id': itemId});
 }

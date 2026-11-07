@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -42,8 +43,7 @@ class SupportChatService {
     try {
       final stream = _client
           .from('support_conversations')
-          .stream(primaryKey: ['id'])
-          .eq('student_id', userId);
+          .stream(primaryKey: ['id']).eq('student_id', userId);
 
       await for (final rows in stream) {
         if (rows.isEmpty) {
@@ -76,10 +76,8 @@ class SupportChatService {
 
     // Realtime updates.
     try {
-      final stream = _client
-          .from('support_conversations')
-          .stream(primaryKey: ['id'])
-          .order('last_message_at', ascending: false);
+      final stream = _client.from('support_conversations').stream(
+          primaryKey: ['id']).order('last_message_at', ascending: false);
 
       await for (final rows in stream) {
         final convs = rows.map(SupportConversation.fromMap).toList()
@@ -149,23 +147,31 @@ class SupportChatService {
   // ── Admin: load a student profile for the conversation header ─────────
 
   /// Returns { full_name, nickname, phone } for the conversation's student.
+  /// Goes through the admin-only `admin_profile_basics` function — Admin
+  /// cannot read another user's `profiles` row directly.
   Future<Map<String, dynamic>?> fetchStudentProfile(String studentId) async {
-    final row = await _client
-        .from('profiles')
-        .select('full_name, nickname, phone')
-        .eq('id', studentId)
-        .maybeSingle();
-    return row;
+    final rows = await _client.rpc('admin_profile_basics', params: {
+      'p_ids': [studentId]
+    });
+    final list = rows as List;
+    if (list.isEmpty) return null;
+    return Map<String, dynamic>.from(list.first as Map);
   }
 
   // ── Write actions (all via RPC) ───────────────────────────────────────
 
   /// Sends a message. Returns `{ message_id, conversation_id }`.
   ///
-  /// [conversationId] is required for admin callers; ignored for students.
-  /// [orderId] optionally attaches a standalone order (student only).
-  /// [groupId] optionally attaches a delivery group (student only).
-  /// Only one of [orderId] / [groupId] should be set per message.
+  /// Three paths, one function (`send_support_message`):
+  ///   * student, no order        → just [body]
+  ///   * student, with an order   → [orderId] (errand / pickup order) or
+  ///                                [groupId] (a delivery — the one order the
+  ///                                student, rider and Admin all see)
+  ///   * admin reply              → [conversationId]
+  ///
+  /// All four named parameters are always sent (nulls included) so the
+  /// call always names the same parameter list. The real error is logged
+  /// in debug builds; the user only ever sees a friendly line.
   Future<Map<String, dynamic>> sendMessage(
     String body, {
     String? orderId,
@@ -175,14 +181,17 @@ class SupportChatService {
     try {
       final result = await _client.rpc('send_support_message', params: {
         'p_body': body.trim(),
-        if (orderId != null) 'p_order_id': orderId,
-        if (groupId != null) 'p_group_id': groupId,
-        if (conversationId != null) 'p_conversation_id': conversationId,
+        'p_order_id': orderId,
+        'p_group_id': groupId,
+        'p_conversation_id': conversationId,
       });
       return Map<String, dynamic>.from(result as Map);
     } on PostgrestException catch (e) {
+      debugPrint('[Support] send_support_message failed: '
+          'code=${e.code} message=${e.message} details=${e.details}');
       if (e.message.contains('RATE_LIMITED')) {
-        throw SupportException('Slow down — you can send 20 messages per minute.');
+        throw SupportException(
+            'Slow down — you can send 20 messages per minute.');
       }
       if (e.message.contains('empty')) {
         throw SupportException('Message cannot be empty.');
@@ -193,6 +202,14 @@ class SupportChatService {
       throw SupportException('Could not send message. Please try again.');
     }
   }
+
+  /// Admin: loads the order or delivery group a message refers to, so a
+  /// tap on its chip can open it. Returns null if it no longer exists.
+  Future<Map<String, dynamic>?> fetchDeliveryGroup(String groupId) =>
+      _client.from('delivery_groups').select().eq('id', groupId).maybeSingle();
+
+  Future<Map<String, dynamic>?> fetchOrder(String orderId) =>
+      _client.from('orders').select().eq('id', orderId).maybeSingle();
 
   /// Clears the caller's unread count for [conversationId].
   Future<void> markRead(String conversationId) async {
@@ -223,8 +240,7 @@ class SupportChatService {
   ///   admin   → sum of all admin_unread_counts
   Future<int> getUnreadTotal() async {
     try {
-      final result =
-          await _client.rpc('get_support_unread_total');
+      final result = await _client.rpc('get_support_unread_total');
       return (result as int?) ?? 0;
     } catch (_) {
       return 0;
@@ -239,8 +255,7 @@ final supportChatServiceProvider = Provider<SupportChatService>((ref) {
 });
 
 /// Student: live stream of their own conversation (null if none yet).
-final myConversationProvider =
-    StreamProvider<SupportConversation?>((ref) {
+final myConversationProvider = StreamProvider<SupportConversation?>((ref) {
   return ref.watch(supportChatServiceProvider).watchMyConversation();
 });
 

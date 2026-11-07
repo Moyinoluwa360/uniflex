@@ -29,17 +29,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final notifier = ref.read(cartProvider.notifier);
-      final wasExpired =
-          notifier.expiredOnLoad || notifier.checkAndClearIfExpired();
-      if (wasExpired) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Your cart was cleared after 1 hour.'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      // An expired cart is cleared silently — no message.
+      ref.read(cartProvider.notifier).checkAndClearIfExpired();
     });
   }
 
@@ -68,15 +59,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                       size: 36, color: theme.colorScheme.primary),
                 ),
                 const SizedBox(height: AppSpacing.md),
-                Text('Your cart is empty',
-                    style: theme.textTheme.titleMedium),
+                Text('Your cart is empty', style: theme.textTheme.titleMedium),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   'Add items from the menu to get started.',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurface
-                        .withValues(alpha: 0.55),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
                   ),
                 ),
               ],
@@ -86,9 +75,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       );
     }
 
-    final vendorGroups = cart.groups.values
-        .where((g) => !g.isEmpty)
-        .toList();
+    final vendorGroups = cart.groups.values.where((g) => !g.isEmpty).toList();
     final isMultiVendor = vendorGroups.length > 1;
 
     return Scaffold(
@@ -182,7 +169,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                       ),
                       TextButton(
                         onPressed: () => Navigator.pop(ctx, true),
-                        child: Text(
+                        child: const Text(
                           'Remove',
                           style: TextStyle(color: AppColors.error),
                         ),
@@ -191,9 +178,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                   ),
                 );
                 if (ok == true) {
-                  ref
-                      .read(cartProvider.notifier)
-                      .removeVendor(group.vendor.id);
+                  ref.read(cartProvider.notifier).removeVendor(group.vendor.id);
                 }
               },
             ),
@@ -236,10 +221,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Pack fees',
-                        style: theme.textTheme.bodySmall),
-                    Text(
-                        '₦${cart.totalPackFee.toStringAsFixed(0)}',
+                    Text('Pack fees', style: theme.textTheme.bodySmall),
+                    Text('₦${cart.totalPackFee.toStringAsFixed(0)}',
                         style: theme.textTheme.bodySmall),
                   ],
                 ),
@@ -377,13 +360,12 @@ class _CartItemTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item.product.name,
-                    style: theme.textTheme.labelLarge),
+                Text(item.product.name, style: theme.textTheme.labelLarge),
                 if (item.optionsSummary.isNotEmpty)
                   Text(item.optionsSummary,
                       style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.55),
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.55),
                       )),
                 const SizedBox(height: 4),
                 Text(
@@ -402,10 +384,9 @@ class _CartItemTile extends StatelessWidget {
                 onTap: () => onRemoveOrUpdate(item.quantity - 1),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.sm),
-                child: Text('${item.quantity}',
-                    style: theme.textTheme.titleSmall),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                child:
+                    Text('${item.quantity}', style: theme.textTheme.titleSmall),
               ),
               _SmallButton(
                 icon: Icons.add,

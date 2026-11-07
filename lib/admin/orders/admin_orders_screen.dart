@@ -8,7 +8,9 @@ import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../services/admin_providers.dart';
 import '../services/admin_service.dart';
+import '../services/profile_basics.dart';
 import 'admin_order_details_screen.dart';
+import '../../shared/widgets/inputs/app_text_field.dart';
 
 /// Tabbed order management screen for admin: Deliveries | Errands.
 ///
@@ -94,6 +96,15 @@ class _AdminOrdersScreenState extends ConsumerState<AdminOrdersScreen>
 
 // ── Filter chip bar ───────────────────────────────────────────────────────────
 
+/// The rider line on an order card: the rider's name once one has accepted,
+/// "Waiting for rider" before that. (Falls back to "Rider assigned" only if
+/// the name could not be loaded.)
+String riderLineText(String? riderId, String? riderName) {
+  if (riderId == null) return 'Waiting for rider';
+  final name = riderName?.trim();
+  return (name == null || name.isEmpty) ? 'Rider assigned' : 'Rider: $name';
+}
+
 class _FilterBar extends StatelessWidget {
   const _FilterBar({
     required this.selected,
@@ -141,7 +152,7 @@ class _SearchBar extends StatelessWidget {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
-      child: TextField(
+      child: AppTextField(
         controller: controller,
         onChanged: onChanged,
         style: theme.textTheme.bodyMedium,
@@ -191,10 +202,8 @@ class _DeliveriesTabState extends ConsumerState<_DeliveriesTab> {
   bool _matchesFilter(DeliveryGroup group) {
     return switch (_filter) {
       _StatusFilter.active => !group.isTerminal,
-      _StatusFilter.completed =>
-        group.status == DeliveryGroupStatus.completed,
-      _StatusFilter.cancelled =>
-        group.status == DeliveryGroupStatus.cancelled,
+      _StatusFilter.completed => group.status == DeliveryGroupStatus.completed,
+      _StatusFilter.cancelled => group.status == DeliveryGroupStatus.cancelled,
     };
   }
 
@@ -221,6 +230,11 @@ class _DeliveriesTabState extends ConsumerState<_DeliveriesTab> {
         final filtered = groups
             .where((r) => _matchesFilter(r.group) && _matchesQuery(r))
             .toList();
+        final riderNames = ref
+                .watch(adminProfileBasicsProvider(
+                    profileIdsKey(filtered.map((r) => r.group.riderId))))
+                .valueOrNull ??
+            const <String, ProfileBasics>{};
 
         return Column(
           children: [
@@ -256,8 +270,11 @@ class _DeliveriesTabState extends ConsumerState<_DeliveriesTab> {
                         AppSpacing.xl,
                       ),
                       itemCount: filtered.length,
-                      itemBuilder: (_, i) =>
-                          _DeliveryGroupCard(row: filtered[i]),
+                      itemBuilder: (_, i) => _DeliveryGroupCard(
+                        row: filtered[i],
+                        riderName: riderNames[filtered[i].group.riderId]
+                            ?.displayName(),
+                      ),
                     ),
             ),
           ],
@@ -268,8 +285,11 @@ class _DeliveriesTabState extends ConsumerState<_DeliveriesTab> {
 }
 
 class _DeliveryGroupCard extends StatelessWidget {
-  const _DeliveryGroupCard({required this.row});
+  const _DeliveryGroupCard({required this.row, this.riderName});
   final AdminDeliveryGroupRow row;
+
+  /// The rider's name once known; null while loading / unavailable.
+  final String? riderName;
 
   @override
   Widget build(BuildContext context) {
@@ -353,8 +373,8 @@ class _DeliveryGroupCard extends StatelessWidget {
                   children: [
                     Icon(Icons.location_on_outlined,
                         size: 14,
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.5)),
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.5)),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -382,7 +402,8 @@ class _DeliveryGroupCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    group.riderId == null ? 'Waiting for rider' : 'Rider assigned',
+                    riderLineText(group.riderId, riderName),
+                    key: const ValueKey('rider-line'),
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: group.riderId == null
                           ? AppColors.orange
@@ -463,6 +484,11 @@ class _ErrandsTabState extends ConsumerState<_ErrandsTab> {
         final filtered = errands
             .where((r) => _matchesFilter(r.order) && _matchesQuery(r))
             .toList();
+        final riderNames = ref
+                .watch(adminProfileBasicsProvider(
+                    profileIdsKey(filtered.map((r) => r.order.riderId))))
+                .valueOrNull ??
+            const <String, ProfileBasics>{};
 
         return Column(
           children: [
@@ -498,8 +524,11 @@ class _ErrandsTabState extends ConsumerState<_ErrandsTab> {
                         AppSpacing.xl,
                       ),
                       itemCount: filtered.length,
-                      itemBuilder: (_, i) =>
-                          _ErrandOrderCard(row: filtered[i]),
+                      itemBuilder: (_, i) => _ErrandOrderCard(
+                        row: filtered[i],
+                        riderName: riderNames[filtered[i].order.riderId]
+                            ?.displayName(),
+                      ),
                     ),
             ),
           ],
@@ -510,8 +539,11 @@ class _ErrandsTabState extends ConsumerState<_ErrandsTab> {
 }
 
 class _ErrandOrderCard extends StatelessWidget {
-  const _ErrandOrderCard({required this.row});
+  const _ErrandOrderCard({required this.row, this.riderName});
   final AdminErrandRow row;
+
+  /// The rider's name once known; null while loading / unavailable.
+  final String? riderName;
 
   @override
   Widget build(BuildContext context) {
@@ -604,8 +636,8 @@ class _ErrandOrderCard extends StatelessWidget {
                   children: [
                     Icon(Icons.upload_outlined,
                         size: 14,
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.5)),
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.5)),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -626,8 +658,8 @@ class _ErrandOrderCard extends StatelessWidget {
                   children: [
                     Icon(Icons.location_on_outlined,
                         size: 14,
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.5)),
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.5)),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -656,9 +688,8 @@ class _ErrandOrderCard extends StatelessWidget {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      order.riderId == null
-                          ? 'Waiting for rider'
-                          : 'Rider assigned',
+                      riderLineText(order.riderId, riderName),
+                      key: const ValueKey('rider-line'),
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: order.riderId == null
                             ? AppColors.orange
@@ -698,8 +729,8 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.sm, vertical: 3),
+      padding:
+          const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 3),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(AppRadius.pill),

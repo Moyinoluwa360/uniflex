@@ -2,30 +2,31 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../shared/models/order.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/utils/app_error_mapper.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
-import '../../shared/services/supabase/supabase_providers.dart';
 import '../services/rider_providers.dart';
 import '../services/rider_service.dart';
+import 'delivery_complete_screen.dart';
+import 'rider_job.dart';
+import '../../shared/widgets/inputs/app_text_field.dart';
 
 class ErrandJobScreen extends ConsumerStatefulWidget {
-  /// Open in preview mode (from pool — errand not yet accepted).
-  ErrandJobScreen.fromPool({super.key, required Order order})
-      : orderId = order.id,
-        order = order,
+  /// Open in preview mode (from the pool — errand not yet accepted).
+  ErrandJobScreen.fromPool({super.key, required RiderJob job})
+      : orderId = job.id,
+        previewJob = job,
         isPreview = true;
 
-  /// Open as active errand (already accepted by this rider).
+  /// Open as an active errand (already accepted by this rider).
   const ErrandJobScreen.active({super.key, required this.orderId})
-      : order = null,
+      : previewJob = null,
         isPreview = false;
 
   final String orderId;
-  final Order? order;
+  final RiderJob? previewJob;
   final bool isPreview;
 
   @override
@@ -39,15 +40,16 @@ class _ErrandJobScreenState extends ConsumerState<ErrandJobScreen> {
     setState(() => _isAccepting = true);
     try {
       await ref.read(riderServiceProvider).acceptOrder(widget.orderId);
+      ref.invalidate(riderStatsProvider);
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) =>
-                ErrandJobScreen.active(orderId: widget.orderId),
+            builder: (_) => ErrandJobScreen.active(orderId: widget.orderId),
           ),
         );
       }
     } catch (e) {
+      debugPrint('[ErrandJob] accept failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(AppErrorMapper.map(e))),
@@ -59,28 +61,32 @@ class _ErrandJobScreenState extends ConsumerState<ErrandJobScreen> {
   }
 
   Future<void> _showDeliveryPinSheet() async {
-    await showModalBottomSheet(
+    final ok = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-            top: Radius.circular(AppRadius.sheet)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
       ),
       builder: (ctx) => _ErrandDeliveryPinSheet(orderId: widget.orderId),
     );
+    if (ok == true && mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => DeliveryCompleteScreen(jobId: widget.orderId),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.isPreview) {
-      return _buildPreview(context);
-    }
+    if (widget.isPreview) return _buildPreview(context);
     return _buildActive(context);
   }
 
   Widget _buildPreview(BuildContext context) {
-    final order = widget.order!;
-
+    final job = widget.previewJob!;
     return Scaffold(
       appBar: UniflexAppBar(
         title: 'Job Details',
@@ -97,13 +103,12 @@ class _ErrandJobScreenState extends ConsumerState<ErrandJobScreen> {
                 AppSpacing.xl,
               ),
               children: [
-                _ErrandDetailCard(orderId: order.id),
+                _ErrandDetailCard(job: job),
                 const SizedBox(height: AppSpacing.md),
-                // Drop-off location.
                 _InfoCard(
                   icon: Icons.location_on_outlined,
                   label: 'Drop-off',
-                  value: order.deliveryLocation ?? '—',
+                  value: job.deliveryLocation ?? '—',
                 ),
               ],
             ),
@@ -143,76 +148,112 @@ class _ErrandJobScreenState extends ConsumerState<ErrandJobScreen> {
 
   Widget _buildActive(BuildContext context) {
     final theme = Theme.of(context);
-    final detailAsync =
-        ref.watch(activeDeliveryDetailProvider(widget.orderId));
+    final jobsAsync = ref.watch(riderActiveJobsProvider);
+    final customerAsync = ref.watch(errandCustomerProvider(widget.orderId));
 
     return Scaffold(
       appBar: UniflexAppBar(
         title: 'Active Errand',
         actions: [_ErrandBadgeChip()],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.screenGutter,
-                AppSpacing.md,
-                AppSpacing.screenGutter,
-                AppSpacing.xl,
+      body: jobsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) {
+          debugPrint('[ErrandJob] load error: $e');
+          return RetrySection(
+            message: 'Could not load errand details.',
+            onRetry: () => ref.invalidate(riderActiveJobsProvider),
+          );
+        },
+        data: (jobs) {
+          final matches = jobs.where((j) => j.id == widget.orderId);
+          if (matches.isEmpty) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.screenGutter),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('This errand is no longer active.',
+                        style: theme.textTheme.titleSmall),
+                    const SizedBox(height: AppSpacing.lg),
+                    OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Go back'),
+                    ),
+                  ],
+                ),
               ),
-              children: [
-                // Status stepper: 2 steps.
-                _ErrandStatusStepper(detailAsync: detailAsync),
-                const SizedBox(height: AppSpacing.lg),
-
-                // Errand detail.
-                _ErrandDetailCard(orderId: widget.orderId),
-                const SizedBox(height: AppSpacing.md),
-
-                // Customer card.
-                detailAsync.when(
-                  loading: () => const _DetailShimmer(),
-                  error: (e, _) => RetrySection(
-                    message: 'Could not load customer info.',
-                    compact: true,
-                    onRetry: () => ref.invalidate(
-                        activeDeliveryDetailProvider(widget.orderId)),
+            );
+          }
+          final job = matches.first;
+          return Column(
+            children: [
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.screenGutter,
+                    AppSpacing.md,
+                    AppSpacing.screenGutter,
+                    AppSpacing.xl,
                   ),
-                  data: (detail) {
-                    if (detail == null) return const SizedBox.shrink();
-                    return _ActiveCustomerCard(detail: detail);
-                  },
+                  children: [
+                    _ErrandStatusStepper(
+                        outForDelivery: job.status == 'out_for_delivery'),
+                    const SizedBox(height: AppSpacing.lg),
+                    _InfoCard(
+                      icon: Icons.tag,
+                      label: 'Order ID',
+                      value: job.shortId,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    customerAsync.when(
+                      loading: () => const _DetailShimmer(),
+                      error: (e, _) => RetrySection(
+                        message: 'Could not load customer info.',
+                        compact: true,
+                        onRetry: () => ref
+                            .invalidate(errandCustomerProvider(widget.orderId)),
+                      ),
+                      data: (c) => _ActiveCustomerCard(customer: c),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    _ErrandDetailCard(job: job),
+                    const SizedBox(height: AppSpacing.md),
+                    _InfoCard(
+                      icon: Icons.location_on_outlined,
+                      label: 'Drop-off',
+                      value: job.deliveryLocation ?? '—',
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-
-          // Bottom action: Enter Delivery PIN.
-          Container(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.screenGutter,
-              AppSpacing.sm,
-              AppSpacing.screenGutter,
-              AppSpacing.lg,
-            ),
-            decoration: BoxDecoration(
-              color: theme.scaffoldBackgroundColor,
-              border: Border(top: BorderSide(color: theme.dividerColor)),
-            ),
-            child: SizedBox(
-              width: double.infinity,
-              height: AppSpacing.controlHeight,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.accentViolet,
-                ),
-                onPressed: _showDeliveryPinSheet,
-                child: const Text('Enter Delivery PIN'),
               ),
-            ),
-          ),
-        ],
+              Container(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.screenGutter,
+                  AppSpacing.sm,
+                  AppSpacing.screenGutter,
+                  AppSpacing.lg,
+                ),
+                decoration: BoxDecoration(
+                  color: theme.scaffoldBackgroundColor,
+                  border: Border(top: BorderSide(color: theme.dividerColor)),
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: AppSpacing.controlHeight,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.accentViolet,
+                    ),
+                    onPressed: _showDeliveryPinSheet,
+                    child: const Text('Enter Delivery PIN'),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -227,8 +268,8 @@ class _ErrandBadgeChip extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(right: AppSpacing.md),
       child: Container(
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.sm, vertical: 3),
+        padding:
+            const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 3),
         decoration: BoxDecoration(
           color: AppColors.accentViolet.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -247,28 +288,24 @@ class _ErrandBadgeChip extends StatelessWidget {
 
 // ── Status stepper (2 steps) ──────────────────────────────────────────────────
 
-class _ErrandStatusStepper extends ConsumerWidget {
-  const _ErrandStatusStepper({required this.detailAsync});
+class _ErrandStatusStepper extends StatelessWidget {
+  const _ErrandStatusStepper({required this.outForDelivery});
 
-  final AsyncValue<ActiveDeliveryDetail?> detailAsync;
+  final bool outForDelivery;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // Determine completed: check if the order is out_for_delivery vs accepted.
-    final isOutForDelivery = detailAsync.valueOrNull?.order.status ==
-        OrderStatus.outForDelivery;
-
     final steps = ['Accepted', 'Completed'];
-    final current = isOutForDelivery ? 1 : 0;
+    final current = outForDelivery ? 1 : 0;
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: AppColors.accentViolet.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(
-            color: AppColors.accentViolet.withValues(alpha: 0.2)),
+        border:
+            Border.all(color: AppColors.accentViolet.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: List.generate(steps.length * 2 - 1, (i) {
@@ -297,8 +334,7 @@ class _ErrandStatusStepper extends ConsumerWidget {
                   shape: BoxShape.circle,
                   color: isDone || isCurrent
                       ? AppColors.accentViolet
-                      : theme.colorScheme.outline
-                          .withValues(alpha: 0.2),
+                      : theme.colorScheme.outline.withValues(alpha: 0.2),
                 ),
                 child: Center(
                   child: isDone
@@ -324,10 +360,8 @@ class _ErrandStatusStepper extends ConsumerWidget {
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: isDone || isCurrent
                       ? AppColors.accentViolet
-                      : theme.colorScheme.onSurface
-                          .withValues(alpha: 0.4),
-                  fontWeight:
-                      isCurrent ? FontWeight.w700 : FontWeight.normal,
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                  fontWeight: isCurrent ? FontWeight.w700 : FontWeight.normal,
                   fontSize: 10,
                 ),
               ),
@@ -339,124 +373,85 @@ class _ErrandStatusStepper extends ConsumerWidget {
   }
 }
 
-// ── Errand detail card (fetches from errand_requests) ────────────────────────
+// ── Errand detail card (from the rider-safe job payload; no fees) ────────────
 
-class _ErrandDetailCard extends ConsumerWidget {
-  const _ErrandDetailCard({required this.orderId});
+class _ErrandDetailCard extends StatelessWidget {
+  const _ErrandDetailCard({required this.job});
 
-  final String orderId;
+  final RiderJob job;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final errandAsync =
-        ref.watch(_errandRequestProvider(orderId));
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final category = job.category ?? 'Errand';
+    final description = job.itemDescription ?? '—';
+    final pickup = job.pickupLocation;
 
-    return errandAsync.when(
-      loading: () => const _DetailShimmer(),
-      error: (e, _) => RetrySection(
-        message: 'Could not load errand details.',
-        compact: true,
-        onRetry: () =>
-            ref.invalidate(_errandRequestProvider(orderId)),
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: theme.dividerColor),
       ),
-      data: (data) {
-        if (data == null) return const SizedBox.shrink();
-
-        final category = data['category'] as String? ?? 'Errand';
-        final description =
-            data['item_description'] as String? ?? '—';
-        final pickup = data['pickup_location'] as String?;
-
-        return Container(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadius.card),
-            border: Border.all(color: theme.dividerColor),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm, vertical: 3),
+            decoration: BoxDecoration(
+              color: AppColors.accentViolet.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+            ),
+            child: Text(
+              category,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: AppColors.accentViolet,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.sm, vertical: 3),
-                    decoration: BoxDecoration(
-                      color:
-                          AppColors.accentViolet.withValues(alpha: 0.1),
-                      borderRadius:
-                          BorderRadius.circular(AppRadius.pill),
-                    ),
-                    child: Text(
-                      category,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: AppColors.accentViolet,
-                        fontWeight: FontWeight.w700,
+          const SizedBox(height: AppSpacing.sm),
+          Text(description, style: theme.textTheme.bodyMedium),
+          if (pickup != null && pickup.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.store_outlined,
+                    size: 16,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Pickup',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.5),
+                        ),
                       ),
-                    ),
+                      Text(pickup, style: theme.textTheme.bodySmall),
+                    ],
                   ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                description,
-                style: theme.textTheme.bodyMedium,
-              ),
-              if (pickup != null && pickup.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.md),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.store_outlined,
-                        size: 16,
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.5)),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Pickup',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurface
-                                  .withValues(alpha: 0.5),
-                            ),
-                          ),
-                          Text(pickup,
-                              style: theme.textTheme.bodySmall),
-                        ],
-                      ),
-                    ),
-                  ],
                 ),
               ],
-            ],
-          ),
-        );
-      },
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
 
-final _errandRequestProvider =
-    FutureProvider.family<Map<String, dynamic>?, String>((ref, orderId) async {
-  final client = ref.watch(supabaseClientProvider);
-  final result = await client
-      .from('errand_requests')
-      .select('order_id, pickup_location, item_description, category')
-      .eq('order_id', orderId)
-      .maybeSingle();
-  return result;
-});
-
 // ── Active customer card ──────────────────────────────────────────────────────
 
 class _ActiveCustomerCard extends StatelessWidget {
-  const _ActiveCustomerCard({required this.detail});
+  const _ActiveCustomerCard({required this.customer});
 
-  final ActiveDeliveryDetail detail;
+  final ErrandCustomer customer;
 
   void _callPhone(BuildContext context, String phone) async {
     final uri = Uri.parse('tel:$phone');
@@ -488,7 +483,7 @@ class _ActiveCustomerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final phone = detail.customerPhone ?? '';
+    final phone = customer.phone ?? '';
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -514,38 +509,13 @@ class _ActiveCustomerCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
-          if (detail.customerName != null)
+          if (customer.name != null)
             Text(
-              detail.customerName!,
+              customer.name!,
               style: theme.textTheme.titleSmall
                   ?.copyWith(fontWeight: FontWeight.w700),
             ),
           const SizedBox(height: AppSpacing.sm),
-
-          // Drop-off location details from pickupAddress used as note.
-          if (detail.pickupAddress != null) ...[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.info_outline,
-                    size: 14,
-                    color: theme.colorScheme.onSurface
-                        .withValues(alpha: 0.5)),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    detail.pickupAddress!,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface
-                          .withValues(alpha: 0.6),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-          ],
-
           if (phone.isNotEmpty) ...[
             Row(
               children: [
@@ -564,8 +534,8 @@ class _ActiveCustomerCard extends StatelessWidget {
                     label: const Text('WhatsApp'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF25D366),
-                      side: const BorderSide(
-                          color: Color(0xFF25D366), width: 1),
+                      side:
+                          const BorderSide(color: Color(0xFF25D366), width: 1),
                     ),
                   ),
                 ),
@@ -605,8 +575,7 @@ class _InfoCard extends StatelessWidget {
         children: [
           Icon(icon,
               size: 18,
-              color:
-                  theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
@@ -615,8 +584,7 @@ class _InfoCard extends StatelessWidget {
                 Text(
                   label,
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurface
-                        .withValues(alpha: 0.5),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -642,8 +610,7 @@ class _DetailShimmer extends StatelessWidget {
       height: 100,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppRadius.card),
-        color: theme.colorScheme.surfaceContainerHighest
-            .withValues(alpha: 0.4),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
       ),
     );
   }
@@ -676,22 +643,16 @@ class _ErrandDeliveryPinSheetState
     final pin = _controller.text.trim().toUpperCase();
     if (pin.length != 4) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Please enter a 4-character PIN.')),
+        const SnackBar(content: Text('Please enter a 4-character PIN.')),
       );
       return;
     }
 
     setState(() => _isConfirming = true);
     try {
-      await ref
-          .read(riderServiceProvider)
-          .verifyDelivery(widget.orderId, pin);
+      await ref.read(riderServiceProvider).verifyDelivery(widget.orderId, pin);
       ref.invalidate(riderStatsProvider);
-      if (mounted) {
-        Navigator.of(context).pop(); // close sheet
-        Navigator.of(context).pop(); // pop job screen
-      }
+      if (mounted) Navigator.of(context).pop(true); // job screen shows summary
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -726,12 +687,11 @@ class _ErrandDeliveryPinSheetState
           Text(
             'Ask the customer for their 4-digit PIN.',
             style: theme.textTheme.bodyMedium?.copyWith(
-              color:
-                  theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
-          TextField(
+          AppTextField(
             controller: _controller,
             maxLength: 4,
             textCapitalization: TextCapitalization.characters,
@@ -750,8 +710,7 @@ class _ErrandDeliveryPinSheetState
               if (upper != v) {
                 _controller.value = _controller.value.copyWith(
                   text: upper,
-                  selection:
-                      TextSelection.collapsed(offset: upper.length),
+                  selection: TextSelection.collapsed(offset: upper.length),
                 );
               }
             },
@@ -770,8 +729,7 @@ class _ErrandDeliveryPinSheetState
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.pureWhite),
+                          strokeWidth: 2, color: AppColors.pureWhite),
                     )
                   : const Text('Confirm delivery'),
             ),

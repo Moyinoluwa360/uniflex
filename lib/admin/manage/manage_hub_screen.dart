@@ -12,7 +12,9 @@ import '../profile/admin_profile_screen.dart';
 import '../referrals/referral_codes_screen.dart';
 import '../riders/rider_management_screen.dart';
 import '../scheduled/admin_scheduled_orders_screen.dart';
+import '../service_charge/service_charge_screen.dart';
 import '../support/admin_support_inbox_screen.dart';
+import '../support/support_settings_screen.dart';
 import '../vendors/vendor_management_screen.dart';
 
 /// The "Manage" bottom-nav tab — a single hub that branches into every
@@ -49,6 +51,13 @@ class ManageHubScreen extends ConsumerWidget {
             title: 'Manage Riders',
             subtitle: 'Add, remove, and activate Rider accounts',
             screen: RiderManagementScreen(),
+          ),
+          const SizedBox(height: AppSpacing.cardGap),
+          const _ManageEntry(
+            icon: Icons.payments_outlined,
+            title: 'Service charge',
+            subtitle: 'The flat fee added to every delivery and errand',
+            screen: ServiceChargeScreen(),
           ),
           const SizedBox(height: AppSpacing.cardGap),
           const _ManageEntry(
@@ -93,6 +102,13 @@ class ManageHubScreen extends ConsumerWidget {
             subtitle: 'Student messages and conversations',
             screen: const AdminSupportInboxScreen(),
             badgeCount: unread,
+          ),
+          const SizedBox(height: AppSpacing.cardGap),
+          const _ManageEntry(
+            icon: Icons.settings_phone_outlined,
+            title: 'Support settings',
+            subtitle: 'The WhatsApp number students can message',
+            screen: SupportSettingsScreen(),
           ),
           const SizedBox(height: AppSpacing.cardGap),
           const _ManageEntry(

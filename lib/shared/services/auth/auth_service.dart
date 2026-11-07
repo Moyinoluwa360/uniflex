@@ -16,15 +16,10 @@ class AuthService {
   /// the persisted session.
   Stream<AuthState> get onAuthStateChange => _client.auth.onAuthStateChange;
 
-  /// Step One of student sign-up. Supabase project's "Confirm email"
-  /// setting must be off (see supabase/schema.sql) — this app's own
-  /// verification gate is the Termii phone OTP, not an email link.
-  Future<AuthResponse> signUpWithEmail({
-    required String email,
-    required String password,
-  }) {
-    return _client.auth.signUp(email: email, password: password);
-  }
+  // Pack 5: there is deliberately NO signUp() here any more. A student
+  // account is created only by the `signup` Edge Function at the very last
+  // step (see lib/shared/auth/signup/); the app then calls
+  // [signInWithEmail]. That is what keeps half-made accounts from existing.
 
   /// Used by the shared Login screen for Students, Riders, and Admins
   /// alike — which shell a person lands on is decided by their

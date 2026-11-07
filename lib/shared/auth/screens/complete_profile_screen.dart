@@ -17,15 +17,25 @@ import '../validators.dart';
 const _availableSchools = ['Redeemer\'s University'];
 
 const _months = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
 ];
 
 String _formatDate(DateTime date) =>
     '${_months[date.month - 1]} ${date.day}, ${date.year}';
 
-/// Step Two — shown immediately after Step One (phone OTP) succeeds, or
-/// on app start if a signed-in student's profile row exists but
+/// LEGACY (pre-Pack-5 accounts only — new sign-ups use SignupFinalStep).
+/// Shown on app start if a signed-in student's profile row exists but
 /// `onboarding_complete` is still false (see AuthGate). On submit this
 /// creates the profile, wallet, and (if a valid code was entered) the
 /// referral relationship in one transaction (complete_student_onboarding()
@@ -40,8 +50,7 @@ class CompleteProfileScreen extends ConsumerStatefulWidget {
       _CompleteProfileScreenState();
 }
 
-class _CompleteProfileScreenState
-    extends ConsumerState<CompleteProfileScreen> {
+class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nicknameController = TextEditingController();
   final _fullNameController = TextEditingController();
@@ -98,9 +107,7 @@ class _CompleteProfileScreenState
     final referralCode = _referralController.text.trim();
 
     try {
-      await ref
-          .read(profileServiceProvider)
-          .completeStudentOnboarding(
+      await ref.read(profileServiceProvider).completeStudentOnboarding(
             nickname: _nicknameController.text.trim(),
             fullName: _fullNameController.text.trim(),
             matricNumber: _matricController.text.trim().isEmpty
@@ -135,9 +142,8 @@ class _CompleteProfileScreenState
 
   @override
   Widget build(BuildContext context) {
-    final dobLabel = _dateOfBirth == null
-        ? 'Date of birth'
-        : _formatDate(_dateOfBirth!);
+    final dobLabel =
+        _dateOfBirth == null ? 'Date of birth' : _formatDate(_dateOfBirth!);
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
     final secondaryInk = Theme.of(context).brightness == Brightness.dark
@@ -285,8 +291,8 @@ class _CompleteProfileScreenState
                 Text(
                   'You\'ll enter this 4-digit PIN to confirm every order.',
                   style: textTheme.bodySmall?.copyWith(
-                        color: secondaryInk,
-                      ),
+                    color: secondaryInk,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Row(

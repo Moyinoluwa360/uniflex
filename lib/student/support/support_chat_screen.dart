@@ -7,6 +7,8 @@ import '../../shared/services/support/support_chat_service.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/async/retry_section.dart';
+import '../../shared/widgets/chat/support_order_chip.dart';
+import '../../shared/widgets/inputs/app_text_field.dart';
 
 /// Student-facing support chat.
 ///
@@ -108,15 +110,19 @@ class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
     }
   }
 
+  /// Newest message is at the bottom (WhatsApp order). Scrolls after the
+  /// next frame, and again one frame later, because a long list's extent
+  /// is only final once the last items have been laid out.
   void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    void jump() {
       if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-        );
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
       }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      jump();
+      WidgetsBinding.instance.addPostFrameCallback((_) => jump());
     });
   }
 
@@ -142,33 +148,35 @@ class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
       body: Column(
         children: [
           // ── Status bar (resolved) ─────────────────────────────────────
-          convAsync.whenData(
-            (conv) => conv != null && conv.isResolved
-                ? Container(
-                    width: double.infinity,
-                    color: AppColors.mediumGrey.withValues(alpha: 0.1),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md,
-                      vertical: AppSpacing.sm,
-                    ),
-                    child: Text(
-                      'This conversation was marked resolved. '
-                      'Send a message to reopen it.',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.6),
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
+          convAsync
+                  .whenData(
+                    (conv) => conv != null && conv.isResolved
+                        ? Container(
+                            width: double.infinity,
+                            color: AppColors.mediumGrey.withValues(alpha: 0.1),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.md,
+                              vertical: AppSpacing.sm,
+                            ),
+                            child: Text(
+                              'This conversation was marked resolved. '
+                              'Send a message to reopen it.',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.onSurface
+                                    .withValues(alpha: 0.6),
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          )
+                        : const SizedBox.shrink(),
                   )
-                : const SizedBox.shrink(),
-          ).value ?? const SizedBox.shrink(),
+                  .value ??
+              const SizedBox.shrink(),
 
           // ── Message list ─────────────────────────────────────────────
           Expanded(
             child: convAsync.when(
-              loading: () =>
-                  const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => RetrySection(
                 message: 'Could not load messages.',
                 onRetry: () => ref.invalidate(myConversationProvider),
@@ -309,15 +317,15 @@ class _MessageListState extends ConsumerState<_MessageList> {
 
   @override
   Widget build(BuildContext context) {
-    final msgsAsync = ref.watch(
-        conversationMessagesProvider(widget.conversationId));
+    final msgsAsync =
+        ref.watch(conversationMessagesProvider(widget.conversationId));
 
     return msgsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => RetrySection(
         message: 'Could not load messages.',
-        onRetry: () => ref.invalidate(
-            conversationMessagesProvider(widget.conversationId)),
+        onRetry: () =>
+            ref.invalidate(conversationMessagesProvider(widget.conversationId)),
       ),
       data: (msgs) {
         // Scroll to bottom on initial load and when new messages arrive.
@@ -339,8 +347,8 @@ class _MessageListState extends ConsumerState<_MessageList> {
           itemCount: msgs.length,
           itemBuilder: (context, i) {
             final msg = msgs[i];
-            final showDate = i == 0 ||
-                !_sameDay(msgs[i - 1].createdAt, msg.createdAt);
+            final showDate =
+                i == 0 || !_sameDay(msgs[i - 1].createdAt, msg.createdAt);
 
             return Column(
               children: [
@@ -421,10 +429,10 @@ class _ChatBubble extends StatelessWidget {
     final bubbleColor = isMe
         ? theme.colorScheme.primary
         : theme.colorScheme.surfaceContainerHighest;
-    final textColor =
-        isMe ? AppColors.pureWhite : theme.colorScheme.onSurface;
-    final labelColor =
-        isMe ? AppColors.pureWhite.withValues(alpha: 0.7) : theme.colorScheme.onSurface.withValues(alpha: 0.5);
+    final textColor = isMe ? AppColors.pureWhite : theme.colorScheme.onSurface;
+    final labelColor = isMe
+        ? AppColors.pureWhite.withValues(alpha: 0.7)
+        : theme.colorScheme.onSurface.withValues(alpha: 0.5);
 
     final senderLabel = message.isFromAdmin
         ? 'Uniflex Support · ${message.senderName.split(' ').first}'
@@ -461,15 +469,18 @@ class _ChatBubble extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 2),
                   child: Text(
                     senderLabel,
-                    style: theme.textTheme.labelSmall
-                        ?.copyWith(color: labelColor, fontWeight: FontWeight.w600),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                        color: labelColor, fontWeight: FontWeight.w600),
                   ),
                 ),
-              // Order chip
-              if (message.orderId != null)
+              // Order chip — shown for an attached order OR delivery group.
+              if (message.attachedRefId != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-                  child: _OrderChipDisplay(orderId: message.orderId!),
+                  child: SupportOrderChip(
+                    refId: message.attachedRefId!,
+                    foreground: textColor,
+                  ),
                 ),
               Text(
                 message.body,
@@ -492,46 +503,6 @@ class _ChatBubble extends StatelessWidget {
     final h = dt.hour.toString().padLeft(2, '0');
     final m = dt.minute.toString().padLeft(2, '0');
     return '$h:$m';
-  }
-}
-
-// ── Order chip (display-only, in message bubble) ──────────────────────────────
-
-class _OrderChipDisplay extends StatelessWidget {
-  const _OrderChipDisplay({required this.orderId});
-  final String orderId;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final shortId = orderId.substring(0, 8).toUpperCase();
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
-        vertical: 2,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.pureWhite.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-        border: Border.all(
-            color: AppColors.pureWhite.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.receipt_long_outlined,
-              size: 12, color: AppColors.pureWhite),
-          const SizedBox(width: 4),
-          Text(
-            'Order #$shortId',
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: AppColors.pureWhite,
-              fontSize: 10,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -594,7 +565,7 @@ class _InputBar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Expanded(
-                  child: TextField(
+                  child: AppTextField(
                     controller: controller,
                     minLines: 1,
                     maxLines: 5,
@@ -602,13 +573,11 @@ class _InputBar extends StatelessWidget {
                     decoration: InputDecoration(
                       hintText: 'Write a message…',
                       border: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppRadius.control),
+                        borderRadius: BorderRadius.circular(AppRadius.control),
                         borderSide: BorderSide.none,
                       ),
                       filled: true,
-                      fillColor:
-                          theme.colorScheme.surfaceContainerHighest,
+                      fillColor: theme.colorScheme.surfaceContainerHighest,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: AppSpacing.md,
                         vertical: AppSpacing.sm,

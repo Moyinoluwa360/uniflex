@@ -138,7 +138,8 @@ class RiderManagementScreen extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
       ),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) {
@@ -162,7 +163,8 @@ class RiderManagementScreen extends ConsumerWidget {
             } catch (e) {
               setState(() {
                 isSaving = false;
-                error = e is AdminException ? e.message : 'Could not create rider.';
+                error =
+                    e is AdminException ? e.message : 'Could not create rider.';
               });
             }
           }
@@ -198,7 +200,8 @@ class RiderManagementScreen extends ConsumerWidget {
                     const SizedBox(height: AppSpacing.lg),
                     if (error != null) ...[
                       Text(error!,
-                          style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+                          style: TextStyle(
+                              color: Theme.of(ctx).colorScheme.error)),
                       const SizedBox(height: AppSpacing.md),
                     ],
                     AppTextField(
@@ -240,7 +243,7 @@ class RiderManagementScreen extends ConsumerWidget {
                     const SizedBox(height: AppSpacing.lg),
                     PrimaryButton(
                       label: 'Create Rider Account',
-                        icon: Icons.person_add_outlined,
+                      icon: Icons.person_add_outlined,
                       isLoading: isSaving,
                       onPressed: submit,
                     ),
@@ -303,7 +306,8 @@ class _RiderCard extends StatelessWidget {
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: rider.isOnline
                             ? AppColors.emerald
-                            : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                            : theme.colorScheme.onSurface
+                                .withValues(alpha: 0.4),
                       ),
                     ),
                 ],
@@ -312,7 +316,8 @@ class _RiderCard extends StatelessWidget {
             OutlinedButton(
               onPressed: onToggle,
               style: OutlinedButton.styleFrom(
-                foregroundColor: rider.isActive ? AppColors.error : AppColors.emerald,
+                foregroundColor:
+                    rider.isActive ? AppColors.error : AppColors.emerald,
                 side: BorderSide(
                   color: rider.isActive ? AppColors.error : AppColors.emerald,
                 ),

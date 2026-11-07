@@ -11,7 +11,8 @@ import '../../widgets/inputs/app_text_field.dart';
 import '../validators.dart';
 import 'complete_profile_screen.dart';
 
-/// Shown by [AuthGate] when a user returns to the app mid-signup: their
+/// LEGACY (pre-Pack-5 accounts only). Shown by [AuthGate] when a user from the
+/// old 2-step flow returns to the app mid-signup: their
 /// auth account exists and they have a profile stub row, but
 /// `phone_verified_at` is still null, so they never completed Step 1b.
 ///
@@ -80,9 +81,8 @@ class _ResumeOtpScreenState extends ConsumerState<ResumeOtpScreen> {
     });
 
     try {
-      final result = await ref
-          .read(phoneOtpServiceProvider)
-          .sendOtp(_resolvedPhone!);
+      final result =
+          await ref.read(phoneOtpServiceProvider).sendOtp(_resolvedPhone!);
       setState(() => _pinId = result.pinId);
     } on OtpException catch (e) {
       setState(() => _errorText = e.message);

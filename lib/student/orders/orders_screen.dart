@@ -7,6 +7,9 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
+import '../gifts/gift_models.dart';
+import '../gifts/gift_received_screen.dart';
+import '../gifts/gift_repository.dart';
 import '../ordering/cart_provider.dart';
 import '../ordering/checkout_screen.dart';
 import '../ordering/order_repository.dart';
@@ -84,14 +87,12 @@ class _CartTab extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
-              Text('Your cart is empty',
-                  style: theme.textTheme.titleMedium),
+              Text('Your cart is empty', style: theme.textTheme.titleMedium),
               const SizedBox(height: AppSpacing.sm),
               Text(
                 'Add items from a vendor on the Home tab.',
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color:
-                      theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -137,13 +138,11 @@ class _CartTab extends ConsumerWidget {
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   GestureDetector(
-                    onTap: () =>
-                        ref.read(cartProvider.notifier).removeAt(i),
+                    onTap: () => ref.read(cartProvider.notifier).removeAt(i),
                     child: Icon(
                       Icons.close,
                       size: 18,
-                      color: theme.colorScheme.onSurface
-                          .withValues(alpha: 0.4),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
                     ),
                   ),
                 ],
@@ -180,8 +179,7 @@ class _CartTab extends ConsumerWidget {
                       ? null
                       : () => Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) =>
-                                  const CheckoutScreen(),
+                              builder: (_) => const CheckoutScreen(),
                             ),
                           ),
                 ),
@@ -203,16 +201,19 @@ class _ActiveOrdersTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ordersAsync = ref.watch(studentOrdersProvider);
     final groupsAsync = ref.watch(studentDeliveryGroupsProvider);
+    final giftsAsync = ref.watch(receivedGiftsProvider);
 
     return _UnifiedOrderList(
       ordersAsync: ordersAsync,
       groupsAsync: groupsAsync,
+      giftsAsync: giftsAsync,
       filter: (entry) => entry.isActive,
       emptyMessage: 'No active orders',
       emptySubtitle: 'Orders being prepared will appear here.',
       onRefresh: () async {
         ref.invalidate(studentOrdersProvider);
         ref.invalidate(studentDeliveryGroupsProvider);
+        ref.invalidate(receivedGiftsProvider);
       },
     );
   }
@@ -227,16 +228,19 @@ class _CompletedOrdersTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ordersAsync = ref.watch(studentOrdersProvider);
     final groupsAsync = ref.watch(studentDeliveryGroupsProvider);
+    final giftsAsync = ref.watch(receivedGiftsProvider);
 
     return _UnifiedOrderList(
       ordersAsync: ordersAsync,
       groupsAsync: groupsAsync,
+      giftsAsync: giftsAsync,
       filter: (entry) => entry.isTerminal,
       emptyMessage: 'No completed orders yet',
       emptySubtitle: 'Your order history will appear here.',
       onRefresh: () async {
         ref.invalidate(studentOrdersProvider);
         ref.invalidate(studentDeliveryGroupsProvider);
+        ref.invalidate(receivedGiftsProvider);
       },
     );
   }
@@ -248,6 +252,7 @@ class _UnifiedOrderList extends ConsumerWidget {
   const _UnifiedOrderList({
     required this.ordersAsync,
     required this.groupsAsync,
+    required this.giftsAsync,
     required this.filter,
     required this.emptyMessage,
     required this.emptySubtitle,
@@ -256,6 +261,10 @@ class _UnifiedOrderList extends ConsumerWidget {
 
   final AsyncValue<List<Order>> ordersAsync;
   final AsyncValue<List<DeliveryGroup>> groupsAsync;
+
+  /// Gifts I received. Never blocks or breaks the list: while loading or on
+  /// error it simply contributes nothing.
+  final AsyncValue<List<GiftDelivery>> giftsAsync;
   final bool Function(StudentOrderEntry) filter;
   final String emptyMessage;
   final String emptySubtitle;
@@ -286,16 +295,17 @@ class _UnifiedOrderList extends ConsumerWidget {
     // Build unified entries:
     // - Standalone orders: orders with no delivery_group_id (pickup, errand)
     // - Delivery groups: one entry per group (replaces per-vendor legs)
-    final deliveryGroupIds =
-        groups.map((g) => g.id).toSet();
     final standaloneOrders = orders
-        .where((o) => o.deliveryGroupId == null ||
-            !deliveryGroupIds.contains(o.deliveryGroupId))
+        // A vendor part (it has a delivery_group_id) is NEVER listed on its
+        // own — only its checkout is.
+        .where((o) => o.deliveryGroupId == null)
         .map((o) => StudentOrderEntry.fromOrder(o));
-    final groupEntries =
-        groups.map((g) => StudentOrderEntry.fromGroup(g));
+    final groupEntries = groups.map((g) => StudentOrderEntry.fromGroup(g));
 
-    final all = [...standaloneOrders, ...groupEntries]
+    final giftEntries = (giftsAsync.valueOrNull ?? const <GiftDelivery>[])
+        .map((g) => StudentOrderEntry.fromGift(g));
+
+    final all = [...standaloneOrders, ...groupEntries, ...giftEntries]
         .where(filter)
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -311,8 +321,7 @@ class _UnifiedOrderList extends ConsumerWidget {
                 width: 88,
                 height: 88,
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.primary
-                      .withValues(alpha: 0.1),
+                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -327,8 +336,7 @@ class _UnifiedOrderList extends ConsumerWidget {
               Text(
                 emptySubtitle,
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface
-                      .withValues(alpha: 0.55),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -343,10 +351,12 @@ class _UnifiedOrderList extends ConsumerWidget {
       child: ListView.separated(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
         itemCount: all.length,
-        separatorBuilder: (_, __) =>
-            const SizedBox(height: AppSpacing.cardGap),
+        separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.cardGap),
         itemBuilder: (context, i) {
           final entry = all[i];
+          if (entry.isGift) {
+            return GiftReceivedCard(gift: entry.gift!);
+          }
           if (entry.isGroup) {
             return _GroupCard(group: entry.group!);
           }
@@ -388,8 +398,7 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Cancel order?'),
-        content: const Text(
-            'Are you sure you want to cancel this order? '
+        content: const Text('Are you sure you want to cancel this order? '
             'No fees will be automatically refunded.'),
         actions: [
           TextButton(
@@ -398,7 +407,7 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Cancel order',
+            child: const Text('Cancel order',
                 style: TextStyle(color: AppColors.error)),
           ),
         ],
@@ -572,9 +581,9 @@ class _GroupCardState extends ConsumerState<_GroupCard> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Cancel order?'),
-        content: const Text(
-            'Are you sure you want to cancel this delivery order? '
-            'No fees will be automatically refunded.'),
+        content:
+            const Text('Are you sure you want to cancel this delivery order? '
+                'No fees will be automatically refunded.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -582,7 +591,7 @@ class _GroupCardState extends ConsumerState<_GroupCard> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Cancel order',
+            child: const Text('Cancel order',
                 style: TextStyle(color: AppColors.error)),
           ),
         ],
@@ -633,7 +642,9 @@ class _GroupCardState extends ConsumerState<_GroupCard> {
               ),
               const SizedBox(width: AppSpacing.sm),
               Text(
-                '• Delivery',
+                group.isGift
+                    ? '• 🎁 Gift to ${group.giftRecipientNickname ?? 'a student'}'
+                    : '• Delivery',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
                 ),
@@ -675,7 +686,8 @@ class _GroupCardState extends ConsumerState<_GroupCard> {
                     Text(
                       group.deliveryLocation!,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.5),
                       ),
                     ),
                   Text(

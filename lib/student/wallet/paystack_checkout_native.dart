@@ -191,8 +191,7 @@ class _PaystackCheckoutPageState extends State<PaystackCheckoutPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.error_outline,
-                        size: 48,
-                        color: theme.colorScheme.error),
+                        size: 48, color: theme.colorScheme.error),
                     const SizedBox(height: 16),
                     Text(
                       _error!,

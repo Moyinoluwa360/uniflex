@@ -185,7 +185,6 @@ class _ReferralCodeFormScreenState
                   ),
                 ),
               ],
-
               const SizedBox(height: AppSpacing.lg),
               Text('Allocate to', style: theme.textTheme.titleSmall),
               const SizedBox(height: AppSpacing.sm),
@@ -208,8 +207,7 @@ class _ReferralCodeFormScreenState
                   ),
                 ],
                 selected: {_ownerKind},
-                onSelectionChanged: (s) =>
-                    setState(() => _ownerKind = s.first),
+                onSelectionChanged: (s) => setState(() => _ownerKind = s.first),
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
@@ -228,7 +226,6 @@ class _ReferralCodeFormScreenState
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
               ),
-
               if (_ownerKind == _OwnerKind.student) ...[
                 const SizedBox(height: AppSpacing.md),
                 if (_selectedStudent != null)
@@ -282,7 +279,6 @@ class _ReferralCodeFormScreenState
                     ),
                 ],
               ],
-
               if (_ownerKind == _OwnerKind.external) ...[
                 const SizedBox(height: AppSpacing.md),
                 AppTextField(
@@ -294,7 +290,6 @@ class _ReferralCodeFormScreenState
                       : null,
                 ),
               ],
-
               const SizedBox(height: AppSpacing.lg),
               Text('Note (optional)', style: theme.textTheme.titleSmall),
               const SizedBox(height: AppSpacing.sm),
@@ -303,7 +298,6 @@ class _ReferralCodeFormScreenState
                 hint: 'Anything worth remembering about this code',
                 maxLines: 2,
               ),
-
               const SizedBox(height: AppSpacing.xl),
               PrimaryButton(
                 label: _isEdit ? 'Save changes' : 'Create code',
@@ -354,8 +348,7 @@ class _SelectedOwnerTile extends StatelessWidget {
                   Text(
                     detail!,
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color:
-                          theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                   ),
               ],

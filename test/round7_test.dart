@@ -327,19 +327,4 @@ void main() {
       expect(cart.isEmpty, isTrue);
     });
   });
-
-  // ── MultiVendorOrderResult ─────────────────────────────────────────────
-
-  group('MultiVendorOrderResult', () {
-    test('stores delivery group info correctly', () {
-      const result = MultiVendorOrderResult(
-        groupId: 'g1',
-        commitmentFeeTotal: 600,
-        vendorCount: 3,
-      );
-      expect(result.groupId, 'g1');
-      expect(result.commitmentFeeTotal, 600);
-      expect(result.vendorCount, 3);
-    });
-  });
 }

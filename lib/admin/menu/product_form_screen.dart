@@ -8,20 +8,31 @@ import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/primary_button.dart';
 import '../../shared/widgets/image_upload/image_upload_field.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
+import '../../shared/utils/app_error_mapper.dart';
 import '../services/admin_providers.dart';
+import 'menu_section.dart';
 
 /// Add or edit a menu item. [product] is null when adding a new item.
 /// Returns `true` via `Navigator.pop` when the save succeeds so the
 /// caller can invalidate its provider.
+///
+/// When adding, [initialSection] is the section whose "+ Add" was tapped —
+/// the item goes straight into it, with no category to pick. When editing,
+/// a "Move to" picker is shown so a wrongly-filed item can be corrected.
 class ProductFormScreen extends ConsumerStatefulWidget {
   const ProductFormScreen({
     super.key,
     required this.vendorId,
     this.product,
+    this.initialSection,
   });
 
   final String vendorId;
   final Product? product;
+
+  /// The section the new item is added to (ignored when editing — the
+  /// item's own section is used).
+  final MenuSection? initialSection;
 
   @override
   ConsumerState<ProductFormScreen> createState() => _ProductFormScreenState();
@@ -32,19 +43,10 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _descCtrl;
   late final TextEditingController _priceCtrl;
-  late String _section;
-  late String? _foodSubsection;
+  late MenuSection _menuSection;
   late bool _isAvailable;
   String? _imageUrl; // current URL — updated by ImageUploadField
   bool _isSaving = false;
-
-  static const _sections = ['food', 'drinks', 'others'];
-  static const _sectionLabels = {'food': 'Food', 'drinks': 'Drinks', 'others': 'Others'};
-  static const _foodSubsections = ['meal', 'protein_topping'];
-  static const _foodSubsectionLabels = {
-    'meal': 'Meals (counts toward pack capacity)',
-    'protein_topping': 'Proteins / Toppings (no capacity limit)',
-  };
 
   @override
   void initState() {
@@ -54,8 +56,9 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     _descCtrl = TextEditingController(text: p?.description ?? '');
     _priceCtrl = TextEditingController(
         text: p != null ? p.basePrice.toStringAsFixed(0) : '');
-    _section = p?.section ?? 'food';
-    _foodSubsection = p?.foodSubsection ?? (_section == 'food' ? 'meal' : null);
+    _menuSection = p != null
+        ? MenuSection.of(p)
+        : (widget.initialSection ?? MenuSection.meals);
     _isAvailable = p?.isAvailable ?? true;
     _imageUrl = p?.imageUrl;
   }
@@ -74,24 +77,28 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
 
     try {
       await ref.read(adminServiceProvider).upsertProduct(
-        id: widget.product?.id,
-        vendorId: widget.vendorId,
-        name: _nameCtrl.text.trim(),
-        description: _descCtrl.text.trim(),
-        category: _sectionLabels[_section] ?? 'Others',
-        basePrice: double.parse(_priceCtrl.text.trim()),
-        imageUrl: _imageUrl,
-        isAvailable: _isAvailable,
-        requiresPack: _section == 'food',
-        section: _section,
-        foodSubsection: _section == 'food' ? _foodSubsection : null,
-      );
+            id: widget.product?.id,
+            vendorId: widget.vendorId,
+            name: _nameCtrl.text.trim(),
+            description: _descCtrl.text.trim(),
+            // `category` is the legacy free-text column; keep it readable.
+            category: _menuSection.label,
+            basePrice: double.parse(_priceCtrl.text.trim()),
+            imageUrl: _imageUrl,
+            isAvailable: _isAvailable,
+            requiresPack: _menuSection.requiresPack,
+            section: _menuSection.section,
+            foodSubsection: _menuSection.foodSubsection,
+          );
 
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Save failed: $e')),
+          SnackBar(
+            content: Text('Could not save the item. ${AppErrorMapper.map(e)}'),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
         setState(() => _isSaving = false);
       }
@@ -147,40 +154,31 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
               const SizedBox(height: AppSpacing.md),
 
               // ── Section ───────────────────────────────────────────────
-              Text('Section', style: theme.textTheme.labelLarge),
-              const SizedBox(height: AppSpacing.sm),
-              DropdownButtonFormField<String>(
-                value: _section,
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(
+              // Adding: fixed to the section whose "+ Add" was tapped.
+              // Editing: a picker, so a wrongly-filed item can be moved.
+              if (!isEditing)
+                Container(
+                  key: const ValueKey('form-section-label'),
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.sm + 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(AppRadius.control),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                    vertical: AppSpacing.sm + 4,
+                  child: Text(
+                    'Adding to ${_menuSection.label}',
+                    style: theme.textTheme.labelLarge,
                   ),
-                ),
-                items: _sections
-                    .map((s) => DropdownMenuItem(
-                        value: s, child: Text(_sectionLabels[s] ?? s)))
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) {
-                    setState(() {
-                      _section = v;
-                      _foodSubsection = v == 'food' ? 'meal' : null;
-                    });
-                  }
-                },
-              ),
-
-              // ── Food Subsection (only when section == food) ──────────
-              if (_section == 'food') ...[
-                const SizedBox(height: AppSpacing.md),
-                Text('Food Type', style: theme.textTheme.labelLarge),
+                )
+              else ...[
+                Text('Section', style: theme.textTheme.labelLarge),
                 const SizedBox(height: AppSpacing.sm),
-                DropdownButtonFormField<String>(
-                  value: _foodSubsection ?? 'meal',
+                DropdownButtonFormField<MenuSection>(
+                  key: const ValueKey('form-section-picker'),
+                  initialValue: _menuSection,
                   decoration: InputDecoration(
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(AppRadius.control),
@@ -190,13 +188,12 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                       vertical: AppSpacing.sm + 4,
                     ),
                   ),
-                  items: _foodSubsections
-                      .map((s) => DropdownMenuItem(
-                          value: s,
-                          child: Text(_foodSubsectionLabels[s] ?? s)))
-                      .toList(),
+                  items: [
+                    for (final s in MenuSection.values)
+                      DropdownMenuItem(value: s, child: Text(s.label)),
+                  ],
                   onChanged: (v) {
-                    if (v != null) setState(() => _foodSubsection = v);
+                    if (v != null) setState(() => _menuSection = v);
                   },
                 ),
               ],
@@ -252,7 +249,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
 
               PrimaryButton(
                 label: isEditing ? 'Save Changes' : 'Add Item',
-                  icon: Icons.check,
+                icon: Icons.check,
                 isLoading: _isSaving,
                 onPressed: _save,
               ),
@@ -265,4 +262,3 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     );
   }
 }
-

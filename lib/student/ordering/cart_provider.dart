@@ -62,9 +62,8 @@ class VendorCartGroup {
         'items': items.map((i) => i.toJson()).toList(),
         'pack_count': packCount,
         'pack_fee': packFee,
-        'pack_contents': packContents
-            .map((m) => m.map((k, v) => MapEntry(k, v)))
-            .toList(),
+        'pack_contents':
+            packContents.map((m) => m.map((k, v) => MapEntry(k, v))).toList(),
       };
 
   factory VendorCartGroup.fromJson(Map<String, dynamic> json) {
@@ -98,11 +97,9 @@ class CartState {
   bool get isEmpty => groups.values.every((g) => g.isEmpty);
   int get vendorCount => groups.values.where((g) => !g.isEmpty).length;
 
-  int get itemCount =>
-      groups.values.fold(0, (sum, g) => sum + g.itemCount);
+  int get itemCount => groups.values.fold(0, (sum, g) => sum + g.itemCount);
 
-  double get subtotal =>
-      groups.values.fold(0.0, (sum, g) => sum + g.subtotal);
+  double get subtotal => groups.values.fold(0.0, (sum, g) => sum + g.subtotal);
 
   double get totalPackFee =>
       groups.values.fold(0.0, (sum, g) => sum + g.packFee);
@@ -115,8 +112,7 @@ class CartState {
   }
 
   /// Flat list of all items across all vendors (for display/counting).
-  List<CartItem> get items =>
-      groups.values.expand((g) => g.items).toList();
+  List<CartItem> get items => groups.values.expand((g) => g.items).toList();
 
   /// Whether the cart contains any partner vendor.
   bool get hasPartnerVendor =>
@@ -138,8 +134,8 @@ class CartState {
 
   Map<String, dynamic> toJson() => {
         'version': 2,
-        'groups': groups
-            .map((vendorId, group) => MapEntry(vendorId, group.toJson())),
+        'groups':
+            groups.map((vendorId, group) => MapEntry(vendorId, group.toJson())),
         if (lastModifiedAt != null)
           'last_modified_at': lastModifiedAt!.toIso8601String(),
       };
@@ -151,8 +147,7 @@ class CartState {
     if (json['version'] == 2) {
       final rawGroups = json['groups'] as Map<String, dynamic>? ?? {};
       final groups = rawGroups.map((vendorId, g) => MapEntry(
-          vendorId,
-          VendorCartGroup.fromJson(g as Map<String, dynamic>)));
+          vendorId, VendorCartGroup.fromJson(g as Map<String, dynamic>)));
       return CartState(groups: groups, lastModifiedAt: lastMod);
     }
     // Legacy v1 format: single vendor cart.
@@ -184,13 +179,17 @@ class CartState {
 
 const _cartExpiry = Duration(hours: 1);
 
+/// Bumped each time an item is added to an EMPTY cart (the start of a new
+/// cart). The student shell listens and shows the one-time notice
+/// "Your cart will be cleared 1 hour after your last change." — once per
+/// cart, never on later adds, never when the app reopens with a saved cart.
+final cartFirstAddNoticeProvider = StateProvider<int>((ref) => 0);
+
+/// The notice text (kept here so the listener and tests agree on it).
+const kCartExpiryNotice =
+    'Your cart will be cleared 1 hour after your last change.';
+
 class CartNotifier extends Notifier<CartState> {
-  bool _expiredOnLoad = false;
-
-  /// True when a saved cart was silently dropped at startup because it was
-  /// more than 1 hour old. The UI reads this once to show a toast.
-  bool get expiredOnLoad => _expiredOnLoad;
-
   @override
   CartState build() {
     _restore();
@@ -215,11 +214,12 @@ class CartNotifier extends Notifier<CartState> {
 
       // Check 1-hour expiry. Old carts with no timestamp are treated as
       // fresh (backward-compatible).
-      if (!loaded.isEmpty && loaded.lastModifiedAt != null &&
+      if (!loaded.isEmpty &&
+          loaded.lastModifiedAt != null &&
           DateTime.now().difference(loaded.lastModifiedAt!) > _cartExpiry) {
+        // Expired carts are cleared silently — no message, ever.
         await prefs.remove(_cartKey);
         await prefs.remove(_legacyCartKey);
-        _expiredOnLoad = true;
         // state stays empty (default)
         return;
       }
@@ -248,11 +248,13 @@ class CartNotifier extends Notifier<CartState> {
   }
 
   /// Call this when the cart screen is opened or the app resumes.
-  /// Returns true if the cart was expired and cleared (UI should toast).
+  /// Returns true if the cart was expired and silently cleared.
   bool checkAndClearIfExpired() {
     if (state.isEmpty) return false;
     final lastMod = state.lastModifiedAt;
-    if (lastMod == null) return false; // no timestamp yet — never expires mid-session
+    if (lastMod == null) {
+      return false; // no timestamp yet — never expires mid-session
+    }
     if (DateTime.now().difference(lastMod) > _cartExpiry) {
       clear();
       return true;
@@ -262,9 +264,9 @@ class CartNotifier extends Notifier<CartState> {
 
   /// Adds a non-food item (drinks, others) to the cart for [vendor].
   void addItem(CartItem item, Vendor vendor) {
+    final startsNewCart = state.isEmpty;
     final groups = Map<String, VendorCartGroup>.from(state.groups);
-    final group = groups[vendor.id] ??
-        VendorCartGroup(vendor: vendor);
+    final group = groups[vendor.id] ?? VendorCartGroup(vendor: vendor);
 
     final items = [...group.items];
     final idx = items.indexWhere(
@@ -274,8 +276,8 @@ class CartNotifier extends Notifier<CartState> {
     );
 
     if (idx >= 0) {
-      items[idx] = items[idx]
-          .copyWith(quantity: items[idx].quantity + item.quantity);
+      items[idx] =
+          items[idx].copyWith(quantity: items[idx].quantity + item.quantity);
     } else {
       items.add(item);
     }
@@ -283,6 +285,9 @@ class CartNotifier extends Notifier<CartState> {
     groups[vendor.id] = group.copyWith(items: items);
     state = CartState(groups: groups);
     _touch();
+    if (startsNewCart) {
+      ref.read(cartFirstAddNoticeProvider.notifier).state++;
+    }
   }
 
   /// Adds a food item from the pack builder (tagged with pack index).
@@ -300,8 +305,7 @@ class CartNotifier extends Notifier<CartState> {
     required List<Map<String, int>> packContents,
   }) {
     final groups = Map<String, VendorCartGroup>.from(state.groups);
-    final group = groups[vendor.id] ??
-        VendorCartGroup(vendor: vendor);
+    final group = groups[vendor.id] ?? VendorCartGroup(vendor: vendor);
 
     groups[vendor.id] = group.copyWith(
       packCount: packCount,

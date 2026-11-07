@@ -84,8 +84,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                       width: 72,
                       height: 72,
                       decoration: BoxDecoration(
-                        color:
-                            theme.colorScheme.primary.withValues(alpha: 0.1),
+                        color: theme.colorScheme.primary.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(Icons.search_off_outlined,
@@ -99,8 +98,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                     Text(
                       'Try another vendor or check back later.',
                       style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.6),
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.6),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -135,8 +134,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
           }
 
           return ListView(
-            padding:
-                const EdgeInsets.only(top: AppSpacing.sm, bottom: 96),
+            padding: const EdgeInsets.only(top: AppSpacing.sm, bottom: 96),
             children: [
               // ── Food section (pack-first entry point) ──────────
               const _SectionHeader(title: 'Food', icon: Icons.restaurant),
@@ -208,22 +206,22 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
         },
       ),
       floatingActionButton: cartState.isEmpty
-              ? null
-              : FloatingActionButton.extended(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const CartScreen(),
-                    ),
-                  ),
-                  backgroundColor: AppColors.orange,
-                  foregroundColor: AppColors.pureWhite,
-                  label: Text(
-                    'View Cart (${cartState.itemCount})',
-                    style: theme.textTheme.labelLarge
-                        ?.copyWith(color: AppColors.pureWhite),
-                  ),
-                  icon: const Icon(Icons.shopping_cart_outlined),
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const CartScreen(),
                 ),
+              ),
+              backgroundColor: AppColors.orange,
+              foregroundColor: AppColors.pureWhite,
+              label: Text(
+                'View Cart (${cartState.itemCount})',
+                style: theme.textTheme.labelLarge
+                    ?.copyWith(color: AppColors.pureWhite),
+              ),
+              icon: const Icon(Icons.shopping_cart_outlined),
+            ),
     );
   }
 }
@@ -290,10 +288,8 @@ class _FoodSectionCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final mealCount =
-        foodProducts.where((p) => p.isMeal).length;
-    final proteinCount =
-        foodProducts.where((p) => p.isProteinTopping).length;
+    final mealCount = foodProducts.where((p) => p.isMeal).length;
+    final proteinCount = foodProducts.where((p) => p.isProteinTopping).length;
 
     return Padding(
       padding: const EdgeInsets.symmetric(
@@ -343,23 +339,21 @@ class _FoodSectionCard extends ConsumerWidget {
                       '$mealCount meals, $proteinCount proteins/toppings'
                       ' · ₦${vendor.packPrice.toStringAsFixed(0)}/pack',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.6),
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.6),
                       ),
                     ),
                   ],
                 ),
               ),
               Icon(Icons.chevron_right,
-                  color:
-                      theme.colorScheme.onSurface.withValues(alpha: 0.4)),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.4)),
             ],
           ),
         ),
       ),
     );
   }
-
 }
 
 /// Product tile with inline add/stepper — used for Drinks and Others.
@@ -375,8 +369,8 @@ class _ProductTile extends ConsumerWidget {
     final cart = ref.watch(cartProvider);
     // Look up this product's quantity within the vendor's group.
     final vendorGroup = cart.groups[vendor.id];
-    final localIdx = vendorGroup?.items
-        .indexWhere((i) => i.product.id == product.id) ?? -1;
+    final localIdx =
+        vendorGroup?.items.indexWhere((i) => i.product.id == product.id) ?? -1;
     final quantity = localIdx >= 0 ? vendorGroup!.items[localIdx].quantity : 0;
 
     void addFirst() {
@@ -414,8 +408,8 @@ class _ProductTile extends ConsumerWidget {
                   Text(
                     product.description,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface
-                          .withValues(alpha: 0.55),
+                      color:
+                          theme.colorScheme.onSurface.withValues(alpha: 0.55),
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -475,7 +469,6 @@ class _ProductTile extends ConsumerWidget {
       ),
     );
   }
-
 }
 
 class _AddButton extends StatelessWidget {

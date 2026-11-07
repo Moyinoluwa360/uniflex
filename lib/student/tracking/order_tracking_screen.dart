@@ -6,6 +6,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../shared/utils/app_error_mapper.dart';
 import '../../shared/models/delivery_group.dart';
 import '../../shared/models/order.dart';
+import '../../shared/order_breakdown/order_breakdown_provider.dart';
+import '../../shared/order_breakdown/order_breakdown_widget.dart';
+import '../../shared/utils/local_time.dart';
 import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
@@ -15,17 +18,17 @@ import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../../shared/widgets/pin/pin_entry_sheet.dart';
 import '../ordering/order_repository.dart';
-import '../support/support_chat_screen.dart';
+import '../support/support_options_screen.dart';
 
 /// Live order tracking — shows the current order status as a vertical
 /// step timeline, refreshable. Supports both individual orders and
 /// delivery groups (multi-vendor checkouts shown as one entry).
 class OrderTrackingScreen extends ConsumerStatefulWidget {
-  const OrderTrackingScreen({super.key, required this.order})
-      : group = null;
+  const OrderTrackingScreen({super.key, required this.order}) : group = null;
 
   /// Track a delivery group (multi-vendor delivery order).
-  const OrderTrackingScreen.forGroup({super.key, required DeliveryGroup this.group})
+  const OrderTrackingScreen.forGroup(
+      {super.key, required DeliveryGroup this.group})
       : order = null;
 
   /// Seed order for standalone tracking. Null when tracking a group.
@@ -46,8 +49,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   bool _isDeclining = false;
 
   Future<void> _payFinalAmount(Order o) async {
-    final hasPin =
-        await ref.read(profileServiceProvider).hasTransactionPin();
+    final hasPin = await ref.read(profileServiceProvider).hasTransactionPin();
     if (!mounted) return;
 
     if (!hasPin) {
@@ -101,8 +103,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   }
 
   Future<void> _payGroupFinalAmount(DeliveryGroup g) async {
-    final hasPin =
-        await ref.read(profileServiceProvider).hasTransactionPin();
+    final hasPin = await ref.read(profileServiceProvider).hasTransactionPin();
     if (!mounted) return;
 
     if (!hasPin) {
@@ -293,7 +294,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
             icon: const Icon(Icons.refresh),
             onPressed: () {
               ref.invalidate(groupByIdProvider(seed.id));
-              ref.invalidate(groupLegsForStudentProvider(seed.id));
+              ref.invalidate(orderBreakdownProvider(seed.id));
             },
             tooltip: 'Refresh',
           ),
@@ -348,8 +349,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                         ),
                         decoration: BoxDecoration(
                           color: color.withValues(alpha: 0.15),
-                          borderRadius:
-                              BorderRadius.circular(AppRadius.pill),
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
                         ),
                         child: Text(
                           g.status.label,
@@ -362,6 +362,11 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                     ],
                   ),
                 ),
+
+                if (g.status == DeliveryGroupStatus.completed) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  DeliveredCard(completedAt: g.completedAt),
+                ],
 
                 const SizedBox(height: AppSpacing.lg),
                 Text('Order progress', style: theme.textTheme.titleSmall),
@@ -385,9 +390,20 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                   const SizedBox(height: AppSpacing.xl),
                 ],
 
+                // ── Gift: who it is for (the PIN goes to the recipient) ──
+                if (g.isGift) ...[
+                  _GiftSenderBanner(
+                    nickname: g.giftRecipientNickname,
+                    message: g.giftMessage,
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                ],
+
                 // ── Out for delivery — payment confirmed + PIN reminder ──
+                // (A gift's PIN is for the recipient to give the rider.)
                 if (g.status == DeliveryGroupStatus.outForDelivery &&
-                    g.deliveryPin != null) ...[
+                    g.deliveryPin != null &&
+                    !g.isGift) ...[
                   _GroupDeliveryConfirmedCard(pin: g.deliveryPin!),
                   const SizedBox(height: AppSpacing.xl),
                 ],
@@ -428,10 +444,9 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                 const SizedBox(height: AppSpacing.xl),
 
                 // Per-vendor breakdown
-                Text('Vendor breakdown',
-                    style: theme.textTheme.titleSmall),
+                Text('Your order', style: theme.textTheme.titleSmall),
                 const SizedBox(height: AppSpacing.md),
-                _GroupLegsSection(groupId: g.id),
+                OrderBreakdown(orderId: g.id),
 
                 const SizedBox(height: AppSpacing.xl),
 
@@ -442,9 +457,10 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                     label: const Text('Get help with this order'),
                     onPressed: () => Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => SupportChatScreen(
-                          initialGroupId: g.id,
-                          initialGroupLabel: '#${g.shortId} · Delivery',
+                        builder: (_) => SupportOptionsScreen(
+                          groupId: g.id,
+                          groupLabel: '#${g.shortId} · Delivery',
+                          orderShortId: g.shortId,
                         ),
                       ),
                     ),
@@ -605,8 +621,8 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                                 'They may flag items as unavailable. '
                                 'Check back here for updates.',
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                  color: AppColors.orange
-                                      .withValues(alpha: 0.8),
+                                  color:
+                                      AppColors.orange.withValues(alpha: 0.8),
                                 ),
                               ),
                             ],
@@ -670,8 +686,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                                 width: 16,
                                 height: 16,
                                 child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: AppColors.pureWhite),
+                                    strokeWidth: 2, color: AppColors.pureWhite),
                               )
                             : const Icon(Icons.lock_outline, size: 18),
                         label: Text(
@@ -681,9 +696,8 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                         ),
                         style: FilledButton.styleFrom(
                             backgroundColor: AppColors.warning),
-                        onPressed: _isPayingFinal
-                            ? null
-                            : () => _payFinalAmount(o),
+                        onPressed:
+                            _isPayingFinal ? null : () => _payFinalAmount(o),
                       ),
                     ),
                   ],
@@ -740,7 +754,8 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text('Your rider',
-                                        style: theme.textTheme.labelSmall?.copyWith(
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(
                                           color: theme.colorScheme.onSurface
                                               .withValues(alpha: 0.5),
                                         )),
@@ -805,10 +820,10 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                     label: const Text('Get help with this order'),
                     onPressed: () => Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => SupportChatScreen(
-                          initialOrderId: o.id,
-                          initialOrderLabel:
-                              '#${o.shortId} · ${o.status.label}',
+                        builder: (_) => SupportOptionsScreen(
+                          orderId: o.id,
+                          orderLabel: '#${o.shortId} · ${o.status.label}',
+                          orderShortId: o.shortId,
                         ),
                       ),
                     ),
@@ -822,7 +837,6 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
       ),
     );
   }
-
 }
 
 class _Step {
@@ -908,8 +922,7 @@ class _StatusTimeline extends StatelessWidget {
               child: Text(
                 step.label,
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight:
-                      isCurrent ? FontWeight.w600 : FontWeight.w400,
+                  fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w400,
                   color: done
                       ? theme.colorScheme.onSurface
                       : theme.colorScheme.onSurface.withValues(alpha: 0.4),
@@ -933,7 +946,10 @@ class _GroupStatusTimeline extends StatelessWidget {
   static const _steps = [
     (status: DeliveryGroupStatus.placed, label: 'Order Placed'),
     (status: DeliveryGroupStatus.riderAccepted, label: 'Rider Accepted'),
-    (status: DeliveryGroupStatus.awaitingFinalPayment, label: 'Final Price Sent'),
+    (
+      status: DeliveryGroupStatus.awaitingFinalPayment,
+      label: 'Final Price Sent'
+    ),
     (status: DeliveryGroupStatus.outForDelivery, label: 'Out for Delivery'),
     (status: DeliveryGroupStatus.completed, label: 'Completed'),
   ];
@@ -1026,8 +1042,7 @@ class _GroupStatusTimeline extends StatelessWidget {
               child: Text(
                 step.label,
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight:
-                      isCurrent ? FontWeight.w600 : FontWeight.w400,
+                  fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w400,
                   color: done
                       ? theme.colorScheme.onSurface
                       : theme.colorScheme.onSurface.withValues(alpha: 0.4),
@@ -1063,8 +1078,7 @@ class _GroupFinalPaymentCard extends ConsumerWidget {
     final walletAsync = ref.watch(walletBalanceProvider);
     final balance = walletAsync.valueOrNull ?? 0.0;
     final finalAmt = group.finalAmount;
-    final hasSufficientBalance =
-        finalAmt != null && balance >= finalAmt;
+    final hasSufficientBalance = finalAmt != null && balance >= finalAmt;
 
     return Container(
       width: double.infinity,
@@ -1122,8 +1136,8 @@ class _GroupFinalPaymentCard extends ConsumerWidget {
               const SizedBox(width: AppSpacing.sm),
               if (finalAmt != null)
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: hasSufficientBalance
                         ? AppColors.emerald.withValues(alpha: 0.12)
@@ -1148,10 +1162,9 @@ class _GroupFinalPaymentCard extends ConsumerWidget {
           SizedBox(
             width: double.infinity,
             child: FilledButton(
-              onPressed:
-                  (isPayingFinal || isDeclining || finalAmt == null)
-                      ? null
-                      : onPay,
+              onPressed: (isPayingFinal || isDeclining || finalAmt == null)
+                  ? null
+                  : onPay,
               child: isPayingFinal
                   ? const SizedBox(
                       width: 16,
@@ -1174,8 +1187,7 @@ class _GroupFinalPaymentCard extends ConsumerWidget {
                 foregroundColor: AppColors.error,
                 side: const BorderSide(color: AppColors.error),
               ),
-              onPressed:
-                  (isPayingFinal || isDeclining) ? null : onDecline,
+              onPressed: (isPayingFinal || isDeclining) ? null : onDecline,
               child: isDeclining
                   ? const SizedBox(
                       width: 16,
@@ -1186,6 +1198,49 @@ class _GroupFinalPaymentCard extends ConsumerWidget {
                   : const Text('Decline order'),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown to the SENDER of a gift on their order's tracking screen.
+class _GiftSenderBanner extends StatelessWidget {
+  const _GiftSenderBanner({this.nickname, this.message});
+
+  final String? nickname;
+  final String? message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasMessage = message != null && message!.trim().isNotEmpty;
+    return Container(
+      key: const ValueKey('gift-sender-banner'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.orange.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.orange.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('🎁 Gift to ${nickname ?? 'a student'}',
+              style: theme.textTheme.titleSmall),
+          const SizedBox(height: 2),
+          Text(
+            'You pay and can cancel. They get the food and give the rider '
+            'the delivery PIN.',
+            style: theme.textTheme.bodySmall,
+          ),
+          if (hasMessage) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text('“${message!.trim()}”',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(fontStyle: FontStyle.italic)),
+          ],
         ],
       ),
     );
@@ -1250,26 +1305,26 @@ class _GroupDeliveryConfirmedCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 ...pin.split('').map(
-                  (digit) => Container(
-                    width: 44,
-                    height: 52,
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.emerald.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                          color: AppColors.emerald.withValues(alpha: 0.4)),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      digit,
-                      style: theme.textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.emerald,
+                      (digit) => Container(
+                        width: 44,
+                        height: 52,
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.emerald.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: AppColors.emerald.withValues(alpha: 0.4)),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          digit,
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.emerald,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
                 const SizedBox(width: AppSpacing.sm),
                 const Icon(Icons.copy_outlined,
                     size: 16, color: AppColors.emerald),
@@ -1284,307 +1339,6 @@ class _GroupDeliveryConfirmedCard extends StatelessWidget {
             ),
             textAlign: TextAlign.center,
           ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Expandable per-vendor leg breakdown within a delivery group.
-/// Single-vendor: flat card. Multi-vendor: one accordion per vendor,
-/// all closed by default.
-class _GroupLegsSection extends ConsumerStatefulWidget {
-  const _GroupLegsSection({required this.groupId});
-
-  final String groupId;
-
-  @override
-  ConsumerState<_GroupLegsSection> createState() => _GroupLegsSectionState();
-}
-
-class _GroupLegsSectionState extends ConsumerState<_GroupLegsSection> {
-  final Set<int> _expandedIndices = {};
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final legsAsync = ref.watch(groupLegsForStudentProvider(widget.groupId));
-
-    return legsAsync.when(
-      loading: () => const Padding(
-        padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
-        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-      ),
-      error: (_, __) => Text(
-        'Could not load order details.',
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.error,
-        ),
-      ),
-      data: (legs) {
-        if (legs.isEmpty) {
-          return Text(
-            'No vendor orders found.',
-            style: theme.textTheme.bodySmall,
-          );
-        }
-
-        // Single vendor: plain flat card
-        if (legs.length == 1) {
-          return _LegCard(leg: legs.first);
-        }
-
-        // Multi-vendor: accordion per vendor, all closed by default
-        return Column(
-          children: List.generate(legs.length, (i) {
-            final leg = legs[i];
-            final isExpanded = _expandedIndices.contains(i);
-            return _LegAccordionCard(
-              leg: leg,
-              isExpanded: isExpanded,
-              onToggle: () => setState(() {
-                if (isExpanded) {
-                  _expandedIndices.remove(i);
-                } else {
-                  _expandedIndices.add(i);
-                }
-              }),
-            );
-          }),
-        );
-      },
-    );
-  }
-}
-
-class _LegCard extends StatelessWidget {
-  const _LegCard({required this.leg});
-
-  final Order leg;
-
-  Color _statusColor(OrderStatus s) {
-    return switch (s) {
-      OrderStatus.placed => AppColors.info,
-      OrderStatus.preparing => AppColors.warning,
-      OrderStatus.ready || OrderStatus.readyForPickup => AppColors.emerald,
-      OrderStatus.outForDelivery => AppColors.orange,
-      OrderStatus.completed => AppColors.emerald,
-      OrderStatus.cancelled => AppColors.error,
-      OrderStatus.beingSourced => AppColors.orange,
-      OrderStatus.awaitingFinalPayment => AppColors.warning,
-    };
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = _statusColor(leg.status);
-
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  leg.vendorName ?? 'Vendor',
-                  style: theme.textTheme.labelLarge,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.sm,
-                  vertical: 3,
-                ),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                ),
-                child: Text(
-                  leg.status.label,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (leg.items.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.sm),
-            ...leg.items.map(
-              (item) => Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${item.quantity}× ${item.productName}',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ),
-                    Text(
-                      '₦${item.unitPrice.toStringAsFixed(0)}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.6),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            '₦${leg.totalAmount.toStringAsFixed(0)}',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LegAccordionCard extends StatelessWidget {
-  const _LegAccordionCard({
-    required this.leg,
-    required this.isExpanded,
-    required this.onToggle,
-  });
-
-  final Order leg;
-  final bool isExpanded;
-  final VoidCallback onToggle;
-
-  Color _statusColor(OrderStatus s) {
-    return switch (s) {
-      OrderStatus.placed => AppColors.info,
-      OrderStatus.preparing => AppColors.warning,
-      OrderStatus.ready || OrderStatus.readyForPickup => AppColors.emerald,
-      OrderStatus.outForDelivery => AppColors.orange,
-      OrderStatus.completed => AppColors.emerald,
-      OrderStatus.cancelled => AppColors.error,
-      OrderStatus.beingSourced => AppColors.orange,
-      OrderStatus.awaitingFinalPayment => AppColors.warning,
-    };
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = _statusColor(leg.status);
-
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-      ),
-      child: Column(
-        children: [
-          // Header row (always visible)
-          InkWell(
-            onTap: onToggle,
-            borderRadius: BorderRadius.circular(AppRadius.card),
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          leg.vendorName ?? 'Vendor',
-                          style: theme.textTheme.labelLarge,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '₦${leg.totalAmount.toStringAsFixed(0)}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.6),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.sm,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
-                    ),
-                    child: Text(
-                      leg.status.label,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: color,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Icon(
-                    isExpanded
-                        ? Icons.expand_less
-                        : Icons.expand_more,
-                    size: 20,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Expanded items list
-          if (isExpanded && leg.items.isNotEmpty) ...[
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.md),
-              child: Column(
-                children: leg.items
-                    .map(
-                      (item) => Padding(
-                        padding: const EdgeInsets.only(bottom: 2),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '${item.quantity}× ${item.productName}',
-                                style: theme.textTheme.bodySmall,
-                              ),
-                            ),
-                            Text(
-                              '₦${item.unitPrice.toStringAsFixed(0)}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurface
-                                    .withValues(alpha: 0.6),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                    .toList(),
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -1654,6 +1408,56 @@ class _TrackingPinCard extends StatelessWidget {
             'Show this to your rider at the door.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: AppColors.emerald.withValues(alpha: 0.8),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Delivered" success card shown at the top of a finished delivery. The time
+/// is the server's single `completed_at`, in the phone's local time.
+class DeliveredCard extends StatelessWidget {
+  const DeliveredCard({super.key, required this.completedAt});
+
+  final DateTime? completedAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      key: const ValueKey('delivered-card'),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.emerald.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.emerald.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle, color: AppColors.emerald, size: 32),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Delivered',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: AppColors.emerald,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (completedAt != null)
+                  Text(
+                    formatLocalDateTime(completedAt!),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color:
+                          theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                    ),
+                  ),
+              ],
             ),
           ),
         ],

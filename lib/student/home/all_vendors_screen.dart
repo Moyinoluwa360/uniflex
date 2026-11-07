@@ -35,8 +35,7 @@ class AllVendorsScreen extends ConsumerWidget {
           return ListView.separated(
             padding: const EdgeInsets.all(AppSpacing.screenGutter),
             itemCount: vendors.length,
-            separatorBuilder: (_, __) =>
-                const SizedBox(height: AppSpacing.sm),
+            separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
             itemBuilder: (context, i) {
               final v = vendors[i];
               return ListTile(
@@ -58,8 +57,7 @@ class AllVendorsScreen extends ConsumerWidget {
                     : null,
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                      builder: (_) => CatalogScreen(vendor: v)),
+                  MaterialPageRoute(builder: (_) => CatalogScreen(vendor: v)),
                 ),
               );
             },

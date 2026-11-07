@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../auth/signup/signup_api.dart';
+import '../../auth/signup/signup_draft.dart';
 import '../../models/profile.dart';
 import '../otp/phone_otp_service.dart';
 import '../profile/profile_service.dart';
@@ -13,6 +15,19 @@ final authServiceProvider = Provider<AuthService>((ref) {
 
 final profileServiceProvider = Provider<ProfileService>((ref) {
   return ProfileService(ref.watch(supabaseClientProvider));
+});
+
+/// Pack 5: the pre-login `signup` Edge Function (send code / verify code /
+/// create account). The old [phoneOtpServiceProvider] is now only used by
+/// legacy half-made accounts (ResumeOtpScreen).
+final signupApiProvider = Provider<SignupApi>((ref) {
+  return SupabaseSignupApi(ref.watch(supabaseClientProvider));
+});
+
+/// Where the sign-up draft's password is kept (OS keystore/keychain).
+/// Tests override this with an in-memory store.
+final signupSecretStoreProvider = Provider<SecretStore>((ref) {
+  return const FlutterSecretStore();
 });
 
 final phoneOtpServiceProvider = Provider<PhoneOtpService>((ref) {

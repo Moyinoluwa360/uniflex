@@ -7,7 +7,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:uniflex/shared/models/delivery_location.dart';
-import 'package:uniflex/student/ordering/order_repository.dart';
+import 'package:uniflex/student/ordering/checkout_draft.dart';
 
 void main() {
   // ── Pack bracket calculation ───────────────────────────────────────

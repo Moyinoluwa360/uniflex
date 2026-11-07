@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
-import '../delivery/delivery_record.dart';
+import '../../shared/widgets/async/retry_section.dart';
+import '../jobs/rider_job.dart';
+import '../jobs/rider_job_card.dart';
 import '../services/rider_providers.dart';
+import 'rider_history_detail_screen.dart';
 
+/// History: ONE entry per checkout (completed or cancelled), newest first.
 class DeliveryHistoryScreen extends ConsumerWidget {
   const DeliveryHistoryScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final historyAsync = ref.watch(deliveryHistoryProvider);
-
+    final async = ref.watch(riderHistoryProvider);
     return Scaffold(
       appBar: UniflexAppBar(
         title: 'Delivery History',
@@ -22,240 +23,76 @@ class DeliveryHistoryScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
-            onPressed: () {
-              // Invalidate to re-fetch including cancelled records.
-              ref.invalidate(deliveryHistoryProvider);
-            },
+            onPressed: () => ref.invalidate(riderHistoryProvider),
           ),
         ],
       ),
-      body: historyAsync.when(
+      body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.screenGutter),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.error_outline,
-                    color: AppColors.error, size: 40),
-                const SizedBox(height: AppSpacing.md),
-                Text('Could not load history: $e',
-                    style: theme.textTheme.bodyMedium,
-                    textAlign: TextAlign.center),
-                const SizedBox(height: AppSpacing.md),
-                TextButton(
-                  onPressed: () => ref.invalidate(deliveryHistoryProvider),
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
-          ),
-        ),
-        data: (records) {
-          if (records.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.history_outlined,
-                    size: 56,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Text('No deliveries yet',
-                      style: theme.textTheme.titleMedium),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    'Completed deliveries will appear here.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface
-                          .withValues(alpha: 0.55),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.screenGutter,
-              AppSpacing.md,
-              AppSpacing.screenGutter,
-              AppSpacing.xl,
-            ),
-            itemCount: records.length,
-            itemBuilder: (ctx, i) => _HistoryCard(record: records[i]),
+        error: (e, _) {
+          debugPrint('[RiderHistory] load error: $e');
+          return RetrySection(
+            message: 'Could not load history.',
+            onRetry: () => ref.invalidate(riderHistoryProvider),
           );
         },
+        data: (jobs) => RiderHistoryList(
+          jobs: jobs,
+          onOpen: (j) => Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => RiderHistoryDetailScreen(jobId: j.id),
+          )),
+        ),
       ),
     );
   }
 }
 
-class _HistoryCard extends StatelessWidget {
-  const _HistoryCard({required this.record});
+class RiderHistoryList extends StatelessWidget {
+  const RiderHistoryList({super.key, required this.jobs, required this.onOpen});
 
-  final DeliveryRecord record;
+  final List<RiderJob> jobs;
+  final void Function(RiderJob) onOpen;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isErrand =
-        record.orderType == 'around' || record.orderType == 'errand';
-    final typeLabel = isErrand ? 'Errand' : 'Food';
-    final typeColor =
-        isErrand ? AppColors.accentViolet : AppColors.emerald;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: AppSpacing.cardGap),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        side: BorderSide(color: theme.dividerColor),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Row(
+    if (jobs.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Type icon.
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: (record.wasCancelled
-                        ? AppColors.error
-                        : typeColor)
-                    .withValues(alpha: 0.1),
-                shape: BoxShape.circle,
+            Icon(Icons.history_outlined,
+                size: 56,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
+            const SizedBox(height: AppSpacing.md),
+            Text('No deliveries yet', style: theme.textTheme.titleMedium),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Completed and cancelled jobs will appear here.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
               ),
-              child: Icon(
-                record.wasCancelled
-                    ? Icons.cancel_outlined
-                    : (isErrand
-                        ? Icons.directions_bike_outlined
-                        : Icons.delivery_dining_outlined),
-                color: record.wasCancelled ? AppColors.error : typeColor,
-                size: 22,
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-
-            // Details.
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        record.shortId,
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      // Type badge.
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.sm - 2, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: typeColor.withValues(alpha: 0.1),
-                          borderRadius:
-                              BorderRadius.circular(AppRadius.pill),
-                        ),
-                        child: Text(
-                          typeLabel,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: typeColor,
-                          ),
-                        ),
-                      ),
-                      // Cancelled badge.
-                      if (record.wasCancelled) ...[
-                        const SizedBox(width: AppSpacing.xs),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: AppSpacing.sm - 2, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.error.withValues(alpha: 0.1),
-                            borderRadius:
-                                BorderRadius.circular(AppRadius.pill),
-                          ),
-                          child: Text(
-                            'CANCELLED',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: AppColors.error,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _formatDate(record.completedAt),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface
-                          .withValues(alpha: 0.55),
-                    ),
-                  ),
-                  if (record.deliveryLocation != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      record.deliveryLocation!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.55),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-
-            // Amount + duration.
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                if (record.orderTotal != null && !record.wasCancelled)
-                  Text(
-                    '₦${record.orderTotal!.toStringAsFixed(0)}',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.emerald,
-                    ),
-                  ),
-                Text(
-                  record.durationLabel,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurface
-                        .withValues(alpha: 0.5),
-                  ),
-                ),
-              ],
             ),
           ],
         ),
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenGutter,
+        AppSpacing.md,
+        AppSpacing.screenGutter,
+        AppSpacing.xl,
       ),
+      children: [
+        for (final j in jobs)
+          RiderJobCard(
+            key: ValueKey('history-${j.id}'),
+            job: j,
+            mode: RiderJobCardMode.history,
+            onTap: () => onOpen(j),
+          ),
+      ],
     );
-  }
-
-  String _formatDate(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-    if (diff.inDays == 0) return 'Today ${_time(dt)}';
-    if (diff.inDays == 1) return 'Yesterday ${_time(dt)}';
-    return '${dt.day}/${dt.month}/${dt.year}';
-  }
-
-  String _time(DateTime dt) {
-    final h = dt.hour.toString().padLeft(2, '0');
-    final m = dt.minute.toString().padLeft(2, '0');
-    return '$h:$m';
   }
 }

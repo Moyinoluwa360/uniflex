@@ -37,9 +37,7 @@ class PreferencesScreen extends ConsumerWidget {
                 final isSelected = themeMode == mode;
                 return ListTile(
                   leading: Icon(icon,
-                      color: isSelected
-                          ? theme.colorScheme.primary
-                          : null),
+                      color: isSelected ? theme.colorScheme.primary : null),
                   title: Text(label),
                   trailing: isSelected
                       ? Icon(Icons.check_circle,

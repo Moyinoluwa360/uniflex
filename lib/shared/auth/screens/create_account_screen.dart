@@ -1,30 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/auth/auth_providers.dart';
-import '../../services/otp/phone_otp_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/buttons/primary_button.dart';
 import '../../widgets/inputs/app_text_field.dart';
 import '../../widgets/progress/onboarding_progress_bar.dart';
+import '../signup/signup_draft.dart';
+import '../signup/signup_flow_controller.dart';
+import '../signup/signup_widgets.dart';
 import '../validators.dart';
+import '../signup/signup_final_step.dart';
 import 'verify_phone_screen.dart';
 
-/// Step One of Student self-signup — Email, Password, Phone Number only.
-/// Google/Apple sign-in is deliberately not built here (deferred past
-/// MVP). There is no role picker: this screen only ever creates a
-/// Student account — Rider/Admin accounts are invite-only (see
-/// supabase/schema.sql).
+/// Student self-signup (Pack 5) — THREE steps, and the account is created
+/// only at the very end:
 ///
-/// On submit: creates the Supabase Auth user, writes the bare profiles
-/// stub row, then kicks off Termii phone OTP and hands off to
-/// [VerifyPhoneScreen]. The account isn't considered created until that
-/// screen's OTP check passes — this screen doesn't touch
-/// `currentProfileProvider`/`AuthGate` routing at all.
+///   1. Your details   email, password, phone  → server checks they're free,
+///                     THEN sends the SMS; moves on only if that worked
+///   2. Verify phone   6-digit code (60 s resend, "Change number")
+///   3. Final details  nickname, name, matric, school, DOB, referral, PIN
+///                     → ONE server call creates everything, then we sign in
+///
+/// This widget is only the host: it loads the saved draft (so leaving and
+/// coming back resumes the same step) and shows the widget for the current
+/// step. All logic lives in [SignupFlowController]. Rider/Admin accounts are
+/// invite-only and never come through here.
 class CreateAccountScreen extends ConsumerStatefulWidget {
-  const CreateAccountScreen({super.key});
+  const CreateAccountScreen({super.key, this.controller});
+
+  /// Tests inject a controller; the app builds its own.
+  final SignupFlowController? controller;
 
   @override
   ConsumerState<CreateAccountScreen> createState() =>
@@ -32,16 +40,99 @@ class CreateAccountScreen extends ConsumerStatefulWidget {
 }
 
 class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
+  SignupFlowController? _c;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    if (widget.controller != null) {
+      _c = widget.controller;
+      if (!_c!.loaded) await _c!.load();
+      if (mounted) setState(() {});
+      return;
+    }
+    final api = ref.read(signupApiProvider);
+    final auth = ref.read(authServiceProvider);
+    final secrets = ref.read(signupSecretStoreProvider);
+    final prefs = await SharedPreferences.getInstance();
+    final c = SignupFlowController(
+      store: SignupDraftStore(prefs, secrets),
+      api: api,
+      signIn: (email, password) =>
+          auth.signInWithEmail(email: email, password: password),
+    );
+    await c.load();
+    if (!mounted) {
+      c.dispose();
+      return;
+    }
+    setState(() => _c = c);
+  }
+
+  @override
+  void dispose() {
+    if (widget.controller == null) _c?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _c;
+    if (c == null || !c.loaded) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    return ListenableBuilder(
+      listenable: c,
+      builder: (context, _) {
+        return PopScope(
+          // System back on step 2 = "Change number", not "leave".
+          canPop: c.step != 2,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) c.changeNumber();
+          },
+          child: switch (c.step) {
+            1 => SignupDetailsStep(
+                key: const ValueKey('signup-step-1'), controller: c),
+            2 => VerifyPhoneScreen(
+                key: const ValueKey('signup-step-2'), controller: c),
+            _ => SignupFinalStep(
+                key: const ValueKey('signup-step-3'), controller: c),
+          },
+        );
+      },
+    );
+  }
+}
+
+/// Step 1 — email, password, confirm, phone.
+class SignupDetailsStep extends StatefulWidget {
+  const SignupDetailsStep({super.key, required this.controller});
+
+  final SignupFlowController controller;
+
+  @override
+  State<SignupDetailsStep> createState() => _SignupDetailsStepState();
+}
+
+class _SignupDetailsStepState extends State<SignupDetailsStep> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
-  final _phoneController = TextEditingController();
+  late final _emailController =
+      TextEditingController(text: widget.controller.draft.email);
+  late final _passwordController =
+      TextEditingController(text: widget.controller.password ?? '');
+  late final _confirmPasswordController =
+      TextEditingController(text: widget.controller.password ?? '');
+  late final _phoneController =
+      TextEditingController(text: widget.controller.draft.phoneInput);
 
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
-  bool _isLoading = false;
-  String? _errorText;
+
+  SignupFlowController get _c => widget.controller;
 
   @override
   void dispose() {
@@ -54,119 +145,31 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    // On success the controller moves to step 2 and the host swaps this
+    // widget out — there is no navigation call here on purpose.
+    await _c.submitDetails(
+      email: _emailController.text,
+      phoneInput: _phoneController.text,
+      password: _passwordController.text,
+    );
+  }
 
-    setState(() {
-      _isLoading = true;
-      _errorText = null;
-    });
-
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
-    final e164Phone = AuthValidators.toE164(_phoneController.text);
-
-    try {
-      final response = await ref
-          .read(authServiceProvider)
-          .signUpWithEmail(email: email, password: password);
-
-      final userId = response.user?.id;
-      if (userId == null) {
-        throw const AuthException(
-          'Could not create your account. Try again.',
-        );
-      }
-      if (response.session == null) {
-        // The Supabase project still has "Confirm email" turned on —
-        // see the setup note in supabase/schema.sql. This app verifies
-        // via phone OTP, not an email link, so that setting must be off
-        // for sign-in to work right after this step.
-        throw const AuthException(
-          'Sign-up succeeded but no session was returned — ask whoever '
-          'set up the Supabase project to turn off "Confirm email" '
-          '(Authentication → Providers → Email).',
-        );
-      }
-
-      await ref
-          .read(profileServiceProvider)
-          .createStubProfile(userId: userId, email: email, phone: e164Phone);
-
-      // Check if phone is already verified (user went back after verifying).
-      // If so, skip OTP entirely and let AuthGate route to CompleteProfile.
-      final freshProfile = await ref.read(profileServiceProvider).fetchProfile(userId);
-      if (freshProfile != null && freshProfile.phoneVerifiedAt != null) {
-        ref.invalidate(currentProfileProvider);
-        if (!mounted) return;
-        Navigator.of(context).popUntil((route) => route.isFirst);
-        return;
-      }
-
-      final otpResult = await ref
-          .read(phoneOtpServiceProvider)
-          .sendOtp(e164Phone);
-
-      if (!mounted) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) =>
-              VerifyPhoneScreen(phone: e164Phone, pinId: otpResult.pinId),
-        ),
-      );
-    } on AuthException catch (e) {
-      final msg = e.message.toLowerCase();
-      if (msg.contains('already') || msg.contains('registered')) {
-        // Account exists — attempt auto-sign-in so the user can resume
-        // whatever onboarding step they left off at.
-        try {
-          await ref
-              .read(authServiceProvider)
-              .signInWithEmail(email: email, password: password);
-          // Update the phone on the stub in case it changed.
-          final session = ref.read(authServiceProvider).currentSession;
-          if (session?.user != null) {
-            await ref.read(profileServiceProvider).createStubProfile(
-                  userId: session!.user.id,
-                  email: email,
-                  phone: e164Phone,
-                );
-          }
-          ref.invalidate(currentProfileProvider);
-          if (!mounted) return;
-          // Pop to root — AuthGate picks up the session and routes to
-          // ResumeOtpScreen or CompleteProfileScreen as needed.
-          Navigator.of(context).popUntil((route) => route.isFirst);
-          return;
-        } on AuthException {
-          setState(
-            () => _errorText =
-                'An account with this email already exists but the password '
-                "doesn't match. Try logging in from the main screen, or use "
-                "'Forgot password?' to recover access.",
-          );
-        }
-      } else {
-        setState(() => _errorText = e.message);
-      }
-    } on OtpException catch (e) {
-      setState(
-        () => _errorText =
-            'Account created, but the verification code could not be '
-            'sent: ${e.message}',
-      );
-    } catch (_) {
-      setState(() => _errorText = 'Something went wrong. Try again.');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+  Future<void> _startOver() async {
+    await _c.startOver();
+    _emailController.clear();
+    _passwordController.clear();
+    _confirmPasswordController.clear();
+    _phoneController.clear();
+    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
     final secondaryInk = Theme.of(context).brightness == Brightness.dark
         ? AppColors.darkInkSecondary
         : AppColors.mediumGrey;
+    final busy = _c.busy;
 
     return Scaffold(
       body: SafeArea(
@@ -177,12 +180,13 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const OnboardingProgressHeader(step: 1, totalSteps: 2),
-                const SizedBox(height: AppSpacing.xl),
-                Text(
-                  'Create your\naccount',
-                  style: textTheme.headlineMedium,
+                OnboardingProgressHeader(
+                  step: 1,
+                  totalSteps: 3,
+                  onBack: () => Navigator.of(context).maybePop(),
                 ),
+                const SizedBox(height: AppSpacing.xl),
+                Text('Create your\naccount', style: textTheme.headlineMedium),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   'Food, deliveries and errands across campus. '
@@ -190,38 +194,7 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
                   style: textTheme.bodyMedium?.copyWith(color: secondaryInk),
                 ),
                 const SizedBox(height: AppSpacing.xl),
-                if (_errorText != null) ...[
-                  Container(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    decoration: BoxDecoration(
-                      color: colorScheme.error.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(AppRadius.control),
-                      border: Border.all(
-                        color: colorScheme.error.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 20,
-                          color: colorScheme.error,
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: Text(
-                            _errorText!,
-                            style: textTheme.bodyMedium?.copyWith(
-                              color: colorScheme.error,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                ],
+                if (_c.error != null) SignupErrorBanner(_c.error!),
                 AppTextField(
                   controller: _emailController,
                   label: 'Email address',
@@ -239,11 +212,9 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
                   textInputAction: TextInputAction.next,
                   prefixIcon: Icons.lock_outline,
                   suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined,
-                    ),
+                    icon: Icon(_obscurePassword
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined),
                     onPressed: () =>
                         setState(() => _obscurePassword = !_obscurePassword),
                   ),
@@ -257,11 +228,9 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
                   textInputAction: TextInputAction.next,
                   prefixIcon: Icons.lock_outline,
                   suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscureConfirm
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined,
-                    ),
+                    icon: Icon(_obscureConfirm
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined),
                     onPressed: () =>
                         setState(() => _obscureConfirm = !_obscureConfirm),
                   ),
@@ -287,8 +256,8 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
                 PrimaryButton(
                   label: 'Continue',
                   icon: Icons.arrow_forward,
-                  isLoading: _isLoading,
-                  onPressed: _submit,
+                  isLoading: busy,
+                  onPressed: busy ? null : _submit,
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 Row(
@@ -296,9 +265,8 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
                   children: [
                     Text(
                       'Already have an account? ',
-                      style: textTheme.bodyMedium?.copyWith(
-                        color: secondaryInk,
-                      ),
+                      style:
+                          textTheme.bodyMedium?.copyWith(color: secondaryInk),
                     ),
                     TextButton(
                       style: TextButton.styleFrom(
@@ -306,13 +274,26 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      onPressed: _isLoading
-                          ? null
-                          : () => Navigator.of(context).maybePop(),
+                      onPressed:
+                          busy ? null : () => Navigator.of(context).maybePop(),
                       child: const Text('Log in'),
                     ),
                   ],
                 ),
+                if (_c.hasProgress) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Center(
+                    child: TextButton(
+                      key: const ValueKey('start-over'),
+                      onPressed: busy ? null : _startOver,
+                      child: Text(
+                        'Start over',
+                        style:
+                            textTheme.bodySmall?.copyWith(color: secondaryInk),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

@@ -11,7 +11,7 @@ void main() {
   // ─── A2: Resume logic — profile state determines routing ──────────────
 
   group('A2: AuthGate routing from profile state', () {
-    Profile _makeProfile({
+    Profile makeProfile({
       bool onboardingComplete = false,
       DateTime? phoneVerifiedAt,
       bool isActive = true,
@@ -27,7 +27,7 @@ void main() {
     }
 
     test('phone NOT verified → AuthGate should show OTP screen', () {
-      final profile = _makeProfile(phoneVerifiedAt: null);
+      final profile = makeProfile(phoneVerifiedAt: null);
       // AuthGate condition: !onboardingComplete && phoneVerifiedAt == null
       expect(profile.onboardingComplete, isFalse);
       expect(profile.phoneVerifiedAt, isNull);
@@ -35,7 +35,7 @@ void main() {
     });
 
     test('phone already verified → AuthGate should skip OTP, show CompleteProfile', () {
-      final profile = _makeProfile(
+      final profile = makeProfile(
         phoneVerifiedAt: DateTime.now(),
       );
       // AuthGate condition: !onboardingComplete && phoneVerifiedAt != null
@@ -45,7 +45,7 @@ void main() {
     });
 
     test('onboarding complete → AuthGate routes to RoleRouter', () {
-      final profile = _makeProfile(
+      final profile = makeProfile(
         onboardingComplete: true,
         phoneVerifiedAt: DateTime.now(),
       );
@@ -55,7 +55,7 @@ void main() {
     });
 
     test('deactivated account → AuthGate shows deactivated screen', () {
-      final profile = _makeProfile(
+      final profile = makeProfile(
         onboardingComplete: true,
         phoneVerifiedAt: DateTime.now(),
         isActive: false,

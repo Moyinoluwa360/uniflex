@@ -19,9 +19,7 @@ final adminDeliveryLocationsProvider =
       .select()
       .order('sort_order')
       .order('name');
-  return rows
-      .map((m) => DeliveryLocation.fromMap(m))
-      .toList();
+  return rows.map((m) => DeliveryLocation.fromMap(m)).toList();
 });
 
 /// Admin screen for managing named delivery locations with prices.
@@ -61,8 +59,7 @@ class DeliverySettingsScreen extends ConsumerWidget {
           return ListView.separated(
             padding: const EdgeInsets.all(AppSpacing.screenGutter),
             itemCount: locs.length,
-            separatorBuilder: (_, __) =>
-                const SizedBox(height: AppSpacing.sm),
+            separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
             itemBuilder: (context, i) {
               final loc = locs[i];
               return _LocationTile(
@@ -97,8 +94,8 @@ class DeliverySettingsScreen extends ConsumerWidget {
               child: const Text('Cancel')),
           TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child:
-                  const Text('Delete', style: TextStyle(color: AppColors.error))),
+              child: const Text('Delete',
+                  style: TextStyle(color: AppColors.error))),
         ],
       ),
     );
@@ -121,8 +118,7 @@ class DeliverySettingsScreen extends ConsumerWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Failed: $e'),
-              behavior: SnackBarBehavior.floating),
+              content: Text('Failed: $e'), behavior: SnackBarBehavior.floating),
         );
       }
     }
@@ -166,8 +162,7 @@ class _LocationTile extends StatelessWidget {
                             horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: AppColors.error.withValues(alpha: 0.12),
-                          borderRadius:
-                              BorderRadius.circular(AppRadius.pill),
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
                         ),
                         child: Text(
                           'Hidden',
@@ -182,8 +177,7 @@ class _LocationTile extends StatelessWidget {
                 Text(
                   '₦${location.price.toStringAsFixed(0)} base fee',
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface
-                        .withValues(alpha: 0.6),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
               ],
@@ -293,8 +287,8 @@ class _DeliveryLocationFormScreenState
     final isEditing = widget.existing != null;
 
     return Scaffold(
-      appBar: UniflexAppBar(
-          title: isEditing ? 'Edit Location' : 'Add Location'),
+      appBar:
+          UniflexAppBar(title: isEditing ? 'Edit Location' : 'Add Location'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
         child: Form(
@@ -317,7 +311,9 @@ class _DeliveryLocationFormScreenState
                 keyboardType: TextInputType.number,
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) return 'Required';
-                  if (double.tryParse(v.trim()) == null) return 'Invalid number';
+                  if (double.tryParse(v.trim()) == null) {
+                    return 'Invalid number';
+                  }
                   return null;
                 },
               ),
@@ -331,7 +327,8 @@ class _DeliveryLocationFormScreenState
               const SizedBox(height: AppSpacing.md),
               SwitchListTile(
                 title: const Text('Active'),
-                subtitle: const Text('Hidden locations are not shown to students.'),
+                subtitle:
+                    const Text('Hidden locations are not shown to students.'),
                 value: _isActive,
                 onChanged: (v) => setState(() => _isActive = v),
               ),

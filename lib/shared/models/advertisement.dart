@@ -1,4 +1,7 @@
-/// What tapping an advertisement card does.
+import '../utils/ad_link.dart';
+
+/// Kept for the database column (`link_type`: none | url). Since Pack 4C an
+/// ad's link is simply "present or not" — see [Advertisement.webLink].
 enum AdLinkType {
   none,
   vendor,
@@ -60,6 +63,15 @@ class Advertisement {
   final String? linkValue;
   final DateTime? startsAt;
   final DateTime? endsAt;
+
+  /// The ad's usable web link (http/https), or null. A missing, empty or
+  /// malformed link — or an old vendor/wallet target — is simply "no link";
+  /// it can never throw.
+  String? get webLink =>
+      linkType == AdLinkType.url ? normalizeAdLink(linkValue) : null;
+
+  /// True when the popup should offer a "Visit" button.
+  bool get hasLink => webLink != null;
 
   /// True when this ad should be on screen right now. The read policy
   /// already filters these out for students, but admin reads every row, so

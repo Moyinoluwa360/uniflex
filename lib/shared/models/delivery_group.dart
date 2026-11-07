@@ -1,3 +1,5 @@
+import '../utils/local_time.dart';
+
 /// Round 7: A parent record for multi-vendor checkouts.
 ///
 /// One [DeliveryGroup] per checkout, even for single-vendor orders.
@@ -22,6 +24,12 @@ class DeliveryGroup {
     this.scheduledFor,
     required this.createdAt,
     this.cancelledByStudent = false,
+    this.completedAt,
+    this.cancelledAt,
+    this.isGift = false,
+    this.giftRecipientId,
+    this.giftRecipientNickname,
+    this.giftMessage,
   });
 
   factory DeliveryGroup.fromMap(Map<String, dynamic> map) {
@@ -37,16 +45,22 @@ class DeliveryGroup {
           (map['commitment_fee_total'] as num?)?.toDouble() ?? 0,
       finalAmount: (map['final_amount'] as num?)?.toDouble(),
       finalPaymentPaid: map['final_payment_paid'] as bool? ?? false,
-      status: DeliveryGroupStatus.fromString(
-          map['status'] as String? ?? 'placed'),
+      status:
+          DeliveryGroupStatus.fromString(map['status'] as String? ?? 'placed'),
       riderId: map['rider_id'] as String?,
       deliveryPin: map['delivery_pin'] as String?,
       deliveryStage: map['delivery_stage'] as String?,
       scheduledFor: map['scheduled_for'] != null
           ? DateTime.parse(map['scheduled_for'] as String)
           : null,
-      createdAt: DateTime.parse(map['created_at'] as String),
+      createdAt: DateTime.parse(map['created_at'] as String).toLocal(),
       cancelledByStudent: map['cancelled_by_student'] as bool? ?? false,
+      completedAt: parseServerTime(map['completed_at']),
+      cancelledAt: parseServerTime(map['cancelled_at']),
+      isGift: map['is_gift'] as bool? ?? false,
+      giftRecipientId: map['gift_recipient_id'] as String?,
+      giftRecipientNickname: map['gift_recipient_nickname'] as String?,
+      giftMessage: map['gift_message'] as String?,
     );
   }
 
@@ -67,6 +81,19 @@ class DeliveryGroup {
   final DateTime? scheduledFor;
   final DateTime createdAt;
   final bool cancelledByStudent;
+
+  /// Server time (now()) stamped ONCE when the rider's PIN was verified /
+  /// the order was cancelled, in the phone's local time. Every screen shows
+  /// this and nothing else as "the time it was completed".
+  final DateTime? completedAt;
+  final DateTime? cancelledAt;
+
+  /// Gift orders: the sender is [studentId]; the recipient only ever appears
+  /// here as a nickname.
+  final bool isGift;
+  final String? giftRecipientId;
+  final String? giftRecipientNickname;
+  final String? giftMessage;
 
   String get shortId => '#${id.substring(0, 8).toUpperCase()}';
 

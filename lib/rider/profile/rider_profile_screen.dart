@@ -92,7 +92,7 @@ class RiderProfileScreen extends ConsumerWidget {
               // ── Logout ───────────────────────────────────────────────
               PrimaryButton(
                 label: 'Log Out',
-                  icon: Icons.logout,
+                icon: Icons.logout,
                 onPressed: () => ref.read(authServiceProvider).signOut(),
               ),
 
@@ -130,7 +130,8 @@ class _InfoRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
       child: Row(
         children: [
-          Icon(icon, size: 20,
+          Icon(icon,
+              size: 20,
               color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
           const SizedBox(width: AppSpacing.md),
           Expanded(

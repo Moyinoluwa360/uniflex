@@ -5,16 +5,12 @@ import '../../shared/models/order.dart';
 import '../../shared/models/product.dart';
 import '../../shared/models/advertisement.dart';
 import '../../shared/models/vendor.dart';
-import '../../shared/services/notifications/notification_inbox_service.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
 import 'admin_service.dart';
 
 /// Single shared instance of [AdminService].
 final adminServiceProvider = Provider<AdminService>((ref) {
-  return AdminService(
-    ref.watch(supabaseClientProvider),
-    ref.watch(notificationInboxServiceProvider),
-  );
+  return AdminService(ref.watch(supabaseClientProvider));
 });
 
 /// All vendors (active + inactive), for the admin management screens.
@@ -33,13 +29,13 @@ final adminVendorProductsProvider =
 /// Live kitchen queue: Uniflex orders in placed/preparing/ready states,
 /// each paired with their line items. Uses Supabase Realtime — the orders
 /// table must be in the `supabase_realtime` publication (see schema.sql).
-final kitchenOrdersProvider =
-    StreamProvider<List<KitchenOrder>>((ref) {
+final kitchenOrdersProvider = StreamProvider<List<KitchenOrder>>((ref) {
   return ref.watch(adminServiceProvider).streamKitchenOrders();
 });
 
-/// Today's dashboard metrics (order counts, revenue, pending). Refreshed
-/// manually via `ref.invalidate(dashboardStatsProvider)`.
+/// Today's dashboard metrics from `get_dashboard_stats()` (orders, pending,
+/// completed, cancelled, fees collected, food payments). Refetched on tab
+/// open, pull-to-refresh and when orders change — see `StatsLiveRefresh`.
 final dashboardStatsProvider =
     FutureProvider<Map<String, dynamic>>((ref) async {
   return ref.watch(adminServiceProvider).getDashboardStats();
@@ -47,8 +43,7 @@ final dashboardStatsProvider =
 
 /// Phase 6: live stream of upcoming scheduled orders for the admin
 /// Scheduled Orders view.
-final scheduledOrdersProvider =
-    StreamProvider<List<Order>>((ref) {
+final scheduledOrdersProvider = StreamProvider<List<Order>>((ref) {
   return ref.watch(adminServiceProvider).streamScheduledOrders();
 });
 
@@ -85,8 +80,7 @@ final adminAdvertisementsProvider =
   return ref.watch(adminServiceProvider).fetchAllAdvertisements();
 });
 
-/// Analytics data for the Admin Analytics screen — aggregates orders,
-/// revenue, user counts, top items, and rider performance.
+/// Analytics for the Admin Analytics screen from `get_admin_analytics()`.
 final adminAnalyticsProvider =
     FutureProvider<Map<String, dynamic>>((ref) async {
   return ref.watch(adminServiceProvider).getAnalytics();
@@ -101,8 +95,6 @@ final adminDeliveryGroupsProvider =
 
 /// Live stream of all non-terminal errand orders, enriched with
 /// errand_requests pickup + item data. Used by the Errands tab.
-final adminErrandOrdersProvider =
-    StreamProvider<List<AdminErrandRow>>((ref) {
+final adminErrandOrdersProvider = StreamProvider<List<AdminErrandRow>>((ref) {
   return ref.watch(adminServiceProvider).streamErrandOrders();
 });
-

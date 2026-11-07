@@ -46,6 +46,11 @@ class SupportMessage {
   final String? deliveryGroupId;
   final DateTime createdAt;
 
+  /// The one id this message refers to, if any: the delivery-group id for
+  /// a delivery (what the student, rider and Admin all see as "the order"),
+  /// otherwise the order id (errand / pickup).
+  String? get attachedRefId => deliveryGroupId ?? orderId;
+
   bool get isFromAdmin => senderRole == 'admin';
   bool get isFromStudent => senderRole == 'student';
 }

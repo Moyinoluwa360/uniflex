@@ -13,13 +13,17 @@ class NotifyException implements Exception {
   String toString() => 'NotifyException: $message';
 }
 
-/// Reads the signed-in student's notification inbox, and — for Admin and
-/// Rider — sends notifications about an order.
+/// Reads the signed-in user's notification inbox, and — for Admin and
+/// Rider — sends a free-text message about an order.
 ///
-/// Sending always goes through the `notify-user` Edge Function rather than
-/// `send-notification` directly: that function checks the sender is allowed
-/// to contact this customer and resolves the device token server-side, so
-/// push tokens never reach a client.
+/// Order-event notifications (rider accepted, final price, paid, cancelled,
+/// delivered, ready for pickup, support replies) are NOT sent from here:
+/// database triggers write the inbox row and the push (Pack 4A).
+///
+/// Free-text messages go through the `notify-user` Edge Function rather
+/// than `send-notification` directly: that function checks the sender is
+/// allowed to contact this customer and resolves the device token
+/// server-side, so push tokens never reach a client.
 class NotificationInboxService {
   const NotificationInboxService(this._client);
 
@@ -67,26 +71,8 @@ class NotificationInboxService {
 
   Future<void> markAllRead() => _client.rpc('mark_all_notifications_read');
 
-  /// Tells the customer their order moved to its current status. Copy is
-  /// generated server-side so every caller says the same thing.
-  ///
-  /// Deliberately never throws: this is fired after a status change that has
-  /// already succeeded, and a failed push must not make the status change
-  /// look like it failed. Returns true if something was delivered.
-  Future<bool> notifyOrderStatus(String orderId) async {
-    try {
-      await _client.functions.invoke('notify-user', body: {
-        'order_id': orderId,
-        'kind': 'order_status',
-      });
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
   /// Sends a free-text message to the order's customer. Unlike
-  /// [notifyOrderStatus] this is an explicit user action, so failures are
+  /// the automatic order notifications this is an explicit user action, so failures are
   /// surfaced.
   Future<void> messageCustomer({
     required String orderId,
@@ -119,8 +105,7 @@ final notificationInboxServiceProvider =
 });
 
 /// Live notification inbox for the signed-in student.
-final notificationInboxProvider =
-    StreamProvider<List<AppNotification>>((ref) {
+final notificationInboxProvider = StreamProvider<List<AppNotification>>((ref) {
   return ref.watch(notificationInboxServiceProvider).watch();
 });
 

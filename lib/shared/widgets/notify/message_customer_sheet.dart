@@ -121,7 +121,6 @@ class _MessageCustomerSheetState extends State<_MessageCustomerSheet> {
             ),
           ),
           const SizedBox(height: AppSpacing.md),
-
           if (widget.quickReplies.isNotEmpty) ...[
             Wrap(
               spacing: AppSpacing.sm,
@@ -140,7 +139,6 @@ class _MessageCustomerSheetState extends State<_MessageCustomerSheet> {
             ),
             const SizedBox(height: AppSpacing.md),
           ],
-
           AppTextField(
             controller: _controller,
             hint: 'Type your message…',
@@ -161,7 +159,8 @@ class _MessageCustomerSheetState extends State<_MessageCustomerSheet> {
           const SizedBox(height: AppSpacing.sm),
           Center(
             child: TextButton(
-              onPressed: _isSending ? null : () => Navigator.of(context).pop(false),
+              onPressed:
+                  _isSending ? null : () => Navigator.of(context).pop(false),
               child: const Text('Cancel',
                   style: TextStyle(color: AppColors.mediumGrey)),
             ),

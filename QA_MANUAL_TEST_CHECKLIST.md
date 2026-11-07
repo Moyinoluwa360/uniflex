@@ -125,7 +125,7 @@ Tick each box. For anything that fails, note: what you did, what you expected, w
 **Growth & rewards**
 - [ ] **Referral:** your referral code is shown and copyable; a new user signing up with it
       credits the referral bonus.
-- [ ] **Gift:** send a wallet gift to another student → their balance goes up, yours down.
+- [ ] **Gift (Pack 6):** at checkout choose Delivery → switch on "Send as a gift" → see BEFORE_YOU_BUILD.md §7 for the full two-phones-plus-rider check.
 - [ ] **Badges / Membership & Rewards:** tier, points, and badges display correctly.
 - [ ] **Scheduled Orders** list (from profile) shows upcoming scheduled orders.
 - [ ] Birthday reward credits on the birthday (if testable).

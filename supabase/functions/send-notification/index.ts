@@ -117,7 +117,14 @@ serve(async (req: Request) => {
     const presented = (req.headers.get('Authorization') ?? '')
       .replace(/^Bearer\s+/i, '')
       .trim()
-    if (!serviceKey || presented !== serviceKey) {
+    // New-style `sb_secret_…` keys are not JWTs, so they are accepted via
+    // the PUSH_TRIGGER_SECRET function secret (deploy with --no-verify-jwt).
+    const triggerSecret = Deno.env.get('PUSH_TRIGGER_SECRET') ?? ''
+    const ok =
+      presented !== '' &&
+      ((serviceKey !== '' && presented === serviceKey) ||
+        (triggerSecret !== '' && presented === triggerSecret))
+    if (!ok) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

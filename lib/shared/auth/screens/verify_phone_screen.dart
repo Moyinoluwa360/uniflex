@@ -1,169 +1,116 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:async';
 
-import '../../services/auth/auth_providers.dart';
-import '../../services/otp/phone_otp_service.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
-import '../../widgets/app_bar/uniflex_app_bar.dart';
 import '../../widgets/buttons/primary_button.dart';
 import '../../widgets/inputs/app_text_field.dart';
-import 'complete_profile_screen.dart';
+import '../../widgets/progress/onboarding_progress_bar.dart';
+import '../signup/signup_api.dart';
+import '../signup/signup_flow_controller.dart';
+import '../signup/signup_widgets.dart';
 
-/// Step 1b — the OTP half of Step One. The account isn't considered
-/// created until the code entered here is confirmed by Termii; the
-/// `phone-otp` Edge Function records `phone`/`phone_verified_at` on the
-/// profiles stub row once it does, and this screen then hands off to
-/// [CompleteProfileScreen] (Step Two).
-class VerifyPhoneScreen extends ConsumerStatefulWidget {
-  const VerifyPhoneScreen({
-    super.key,
-    required this.phone,
-    required this.pinId,
-  });
+/// Step 2 of sign-up — "Verify your phone". Shows the masked number and a
+/// 6-digit field. Resend is disabled for 60 s with a visible countdown;
+/// "Change number" goes back to step 1 with everything still filled in.
+///
+/// A correct code does NOT create an account: the server hands back a
+/// short-lived proof which the controller keeps with the draft, and the
+/// flow moves to step 3. No navigation happens here — the host swaps the
+/// step when the controller says so.
+class VerifyPhoneScreen extends StatefulWidget {
+  const VerifyPhoneScreen({super.key, required this.controller});
 
-  final String phone;
-  final String pinId;
+  final SignupFlowController controller;
 
   @override
-  ConsumerState<VerifyPhoneScreen> createState() => _VerifyPhoneScreenState();
+  State<VerifyPhoneScreen> createState() => _VerifyPhoneScreenState();
 }
 
-class _VerifyPhoneScreenState extends ConsumerState<VerifyPhoneScreen> {
+class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
   final _codeController = TextEditingController();
+  Timer? _ticker;
+  String? _localError;
 
-  late String _pinId = widget.pinId;
-  bool _isVerifying = false;
-  bool _isResending = false;
-  String? _errorText;
+  SignupFlowController get _c => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    // Redraws the countdown once a second.
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
 
   @override
   void dispose() {
+    _ticker?.cancel();
     _codeController.dispose();
     super.dispose();
   }
 
   Future<void> _verify() async {
     final code = _codeController.text.trim();
-    if (code.length < 6) {
-      setState(() => _errorText = 'Enter the 6-digit code we sent you');
+    if (code.length != 6) {
+      setState(() => _localError = 'Enter the 6-digit code we sent you');
       return;
     }
-
-    setState(() {
-      _isVerifying = true;
-      _errorText = null;
-    });
-
-    try {
-      // The Edge Function verifies with Termii and, on success, records
-      // phone/phone_verified_at itself using the service role. The client
-      // deliberately no longer writes those columns — see the note in
-      // phone_otp_service.dart.
-      final verified = await ref.read(phoneOtpServiceProvider).verifyOtp(
-            pinId: _pinId,
-            pin: code,
-            phoneNumber: widget.phone,
-          );
-
-      if (!verified) {
-        setState(() => _errorText = 'That code is incorrect. Try again.');
-        return;
-      }
-
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const CompleteProfileScreen()),
-      );
-    } on OtpException catch (e) {
-      setState(() => _errorText = e.message);
-    } catch (_) {
-      setState(() => _errorText = 'Something went wrong. Try again.');
-    } finally {
-      if (mounted) setState(() => _isVerifying = false);
-    }
+    setState(() => _localError = null);
+    final ok = await _c.verify(code);
+    if (!ok && mounted) _codeController.clear();
   }
 
   Future<void> _resend() async {
-    setState(() {
-      _isResending = true;
-      _errorText = null;
-    });
-    try {
-      final result = await ref
-          .read(phoneOtpServiceProvider)
-          .sendOtp(widget.phone);
-      setState(() => _pinId = result.pinId);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Code resent.')));
-      }
-    } on OtpException catch (e) {
-      setState(() => _errorText = e.message);
-    } finally {
-      if (mounted) setState(() => _isResending = false);
+    setState(() => _localError = null);
+    final ok = await _c.resend();
+    if (ok && mounted) {
+      _codeController.clear();
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('New code sent.')));
     }
+  }
+
+  String _countdown(int seconds) {
+    final m = seconds ~/ 60;
+    final s = (seconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
   }
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
     final secondaryInk = Theme.of(context).brightness == Brightness.dark
         ? AppColors.darkInkSecondary
         : AppColors.mediumGrey;
+    final busy = _c.busy;
+    final wait = _c.cooldownRemaining;
+    final error = _localError ?? _c.error;
 
     return Scaffold(
-      appBar: const UniflexAppBar(title: 'Verify Phone Number'),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.screenGutter),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'Enter the code we sent',
-                style: textTheme.headlineMedium,
+              OnboardingProgressHeader(
+                step: 2,
+                totalSteps: 3,
+                onBack: busy ? null : _c.changeNumber,
               ),
-              const SizedBox(height: AppSpacing.xs),
+              const SizedBox(height: AppSpacing.xl),
+              Text('Verify your\nphone', style: textTheme.headlineMedium),
+              const SizedBox(height: AppSpacing.sm),
               Text(
-                'We sent a verification code to ${widget.phone}.',
+                'We sent a 6-digit code to ${maskPhone(_c.phoneE164)}.',
+                key: const ValueKey('masked-phone'),
                 style: textTheme.bodyMedium?.copyWith(color: secondaryInk),
               ),
               const SizedBox(height: AppSpacing.xl),
-              if (_errorText != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  decoration: BoxDecoration(
-                    color: colorScheme.error.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(AppRadius.control),
-                    border: Border.all(
-                      color: colorScheme.error.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 20,
-                        color: colorScheme.error,
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: Text(
-                          _errorText!,
-                          style: textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.error,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-              ],
+              if (error != null) SignupErrorBanner(error),
               AppTextField(
                 controller: _codeController,
                 label: 'Verification code',
@@ -171,18 +118,29 @@ class _VerifyPhoneScreenState extends ConsumerState<VerifyPhoneScreen> {
                 textInputAction: TextInputAction.done,
                 prefixIcon: Icons.sms_outlined,
                 maxLength: 6,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               ),
               const SizedBox(height: AppSpacing.lg),
               PrimaryButton(
                 label: 'Verify',
                 icon: Icons.check_circle_outline,
-                isLoading: _isVerifying,
-                onPressed: _verify,
+                isLoading: busy,
+                onPressed: busy ? null : _verify,
               ),
               const SizedBox(height: AppSpacing.md),
               TextButton(
-                onPressed: _isResending ? null : _resend,
-                child: Text(_isResending ? 'Resending…' : 'Resend code'),
+                key: const ValueKey('resend'),
+                onPressed: (busy || wait > 0) ? null : _resend,
+                child: Text(
+                  wait > 0
+                      ? 'Resend code in ${_countdown(wait)}'
+                      : 'Resend code',
+                ),
+              ),
+              TextButton(
+                key: const ValueKey('change-number'),
+                onPressed: busy ? null : _c.changeNumber,
+                child: const Text('Change number'),
               ),
             ],
           ),

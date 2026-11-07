@@ -78,7 +78,8 @@ class _Placeholder extends StatelessWidget {
       alignment: Alignment.center,
       child: Icon(
         icon,
-        color: theme.colorScheme.onSurface.withValues(alpha: shimmer ? 0.12 : 0.2),
+        color:
+            theme.colorScheme.onSurface.withValues(alpha: shimmer ? 0.12 : 0.2),
         size: 28,
       ),
     );

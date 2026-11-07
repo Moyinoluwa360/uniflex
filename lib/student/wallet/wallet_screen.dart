@@ -14,6 +14,7 @@ import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import 'paystack_checkout_page.dart';
 import 'saving_plan_screen.dart';
+import '../../shared/widgets/inputs/app_text_field.dart';
 
 /// Student wallet screen — Phase 3:
 ///   • Prominent balance card with Fund Wallet button
@@ -165,8 +166,9 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
   Future<void> _retryVerification(String reference) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final balance =
-          await ref.read(walletServiceProvider).verifyPaystackPayment(reference);
+      final balance = await ref
+          .read(walletServiceProvider)
+          .verifyPaystackPayment(reference);
       ref.invalidate(walletBalanceProvider);
       ref.invalidate(walletInfoProvider);
       ref.invalidate(walletTransactionsProvider);
@@ -227,12 +229,11 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                 Text(
                   'Minimum ₦100 • Test mode — no real money is moved',
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color:
-                        theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
-                TextFormField(
+                AppTextField(
                   controller: controller,
                   autofocus: true,
                   keyboardType:
@@ -261,8 +262,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                   child: FilledButton(
                     onPressed: () {
                       if (formKey.currentState!.validate()) {
-                        Navigator.of(ctx)
-                            .pop(double.parse(controller.text));
+                        Navigator.of(ctx).pop(double.parse(controller.text));
                       }
                     },
                     child: const Text('Proceed to Pay'),
@@ -568,9 +568,8 @@ class _VirtualAccountCard extends StatelessWidget {
                                 ? van!.accountNumber
                                 : 'Awaiting Paystack business verification',
                             style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: van!.isRealAccount
-                                  ? FontWeight.w600
-                                  : null,
+                              fontWeight:
+                                  van!.isRealAccount ? FontWeight.w600 : null,
                             ),
                           ),
                         ],
@@ -581,8 +580,7 @@ class _VirtualAccountCard extends StatelessWidget {
               icon: const Icon(Icons.copy_outlined, size: 18),
               tooltip: 'Copy account number',
               onPressed: () {
-                Clipboard.setData(
-                    ClipboardData(text: van!.accountNumber));
+                Clipboard.setData(ClipboardData(text: van!.accountNumber));
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Account number copied'),
@@ -637,8 +635,7 @@ class _SavingPlanTile extends StatelessWidget {
                   Text(
                     'Set a daily, weekly, or monthly spending budget',
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurface
-                          .withValues(alpha: 0.6),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                   ),
                 ],
@@ -704,8 +701,7 @@ class _TransactionTile extends StatelessWidget {
                 Text(
                   _formatDate(tx.createdAt),
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurface
-                        .withValues(alpha: 0.5),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                   ),
                 ),
               ],

@@ -124,7 +124,8 @@ class ErrandCategoriesScreen extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Delete failed — try deactivating instead. ($e)')),
+          SnackBar(
+              content: Text('Delete failed — try deactivating instead. ($e)')),
         );
       }
     }
@@ -165,7 +166,8 @@ class _CategoryCard extends StatelessWidget {
                 color: theme.colorScheme.primary.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(AppRadius.control - 4),
               ),
-              child: Icon(category.icon, color: theme.colorScheme.primary, size: 20),
+              child: Icon(category.icon,
+                  color: theme.colorScheme.primary, size: 20),
             ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
@@ -196,7 +198,8 @@ class _CategoryCard extends StatelessWidget {
                 PopupMenuItem(value: 'edit', child: Text('Edit')),
                 PopupMenuItem(
                   value: 'delete',
-                  child: Text('Delete', style: TextStyle(color: AppColors.error)),
+                  child:
+                      Text('Delete', style: TextStyle(color: AppColors.error)),
                 ),
               ],
             ),

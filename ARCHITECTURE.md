@@ -50,14 +50,16 @@ lib/
                               # Checkout (location-based fees), PackBuilderScreen (accordion),
                               # CommitmentFeeScreen, Confirmation
                               # + cart_provider, product_repository, order_repository (realtime)
+                              # Pack 4A: checkout_draft, order_payment_repository, cart_notice_listener
     errand/                  # ErrandScreen (reads categories from errand_categories table)
                               # + errand_category_providers.dart (active list, rider availability)
     orders/                  # OrdersScreen (Cart / Preparing / Completed tabs)
     tracking/                # OrderTrackingScreen (status timeline, refreshable)
     wallet/                  # WalletScreen, PaystackCheckoutPage, SavingPlanScreen
     support/                 # SupportChatScreen — student ↔ admin chat (see "Customer Support Chat")
+    gifts/                   # Pack 6: GiftSection (checkout), GiftsScreen, GiftReceivedScreen — see "Food gifting (Pack 6)"
     profile/                 # StudentProfileScreen (rebuilt Phase 6) + sub-screens:
-                              # MembershipCardScreen, ReferralScreen, GiftScreen,
+                              # MembershipCardScreen, ReferralScreen,
                               # BadgesScreen, ScheduledOrdersStudentScreen,
                               # PreferencesScreen
     group_checkout/          # CreateGroupScreen (open group session) +
@@ -91,6 +93,7 @@ lib/
     scheduled/               # AdminScheduledOrdersScreen — pre-order countdown + mark ready
     menu/                    # MenuManagementScreen, ProductFormScreen — Uniflex catalog CRUD
                               # (+ Requires Pack toggle, Uniflex pack price editor)
+    service_charge/          # ServiceChargeScreen — edit the ₦ service charge (Pack 4A)
     manage/                  # ManageHubScreen — single "Manage" nav entry branching into
                               # Vendors / Riders / Errand Categories / Delivery Locations / Support
     support/                 # AdminSupportInboxScreen + AdminSupportChatScreen (see "Customer Support Chat")
@@ -105,7 +108,7 @@ lib/
   shared/
     models/                  # Profile, Vendor, Product, Order, OrderItem, CartItem,
                               # ErrandCategory, DeliveryLocation, WalletTransaction,
-                              # SavingPlan, Gift, Achievement (Phase 6)
+                              # SavingPlan, Achievement (Phase 6)
     services/
       support/               # SupportChatService + all support providers (see "Customer Support Chat")
       notifications/         # NotificationService — FCM init, token storage, local
@@ -171,14 +174,23 @@ user's `profiles` row. Based on what it sees:
 AuthGate
  ├─ still resolving / < 900ms since launch → SplashScreen
  ├─ no session, or profile fetch failed    → LoginScreen
- ├─ session, onboarding_complete = false
- │  ├─ phone_verified_at is null           → ResumeOtpScreen (resumes Step 1b)
- │  └─ phone_verified_at is set            → CompleteProfileScreen (resumes Step Two)
+ ├─ session, onboarding_complete = false      (LEGACY half-made accounts only —
+ │  │                                         Pack 5 never creates these any more)
+ │  ├─ phone_verified_at is null           → ResumeOtpScreen (resumes the phone code)
+ │  └─ phone_verified_at is set            → CompleteProfileScreen (resumes the profile step)
  ├─ session, onboarding_complete = true,
  │  is_active = false                      → _AccountDeactivatedScreen (signs out)
  └─ session, onboarding_complete = true,
     is_active = true                       → RoleRouter(role: profile.role)
 ```
+
+**Pack 5:** while someone is signing up there is *no session*, so `AuthGate`
+simply shows `LoginScreen` underneath the sign-up screens (`CreateAccountScreen`
+is pushed on top of it). The account is created at the very last step; the
+app then signs in and closes the sign-up screens (`popUntil(isFirst)`), and
+`AuthGate` — which already switched to `RoleRouter` underneath — is what the
+person sees. The `onboarding_complete = false` branches above exist only so
+accounts made by the OLD 2-step flow can still finish.
 
 `RoleRouter` (`lib/shared/router/role_router.dart`) now takes `role` as a
 plain constructor argument instead of reading a provider itself — the
@@ -197,7 +209,7 @@ None of them navigate to a shell or back to Login on success. Because
 mounted at the root, a change to that provider's value is enough on its
 own to swap what's on screen. Two consequences:
 
-- After `CompleteProfileScreen` submits successfully, it calls
+- (Legacy accounts) After `CompleteProfileScreen` submits successfully, it calls
   `ref.invalidate(currentProfileProvider)` (the RPC changed the profile
   row directly in Postgres, which doesn't fire a Supabase auth event) and
   then does nothing else — `AuthGate` picks up
@@ -211,41 +223,95 @@ own to swap what's on screen. Two consequences:
 If you add a new auth-adjacent screen, keep this pattern: mutate state,
 don't navigate to where the state change should already take you.
 
-### Sign-up flow (Student self-signup only)
+### Sign-up flow (Student self-signup only) — rebuilt in Pack 5
 
-There is no role picker anywhere in the auth UI — `CreateAccountScreen`
-only ever produces a Student account. Rider/Admin accounts are
-invite-only, seeded by hand directly in Supabase (see
-`supabase/schema.sql`); `LoginScreen` is the one screen all three roles
-sign in from, and it has no path to a signup screen for anything but
-Student.
+There is no role picker anywhere in the auth UI — sign-up only ever
+produces a Student account. Rider/Admin accounts are invite-only, seeded by
+hand directly in Supabase (see `supabase/schema.sql`).
 
-1. **Step One** (`create_account_screen.dart`) — email, password, phone.
-   Creates the Supabase Auth user, writes a bare `profiles` stub row
-   (role defaults to `student`, `onboarding_complete` defaults to
-   `false` at the DB level), then calls `TermiiOtpService.sendOtp`.
-2. **Step 1b** (`verify_phone_screen.dart`) — the OTP code from Termii.
-   On a verified code, records `phone` + `phone_verified_at` on the stub
-   row. The account is not considered "created" until this step passes.
-3. **Step Two** (`complete_profile_screen.dart`) — nickname, full name,
-   matric number, school (a plain string field, not an enum, so more
-   schools can be added later with no schema change — only
-   "Redeemer's University" is offered today), date of birth, optional
-   referral code. Submits to the `complete_student_onboarding()` Postgres
-   function, which in one transaction: validates the referral code (if
-   any) exists, generates this student's own shareable referral code,
-   writes the completed `profiles` row, creates their `wallets` row
-   (balance 0, **mocked/placeholder** virtual account number — see the
-   stub comment on `public.wallets` in `supabase/schema.sql`, real Paystack
-   Dedicated Virtual Accounts are a later phase), sets tier to `Bronze`,
-   and records the referral relationship. Either all of that lands, or
-   none of it does.
+**Rule: nothing exists in the backend until the very last step.** Steps 1–2
+only send/check an SMS code; the draft lives on the phone.
+
+```
+ Step 1  Your details ──send OK──▶ Step 2  Verify phone ──code OK──▶ Step 3  Final details
+ (email, password,       ▲          (6-digit code, 60 s            (nickname, name, matric,
+  phone)                 │           resend, Change number)         school, DOB, referral, PIN)
+                         └──change number──┘◀── proof expired ───────┘
+                                                                        │ "Finish setup"
+                                                                        ▼
+                                          ONE server call `signup`/complete → account, then sign in
+```
+
+| Piece | Where |
+|---|---|
+| Host + step 1 | `lib/shared/auth/screens/create_account_screen.dart` (`CreateAccountScreen` is the host; it loads the saved draft and shows the current step) |
+| Step 2 | `lib/shared/auth/screens/verify_phone_screen.dart` |
+| Step 3 | `lib/shared/auth/signup/signup_final_step.dart` |
+| All logic / transitions | `lib/shared/auth/signup/signup_flow_controller.dart` (no widgets; unit-tested) |
+| Phone draft | `lib/shared/auth/signup/signup_draft.dart` |
+| Server client + friendly errors | `lib/shared/auth/signup/signup_api.dart` |
+| Edge Function | `supabase/functions/signup/index.ts` (actions `send`, `verify`, `complete`) |
+| SQL | `supabase/pack_5.sql` (+ `pack_5_test.sql`) |
+
+**Step 1 → 2 only when the server says the SMS was sent.** `send` first asks
+Postgres whether the email / phone are free (`pack5_identity_status`) and
+answers `EMAIL_TAKEN` / `EMAIL_STUCK` / `PHONE_TAKEN` *before any SMS is
+sent*. Then limits (60 s between sends to one number, 5 per number per 24 h,
+20/h per IP, 10/h per device) are reserved atomically, Termii is called
+(20 s timeout), and a failed send is cancelled so it never counts. If a code
+for that number went out a moment ago (double tap / lost reply) the server
+answers `TOO_SOON` and the app moves on to step 2 with the remaining wait.
+The client has a 25 s timeout on every call — a lost reply can no longer
+leave the button spinning forever.
+
+**The proof.** `verify` checks the code with Termii (max 5 tries per code,
+per-IP cap; only the newest code for a number is valid). On success the
+function makes a random 32-byte token, stores only its SHA-256 next to that
+phone number (`signup_phone_verifications`), and returns the token. It is
+valid 30 minutes, works for that phone only, and can be spent once. The
+app keeps it in the draft (treating it as expired after 29 min).
+
+**Creating the account.** `complete` re-checks the proof, then email /
+phone / nickname / matric are free, creates the auth user through the admin
+API (email pre-confirmed, so no confirmation email), then calls
+`pack5_finish_signup()` — one Postgres transaction that locks and spends
+the proof and writes profile (verified phone, `onboarding_complete = true`),
+wallet, referral relationship and the bcrypt-hashed transaction PIN. If that
+function raises for any reason, Postgres rolls everything back and the Edge
+Function deletes the just-created auth user: all or nothing. (Postgres
+cannot create the auth user inside the same transaction without writing
+GoTrue's tables by hand, so the auth user is created first and removed on
+failure.) The app then signs in with the typed email/password; `AuthGate`
+shows the Student shell.
+
+**The draft** (`SignupDraftStore`): step, typed fields, proof and the
+last-send time are JSON in shared preferences; the **password is only in
+secure storage** (Android Keystore / iOS Keychain via `flutter_secure_storage`,
+`SecretStore` interface); the **PIN is never stored** anywhere. It expires 24 h
+after the last save, is cleared on success or "Start over", and opening
+"Create account" resumes the saved step. If the proof ran out the person
+goes back to step 2 with everything else kept. Changing the email or phone
+discards the proof. "Log in" always goes to the normal login screen.
+
+**Legacy half-made accounts** (made by the old flow: auth user + stub profile,
+`onboarding_complete = false`) are untouched. They still resume through
+`AuthGate` → `ResumeOtpScreen` / `CompleteProfileScreen`, which still use the
+old authenticated `phone-otp` function and `complete_student_onboarding()` RPC.
+Registering with an email that belongs to one returns `EMAIL_STUCK`: "You
+already started creating an account with this email. Log in to continue where
+you stopped." `supabase/pack_5_legacy_accounts.sql` lists them (read-only);
+`supabase/pack_5_cleanup_DO_NOT_RUN_until_approved.sql` removes stale ones but
+ends in `ROLLBACK` and is for the owner to approve and run.
+
+**Termii.** The app never calls Termii and does not contain its key. The key
+exists only as the `TERMII_API_KEY` secret on the `signup` and `phone-otp`
+Edge Functions.
 
 Nickname/matric-number uniqueness and referral-code existence are checked
-through dedicated RPCs (`is_nickname_available`, `is_matric_number_available`,
-`is_referral_code_valid`) rather than raw `profiles` selects, so the
-`profiles` table itself is never directly readable/insertable by other
-users — see the RLS policies in `supabase/schema.sql`.
+on step 3 through the existing RPCs (`is_nickname_available`,
+`is_matric_number_available`, `is_referral_code_valid`, callable before login)
+as a courtesy while typing; the server re-checks at the end and the database
+unique constraints have the final word.
 
 ### Session persistence
 
@@ -280,10 +346,9 @@ Phase 2 additions follow these conventions:
   **persisted to SharedPreferences** — every mutation serializes the full
   `CartState` (items + vendor) to JSON; `build()` restores it on startup.
   Corrupted data is silently discarded (fresh cart).
-- `OrderNotifier` (`student/ordering/order_repository.dart`) — `Notifier<OrderPlacementState>`.
-  Wraps the two-step Supabase write (insert `orders` row, then insert
-  `order_items` or `errand_requests`). After a successful placement it
-  clears the cart and invalidates `studentOrdersProvider`.
+- ~~`OrderNotifier`~~ — **removed in Pack 4A.** Orders are created only by
+  `OrderPaymentRepository` (`student/ordering/order_payment_repository.dart`),
+  one paid RPC per order type; see "Payment-first order creation".
 - `vendorProductsProvider` uses `FutureProvider.family` (a one-shot
   catalog read is fine — the menu doesn't need to be live). `orderByIdProvider`
   and `studentOrdersProvider` are **`StreamProvider`/`StreamProvider.family`**
@@ -340,12 +405,11 @@ Two more gaps fixed in the same pass:
   The rider pool RLS policy and `accept_order()`'s eligibility check both
   require this column to be set.
 
-`StudentShell` also watches `studentOrdersProvider` with `ref.listen` and
-fires a local notification (`NotificationService.showLocal`) on
-`preparing → ready(_for_pickup) → picked_up → out_for_delivery →
-completed` transitions, using the same realtime stream — this only fires
-while the app is open; background push still needs FCM fully configured
-(a pre-existing gap from Phase 6, not closed by this pass).
+> **Superseded in Pack 4A.** `StudentShell` no longer watches
+> `studentOrdersProvider` to fire local notifications (it only worked while
+> the app was open and duplicated the server's push). Every notification is
+> now written and pushed by the server — see "Notification pipeline (Pack
+> 4A)" below.
 
 ## Design system
 
@@ -407,6 +471,7 @@ directly, so there's one place that knows every key the app depends on.
 | Round 5 ✅ (PIN / payment root-cause fix) | All PIN functions + `pay_commitment_fee` re-created with `search_path = public, extensions`; `showSetPinSheet` rewritten with current-PIN detection; comprehensive `_mapError` coverage |
 | Round 7 ✅ (pack-first, multi-vendor, delivery groups) | `delivery_groups`/`delivery_settings` tables, `place_multi_vendor_order`/`pay_group_commitment_fee`/`accept_delivery_group`/`verify_group_delivery` RPCs, `PackBuilderScreen`, multi-vendor `CartState`, `GroupDeliveryScreen`, `DeliverySettingsScreen`, `deliveryFeePerVendor` helper |
 | Round 8 ✅ (locations, errands, unified orders, UI polish) | `delivery_locations` table + RPCs, location-based fees replacing `delivery_settings`, errand rename (around→errand across ~22 files), unified order identity via `delivery_groups`, accordion UI (catalog/pack builder/cart), `acknowledgment_sheet.dart`, double-tap guards, `SearchScreen`, `AllVendorsScreen`, `DeliveryLocationsScreen` |
+| Pack 4A ✅ (2026-11-07) | `supabase/pack_4a.sql` (+ `_test.sql`, `_queries.sql`), `student/ordering/{checkout_draft,order_payment_repository,commitment_fee_screen,cart_notice_listener}.dart`, `student/notifications/notification_router.dart`, `admin/service_charge/`, `shared/services/settings/`, `shared/widgets/chat/`, `supabase/functions/push-notification/` |
 | Support Chat ✅ (2026-11-04) | `support_conversations`/`support_messages` tables + 4 RPCs, `shared/services/support/support_chat_service.dart`, `student/support/support_chat_screen.dart`, `admin/support/` inbox + chat screens, `supabase/functions/support-notify/`, push tap routing in both shells, token hygiene on sign-out |
 
 Update this table as phases land so it stays a reliable map of the repo.
@@ -725,9 +790,12 @@ New students set a PIN as part of Step Two onboarding
 and `ErrandScreen` both call `has_transaction_pin()` before confirming and
 show `showSetPinSheet` first if it's false, then always
 `showEnterPinSheet`. The PIN itself is enforced **server-side**:
-`place_food_order_with_payment` and `place_errand_with_payment` both take
-a `p_pin` param and raise `INVALID_PIN` via `verify_transaction_pin`
-before touching the wallet — a client bug can't skip the check.
+`create_paid_delivery_order`, `create_paid_pickup_order` and
+`create_paid_errand` (Pack 4A) all take a `p_pin` and check it with the
+lockout-aware `_check_transaction_pin` before touching the wallet — a client
+bug can't skip the check. (`set_transaction_pin` is now a single function
+`(p_pin, p_current_pin default null)`; a duplicate one-argument overload used
+to make a first-time "set PIN" call ambiguous.)
 
 ## Pack system (post-testing fixes, Section 11)
 
@@ -763,12 +831,14 @@ The cart (`CartState` in `cart_provider.dart`) is multi-vendor: a map of
 vendor reference. Adding items from different vendors no longer clears the
 cart — `CatalogScreen` reads/writes the vendor-specific group directly.
 
-**Checkout routing:**
-- **Pickup** (Uniflex-only carts): full payment + PIN at checkout →
-  `OrderConfirmationScreen`. Uses the existing single-vendor `placeFoodOrder`.
-- **Delivery** (any cart): no payment → `placeMultiVendorOrder` (creates a
-  `delivery_groups` parent + per-vendor `orders` legs) → `CommitmentFeeScreen`
-  in group mode (pays ₦200–₦300 per vendor from `delivery_settings`).
+**Checkout routing (rebuilt in Pack 4A — payment first):**
+- The checkout form's button is **Continue**. It validates the form and
+  opens the payment page with the cart + chosen options held in memory
+  (`CheckoutDraft`). It creates nothing and does not touch the cart.
+- The payment page (`CommitmentFeeScreen`) shows the fees, then runs the
+  shared payment step and **one** RPC that verifies the PIN, computes every
+  amount, debits the wallet and creates the whole order — see "Payment-first
+  order creation (Pack 4A)". The cart is cleared only after that succeeds.
 
 **Delivery group lifecycle:**
 ```
@@ -945,7 +1015,7 @@ RLS (no client INSERT/UPDATE/DELETE — all writes go through RPCs):
 
 | RPC | Who | What |
 |-----|-----|-------|
-| `send_support_message(p_body, p_order_id, p_conversation_id)` | student or admin | Student path: find-or-create conversation, validate order ownership, reopen if resolved, increment `admin_unread_count`. Admin path: requires `p_conversation_id`, verifies `is_admin()`, increments `student_unread_count`. Both: snapshot `sender_name`, rate-limit 20 msg/min. |
+| `send_support_message(p_body, p_order_id, p_group_id, p_conversation_id)` | student or admin | Student path: race-safe find-or-create conversation, validate that the attached order **or** delivery group belongs to the student, reopen if resolved, increment `admin_unread_count`. Admin path: requires `p_conversation_id`, verifies `is_admin()`, increments `student_unread_count`. Both: snapshot `sender_name`, rate-limit 20 msg/min. **Exactly one overload exists** (Pack 4A dropped the old 3-argument one). |
 | `mark_support_read(p_conversation_id, p_role)` | student or admin | Zeros the caller's unread counter; called best-effort on screen open. |
 | `resolve_support_conversation(p_conversation_id)` | admin only | Sets `status='resolved'`, `resolved_at`, zeros both counters. |
 | `get_support_unread_total()` | student only | Returns `student_unread_count` for the caller's conversation. |
@@ -991,38 +1061,406 @@ channels, no manual reconnect logic.
 
 ### Push notifications for support messages
 
-New edge function: `supabase/functions/support-notify/index.ts`
-
-**Student sends** → function fetches all `profiles` rows with `role='admin'`
-and non-null `fcm_token` → pushes FCM notification to each admin.
-
-**Admin sends** → function joins `support_conversations` → `profiles` to
-get student `fcm_token` → pushes to that student.
-
-On FCM `UNREGISTERED` / `INVALID_ARGUMENT` error: function sets
-`fcm_token = null` for that profile (token hygiene).
-
-**Trigger** (`_trigger_support_notify` on `support_messages AFTER INSERT`):
-calls `support-notify` via `net.http_post` (pg_net extension). This
-requires the DB owner to run once:
-```sql
-ALTER DATABASE postgres SET app.supabase_project_url = 'https://…supabase.co';
-ALTER DATABASE postgres SET app.supabase_service_role_key = '…';
-```
-If pg_net is unavailable, the same edge function can be wired as a
-**Database Webhook** (Supabase Dashboard → Database → Webhooks) on
-`INSERT` on `support_messages` — same payload, no extension needed.
+Since Pack 4A chat notifications use the same pipeline as every other
+notification (see "Notification pipeline (Pack 4A)"): the
+`on_support_message_insert` trigger writes `notifications` rows (student →
+every active admin; admin reply → that student, `type = 'support'`,
+`conversation_id` set) and the generic push trigger sends them.
+`mark_support_read` also marks the matching inbox rows read. The old
+`support-notify` Edge Function is no longer called.
 
 **Push tap routing** (`lib/shared/services/notifications/notification_service.dart`):
-- `FirebaseMessaging.onMessageOpenedApp` and `getInitialMessage()` store
-  the payload in static `_pendingNavigation`.
-- `StudentShell.initState` and `AdminShell.initState` read it via
-  `consumePendingNavigation()` in `addPostFrameCallback`; `type == 'support'`
-  navigates to `SupportChatScreen` / `AdminSupportInboxScreen`.
+- `onMessageOpenedApp`, `getInitialMessage()` and taps on the in-app banner
+  all set the `NotificationService.pendingNavigation` `ValueNotifier`.
+- `StudentShell` / `AdminShell` listen to it (so a tap while the app is only
+  backgrounded works) and also read it once after the first frame (cold
+  start). The payload keys are `type`, `notification_id`, `order_id`,
+  `group_id`, `conversation_id`.
+- Students: `openNotificationTarget()` (`student/notifications/notification_router.dart`)
+  marks the notification read and opens the support chat, the delivery-group
+  tracking screen or a single order. The Notifications screen uses the same
+  function. Admins: `type == 'support'` opens the support inbox. The Rider
+  shell does not route taps yet (Pack 4B).
 
-**Token hygiene:**
-- `NotificationService` listens to `auth.onAuthStateChange`; on
-  `AuthChangeEvent.signedOut` calls `store_fcm_token(null)` to clear
-  the stale token.
-- `send-notification` edge function (existing) also gained UNREGISTERED
-  cleanup in the same pass.
+**Token hygiene:** unchanged — `store_fcm_token(null)` on sign-out, plus
+`UNREGISTERED` cleanup in the push functions. Sign-out also clears any
+pending tap payload.
+
+**Chip / order identity:** a support message carries `order_id` (errand,
+pickup) **or** `delivery_group_id` (a delivery — the one order the student,
+rider and Admin all see). Both render as the same `SupportOrderChip`
+(`shared/widgets/chat/`); on the Admin side the chip opens that order's
+details.
+
+## Payment-first order creation (Pack 4A)
+
+**No unpaid order can exist.** Nothing is written to the database until the
+student has paid. The old "create the order now, pay the commitment fee
+afterwards" split (`place_multi_vendor_order` → `pay_group_commitment_fee`,
+`place_errand_order`, `place_partner_food_order`, `place_food_order_with_payment`,
+`pay_commitment_fee`, …) is gone — `pack_4a.sql` drops those functions and the
+client code that called them.
+
+```
+Checkout form ──Continue──► CommitmentFeeScreen (payment page)
+   (validates only;            fee lines + total
+    nothing created,           │ Pay → note → PIN   (runPaymentFlow, shared)
+    cart untouched)            ▼
+                          ONE rpc, one transaction:
+                            idempotency check → verify PIN → compute every
+                            amount → lock wallet, check balance → debit →
+                            create group/legs/items/packs (or pickup / errand)
+                               │ success only
+                               ▼
+                          clear cart, refresh wallet/orders, open tracking
+```
+
+| RPC | Creates | Charged |
+|---|---|---|
+| `create_paid_delivery_order(key, pin, legs, location_id, details, note)` | `delivery_groups` row already at `commitment_paid` (→ rider pool) + one leg per vendor with items and packs | Σ per-vendor delivery fee (`location.price × packBrackets`) + service charge **once** |
+| `create_paid_pickup_order(key, pin, vendor_id, items, packs, scheduled_for, notes)` | one `orders` row (pickup) | full food + packs; **no** delivery fee, **no** service charge |
+| `create_paid_errand(key, pin, category, pickup, dropoff, description, location_id, details)` | `orders` (errand) + `errand_requests` | category `flat_fee` + service charge |
+
+Rules every one of them follows:
+
+- **The client sends choices only** — product ids, quantities, pack
+  allocation, location id, category key. Prices, fees, vendor type and the
+  service charge are all read server-side. No parameter is named price/fee/
+  amount/total (asserted in `pack_4a_test.sql`).
+- **Idempotency.** The client makes one UUID per payment page
+  (`newUuidV4()`), re-sent unchanged on every retry. The RPC takes a
+  transaction advisory lock on it and stores `{key → result}` in
+  `order_payment_attempts` (primary key). A repeated key returns the existing
+  result with `replayed: true`; it never creates a second order or debits
+  twice. A different user presenting the same key gets `IDEMPOTENCY_KEY_IN_USE`.
+- **PIN problems are *returned*, everything else is *raised*.** Wrong /
+  locked / missing PIN comes back as `{error: 'INVALID_PIN'|…}` so the
+  failed-attempt counter (15-minute lockout) is committed; any other failure
+  raises, which rolls back the whole transaction — no partial order, no debit.
+  The client turns the returned code into a `PaymentException`, which
+  `AppErrorMapper` maps to the friendly line.
+- **Legacy unpaid orders** (left by the old button) are flagged
+  `is_paid = false` and hidden by `RESTRICTIVE` RLS policies on `orders` and
+  `delivery_groups`, so students, riders, Admin lists, the rider pool,
+  Realtime streams and analytics (`get_dashboard_stats` is filtered too) can
+  never see them. Notification triggers skip them. Nothing was deleted;
+  `pack_4a_queries.sql` lists them and has an optional "mark cancelled".
+
+Client files: `student/ordering/checkout_draft.dart` (in-memory draft + fee
+preview, display only), `order_payment_repository.dart` (the three calls +
+`PaidOrderResult`/`PaymentException`), `commitment_fee_screen.dart` (the
+payment page), `shared/widgets/payment/run_payment_flow.dart` (the shared
+note → PIN step, now actually used), `student/errand/create_errand_screen.dart`
+(errand: pay button → note → PIN → one RPC; fee + service charge shown on the
+form).
+
+## Service charge (Pack 4A)
+
+A flat fee, default **₦30**, added **once per order** to food deliveries and
+errands when the student pays — never to pickup. Stored in
+`app_settings (key, value)` (RLS on, no policies: reached only through
+`get_service_charge()` / `admin_set_service_charge(int)`; the latter is
+super-admin only and validates a whole number 0–100000). The amount actually
+charged is written to `delivery_groups.service_charge` (deliveries) or
+`orders.service_charge` (errands), so changing the setting never alters past
+orders. Riders never see it; it will feed Admin's "Fees collected" (Pack 4C).
+Admin edits it at **Manage → Service charge** (`admin/service_charge/`).
+`serviceChargeProvider` (shared) lets the payment page display it; the server
+is the only authority on what is charged.
+
+## Notification pipeline (Pack 4A)
+
+One server-side pipeline for every notification:
+
+```
+event ─(DB trigger)─► queue_notification() ─► INSERT notifications row
+                                                    │ AFTER INSERT trigger
+                                                    ▼
+                                    pg_net → push-notification Edge Function
+                                                    ▼
+                                    send-notification → FCM → phone
+```
+
+The inbox row and the push are produced together, so they always match and
+work whether the app is open, backgrounded or closed. The app only *displays*
+(and routes taps): with the app open FCM `onMessage` shows an in-app banner —
+nothing is stored by the client, so there are no duplicates.
+
+| Event | Trigger | To | Text |
+|---|---|---|---|
+| Rider accepts (group / errand) | `delivery_groups_notify`, `orders_notify` | student | "A rider has accepted your order." |
+| Rider sets / changes the final price | `delivery_groups_notify` | student | "Pay for your order: ₦X. Tap to pay." |
+| Student pays the final price | `delivery_groups_notify` / `orders_notify` | rider | "Customer has paid. You can deliver." |
+| Student declines / cancels | same | rider (if any) | "Order cancelled by customer." |
+| Admin cancels | same | student + rider | "Your order was cancelled." |
+| Delivered / errand completed | same | student | "Your order has been delivered." |
+| Pickup becomes ready | `orders_notify` | student | "Your order is ready for pickup." |
+| Support message / reply | `on_support_message_insert` | admins / student | message preview |
+
+`notifications` gained `type`, `group_id`, `conversation_id` (the tap target).
+Group legs never notify on their own — the group row does, once. Rows for
+never-paid orders are skipped. `notify-user` (free-text message from Admin or
+the assigned rider) now only records a row; the same trigger pushes it.
+
+**Before Pack 4A (why the final-price alert never arrived):** order
+notifications were produced by *client* code only — Kitchen/Rider screens
+called `notify-user` after an order-status change (standalone orders), and
+`StudentShell` fired a local banner while the app was open. The Fix Pack 2
+delivery-group flow (accept, final price, pay, decline, deliver) goes through
+`delivery_groups` RPCs that call neither, and `notify-user` only understood
+`orders` ids — so a final price produced no notification at all.
+
+The push needs the DB settings `app.supabase_project_url` and
+`app.supabase_service_role_key` (already required by the support-chat push)
+and the `push-notification` + `send-notification` functions deployed with the
+Firebase service-account secret. If the settings are missing the inbox row
+is still stored; only the push is skipped.
+
+## Pack 4B — shared order breakdown, rider home, timestamps, one entry per checkout
+
+### One way to load and show an order
+- Server: `get_order_breakdown(p_id)` (SECURITY DEFINER). `p_id` is a delivery
+  group, a standalone order, or a leg (answers for its parent). Access: the
+  owning student, admin, the assigned rider, or any rider while the group is
+  `commitment_paid`, unassigned and paid. It returns vendors → packs
+  (`index`, `price`, items), plain food items, drinks, others, per-vendor
+  totals. It never returns fees, phone, email or matric number.
+- Client: `lib/shared/order_breakdown/` — `OrderBreakdown(orderId)` (loads via
+  `orderBreakdownProvider`, errors logged in debug, `RetrySection` on failure)
+  and `OrderBreakdownView(data)` (pure). Single vendor = plain header + closed
+  `AppAccordionCard` packs ("Pack 1 · ₦200") + plain Drinks/Others; multi
+  vendor = closed vendor dropdowns with the same body inside. Used by the
+  rider pool preview, rider active job, rider history details, Admin order
+  details and student tracking. Do not add a second copy.
+- `order_packs.price` is stored per pack (pack_fee / pack_count at back-fill,
+  set by trigger on insert).
+
+### Rider app
+- Reads only rider-safe RPCs: `rider_job_pool()`, `rider_active_jobs()`,
+  `rider_history()`, `rider_history_item(id)`, `rider_group_detail(id)`,
+  `get_rider_stats()`. **Riders have no read policy on `delivery_groups`,
+  `orders` or `errand_requests`** (those rows hold the delivery PIN and fee
+  columns, and RLS cannot hide columns). Live refresh = a Realtime stream of
+  `rider_job_signals` (ids only; written by triggers on groups and standalone
+  errands) used purely as a "refetch now" nudge, plus a 45 s safety refetch.
+  Never re-add a rider SELECT policy on those tables. One entry per checkout;
+  vendor parts never appear.
+- The Admin kitchen queue lists pickup orders only; deliveries have no kitchen
+  step.
+- Jobs tab = pool only. Home shows "Active jobs" (count) beside Today / All
+  time; tap → chooser if both kinds are active, else that list directly
+  (`activeJobsTarget`); with none it opens the food list's empty state.
+- Max 3 active jobs per rider, enforced in `accept_delivery_group` /
+  `accept_order` (advisory lock per rider, then `ACTIVE_JOB_LIMIT`), before the
+  existing `for update nowait` race guard.
+- After a correct delivery PIN the sheet returns true and the job screen is
+  replaced by `DeliveryCompleteScreen` (icon, order id, customer, server time,
+  Done). History item → read-only `RiderHistoryDetailScreen` (no phone/email).
+
+### Single timestamp rule
+`completed_at` / `cancelled_at` are `timestamptz`, stamped ONCE by a
+BEFORE trigger with server `now()` the first time the status becomes
+completed/cancelled, and never changed afterwards. `verify_group_delivery`
+completes group, parts and records in one transaction so all carry the same
+value. Screens read it and convert with `.toLocal()` (`shared/utils/local_time.dart`);
+never display `DateTime.parse(...)` hours directly.
+
+### One entry per checkout
+The parent (`delivery_groups` row, or a standalone pickup/errand order) is the
+only thing listed, counted or timestamped. Vendor parts (`orders` rows with a
+`delivery_group_id`) must never be listed, counted or given their own time:
+rider history/active/pool, Admin orders, student orders, stats and dashboard
+all follow this.
+
+## Pack 4C — shared menu manager, support options, stats, ads popup, referral display
+
+### Admin menu: one widget for every vendor
+`lib/admin/menu/vendor_menu_manager.dart` → `VendorMenuManager(vendorId, title)`
+is the ONLY menu-management screen. `MenuManagementScreen` (Uniflex, fixed
+vendor id `0000…0001`) and `VendorProductsScreen` (partners) are one-line
+wrappers. Four sections — Meals, Proteins / Toppings, Drinks, Others — chosen by
+`MenuSection.of(product)` from `products.section` + `food_subsection`, exactly
+what the student catalog groups by. The old free-text `category` column is
+legacy and is only written as a readable label; nothing groups by it. Each
+section has its own "+ Add" → `ProductFormScreen(initialSection:)` with no
+category picker (edit mode keeps a "Section" picker so a mis-filed item can be
+moved). The availability switch calls `setProductAvailability` (changes
+`is_available` only); the old toggle re-saved the whole item and, for partners,
+dropped its section. Vendor pack price lives in the AppBar of the same widget.
+Errors are shown through `AppErrorMapper` (never raw database text).
+
+### Admin reads names through one function
+`profiles` RLS is "read own row only" and RLS cannot hide columns, so Admin
+reading a student/rider profile directly returns nothing (this was the cause of
+blank names in the support inbox, no rider name on order cards, "Unknown" in
+analytics). Admin now uses the admin-only SECURITY DEFINER function
+`admin_profile_basics(uuid[])` → id, role, nickname, full_name, phone, email,
+wrapped by `adminProfileBasicsProvider(profileIdsKey(ids))` and `ProfileBasics`
+(`displayName()` = nickname else full name; `secondaryName` = full name shown
+underneath; `matches(q)` = nickname/full name/phone). Used by the support inbox
++ chat header, order cards/details (customer + rider) and rider performance.
+Never add a broad "admin can read all profiles" policy for this.
+
+### Support options
+- `app_settings` key `support_whatsapp` holds ONE number as international
+  digits (`2348031234567`). `admin_set_support_whatsapp(text)` (super admin)
+  accepts `0803…`, `+234803…`, spaces/dashes, normalises, and clears on blank;
+  `get_support_whatsapp()` is readable by any signed-in user.
+- Student "Help & Support" (profile row and "Get help with this order") opens
+  `SupportOptionsScreen`: Live chat | WhatsApp. When no number is set (or it
+  cannot be read) the screen IS the live chat — no empty choice. WhatsApp opens
+  `https://wa.me/<digits>?text=Hi, this is <nickname>.[ Order #<short id>.]` in
+  the external app. Admin sets it under Manage → Support settings.
+
+### Stats definitions (dashboard + analytics)
+Single source: `_stat_entries()` (SQL, not callable by clients) → one row per
+checkout, **paid only**: every `delivery_groups` row + every standalone order
+(`delivery_group_id is null`); vendor parts never. Errands included. Day / week
+(Monday) / month boundaries are `Africa/Lagos`. `get_dashboard_stats()` and
+`get_admin_analytics()` both read it, so the two screens cannot disagree.
+- Orders today = entries created today. Pending / in progress = every entry
+  not completed/cancelled. Completed / Cancelled today = by the single
+  `completed_at` / `cancelled_at`.
+- **Fees collected** = delivery/commitment fees + service charges (groups,
+  errands). Charged at creation, non-refundable, so cancelled ones still count
+  (a cancelled *pickup* is refunded in full → 0).
+- **Food payments** = a group's final payment (dated by the new
+  `delivery_groups.final_paid_at`, stamped once by trigger) + pickup order
+  totals (not cancelled).
+- The two money numbers are shown side by side and are never added together.
+- Top items = items on checkouts completed this month (each line belongs to one
+  vendor part, so a multi-vendor checkout never double counts). Rider
+  performance = completed checkouts per rider this month, once per checkout.
+  Completion rate = completed ÷ (completed + cancelled) finished this month.
+- Client: `AdminDashboardScreen`/`AdminAnalyticsScreen` only render; they
+  refetch on tab open (`RefreshOnTabVisible` via `AppNavShellScope.currentIndex`),
+  pull-to-refresh, the refresh button, and ~0.8 s after the admin order streams
+  change (`StatsLiveRefresh` mixin).
+
+### Ads
+Tapping any ad opens `showAdPopup` (centred rounded dialog, ≤85% of the screen,
+image `BoxFit.contain`, X + outside-tap close, "Visit" only when
+`Advertisement.hasLink`). The old "tap action" choice is gone; the form has one
+optional link, validated/normalised by `shared/utils/ad_link.dart` (http/https
+only; bare domains get `https://`). DB columns are unchanged (`link_type` stays
+`none|url`; the form sets it from whether a link was typed). `AdCarousel`:
+auto-advance 5 s, 0.8 s eased slide, loops, pauses while a finger is down, dots,
+a single ad is static.
+
+### Referral (student side)
+The student app no longer shows a referral code, amounts, counts, the
+leaderboard or referral badges. "Refer a student" (`ReferAStudentScreen`) says
+to contact Admin for a code and opens Help & Support. Registration still
+accepts someone else's code (untouched); Admin still mints/assigns codes. The
+backend referral logic is unchanged.
+
+---
+
+## Food gifting (Pack 6)
+
+**A gift is an ordinary food delivery order with a different recipient.** There
+is no second order system and no second payment flow. `create_paid_gift_order`
+validates the recipient, then calls the unchanged `create_paid_delivery_order`
+(same idempotency, PIN check, wallet debit, fees, service charge, final-price
+step, delivery PIN, cancellation rules). Only the **sender** is the order's
+`student_id`: only the sender pays, declines, cancels or contacts support.
+
+### Data
+- `delivery_groups` (the parent order) gains `is_gift`, `gift_recipient_id`,
+  `gift_recipient_nickname`, `gift_message` (≤ 200 chars). Set by the server
+  right after the normal order is created.
+- `gift_deliveries` — the **recipient's own table** (one row per gift, primary
+  key = the order id): `recipient_id`, `sender_nickname`, `message`, `status`
+  (`placed | preparing | on_the_way | delivered | cancelled`), `delivery_pin`,
+  `delivery_location`, `location_details`, `items` (the order breakdown with
+  every price/total removed by `_gift_strip_prices`). It has **no money column
+  at all**. RLS: the recipient can `select` their rows, nobody can write; it is
+  in the Realtime publication so status changes appear live.
+- `gift_lookup_log` — one row per lookup, for the 10-per-hour limit. No client
+  grants.
+- Kept unused (nothing deleted): the old `gifts` table, `get_gifts()`,
+  `send_gift()` (execute revoked from clients), `orders.gifted_by`.
+
+### Why a mirror table (privacy)
+The recipient must see status, message, items and the delivery PIN, but must
+never be able to read the sender's order — the order row holds the final price,
+fees, wallet/payment links and the sender's identity. Instead of loosening the
+RLS on `delivery_groups`/`orders`/`order_items`/`order_packs` (and then trusting
+every client query to leave columns out), the server **copies the safe subset**
+into `gift_deliveries` and keeps it in step with an `AFTER UPDATE` trigger on
+`delivery_groups` (`_gift_sync_group`). The recipient's access is then
+"select my rows from a table that contains nothing secret". The PIN is cleared
+when the gift is delivered or cancelled. A third student reads nothing.
+
+### Server functions
+| Function | Who | What |
+|---|---|---|
+| `lookup_gift_recipient(email)` | any student | `{ok, nickname, masked_email}` or `{ok:false, reason: NOT_FOUND\|SELF\|RATE_LIMITED}`. Recipient must be a real student with a completed account. Logs every lookup; > 10/hour → `RATE_LIMITED`. Never returns anything else about the person. |
+| `create_paid_gift_order(…same as delivery…, p_recipient_email, p_gift_message)` | sender | Re-resolves the recipient (never trusts the client), refuses self / unknown / message > 200, creates the normal order, marks it a gift, publishes the mirror row and the recipient notification, awards the Gifter badge. Replays are idempotent. |
+| `_gift_sync_group()` trigger | system | Mirrors status/PIN; notifies the recipient when it goes out for delivery (`gift_on_the_way`), completes (`gift_delivered`) or is cancelled by sender/Admin/decline (`gift_cancelled`). |
+| `get_group_customer_info(group)` | accepted rider | Now also returns `is_gift` and `gift: {recipient, sender}` (name, nickname, phone, email, location details); phones/emails go null once the job ends; never a matric number or PIN. |
+| `rider_job_pool()` / `rider_active_jobs()` | rider | Add `is_gift` to food jobs. Still no personal details before accepting. |
+
+### Notifications
+All through the existing pipeline (`queue_notification` → trigger → push).
+Types: `gift_received` ("<sender> sent you a food gift 🎁" + the message),
+`gift_on_the_way`, `gift_delivered`, `gift_cancelled`. The recipient cannot read
+the group, so `NotificationTarget.isGift` opens `GiftReceivedScreen` instead of
+order tracking. The sender's own notifications are the normal order ones.
+
+### Client
+- **Checkout** (`GiftSection`): the switch exists only for delivery (hidden for
+  pickup; errands have their own flow). Email + **Find** →
+  "Sending to: **Nickname** (j***@gmail.com)" + **Change**; the typed address is
+  not shown again. Continue is blocked until a recipient is found. The draft
+  (`CheckoutDraft.giftRecipient/giftMessage`) drops the gift for pickup.
+  `OrderPaymentRepository.payDelivery` calls `create_paid_gift_order` when
+  `draft.isGift`, otherwise the normal function.
+- **Recipient**: Orders → "Gift from <nickname>" cards (`GiftReceivedCard`, from
+  `receivedGiftsProvider`, a live stream of `gift_deliveries`) → `GiftReceivedScreen`
+  (status steps, message, items via `OrderBreakdownView(showPrices: false)`, the
+  PIN). There is no button that pays, declines, cancels or edits.
+- **Sender**: gift orders carry "🎁 Gift to <nickname>" on the Orders card, a
+  banner with the message on tracking, and no PIN card (the recipient gives it).
+- **Profile → Gifts** (`GiftsScreen`): Sent (from the sender's own groups) and
+  Received tabs, with empty states. Replaces the old Send-a-Gift screen.
+- **Rider**: pool card tagged GIFT; preview says "you see both contacts after
+  you accept"; after accepting, `RiderCustomerCard` shows **Deliver to**
+  (recipient) and **Paid by** (sender), each with Call + WhatsApp, and the
+  reminder to ask the recipient for the PIN.
+- **Admin**: order details show the GIFT tag, sender (paid), recipient and
+  message.
+- **`OrderBreakdown` "no prices" mode** (`showPrices: false`): pack titles lose
+  their price; vendor totals and line amounts are not drawn.
+
+### Not built (deliberately)
+Gifting errands or pickup; the recipient accepting/refusing a gift; gifting by
+phone number or matric number; scheduled gifts; group gifts.
+
+---
+
+## Text fields and the stuck selection highlight (Pack 6)
+
+**Cause.** In Flutter a touch outside a text field does *not* take focus away
+from it on Android/iOS (that only happens on desktop/web). A focused field keeps
+painting its selection highlight and keeps its handles/toolbar, so after
+selecting text and tapping elsewhere, scrolling or cancelling, the highlight
+looked frozen on screen. Nothing in the app unfocused fields (no
+`onTapOutside`, no `keyboardDismissBehavior`). A control test in
+`test/pack_6_test.dart` demonstrates it with a plain `TextField`.
+
+**Fix.**
+- `AppTextField` (the app's one text field) is now stateful: it gives up focus
+  when a tap *ends* outside it (pointer-up, so taps on buttons still fire), and
+  collapses any highlighted range in its controller whenever focus is lost for
+  any reason.
+- `AppScrollBehavior` (set once on `MaterialApp.scrollBehavior`) makes dragging
+  any scroll view dismiss the keyboard/focus.
+- `TapOutsideUnfocus` (wrapped once in `MaterialApp.builder`) unfocuses on a tap
+  on empty screen, covering any future raw field.
+- Every raw `TextField`/`TextFormField` (18 of them: admin order dialog and
+  search, service charge, support settings/inbox/chat, rider price + PIN sheets,
+  rider errand PIN, PIN sheets ×4, group-join, home search, student support
+  chat, saving plan, wallet top-up) now uses `AppTextField`, which accepts the
+  same decoration/style/keyboard options so nothing looks different. A test
+  fails if a raw field reappears outside `app_text_field.dart`.

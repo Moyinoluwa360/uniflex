@@ -52,9 +52,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
 
     try {
-      await ref
-          .read(authServiceProvider)
-          .signInWithEmail(
+      await ref.read(authServiceProvider).signInWithEmail(
             email: _emailController.text.trim(),
             password: _passwordController.text,
           );
@@ -166,10 +164,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     onPressed: _isLoading
                         ? null
                         : () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const ForgotPasswordScreen(),
+                              MaterialPageRoute(
+                                builder: (_) => const ForgotPasswordScreen(),
+                              ),
                             ),
-                          ),
                     child: const Text('Forgot password?'),
                   ),
                 ),
@@ -204,10 +202,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   onPressed: _isLoading
                       ? null
                       : () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const CreateAccountScreen(),
+                            MaterialPageRoute(
+                              builder: (_) => const CreateAccountScreen(),
+                            ),
                           ),
-                        ),
                 ),
               ],
             ),

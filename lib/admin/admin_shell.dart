@@ -35,17 +35,26 @@ class _AdminShellState extends ConsumerState<AdminShell> {
   @override
   void initState() {
     super.initState();
-    // Handle push notification tap that opened the app.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final nav = NotificationService.consumePendingNavigation();
-      if (nav?['type'] == 'support' && mounted) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => const AdminSupportInboxScreen(),
-          ),
-        );
-      }
-    });
+    NotificationService.pendingNavigation.addListener(_onPendingNavigation);
+    // A tap that launched the app (cold start) was stored before this
+    // shell existed.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onPendingNavigation());
+  }
+
+  @override
+  void dispose() {
+    NotificationService.pendingNavigation.removeListener(_onPendingNavigation);
+    super.dispose();
+  }
+
+  void _onPendingNavigation() {
+    if (!mounted) return;
+    final nav = NotificationService.consumePendingNavigation();
+    if (nav?['type'] == 'support') {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const AdminSupportInboxScreen()),
+      );
+    }
   }
 
   @override

@@ -18,8 +18,8 @@ final _scheduledOrdersProvider = FutureProvider<List<Order>>((ref) async {
       .select('*, vendors(name)')
       .eq('student_id', user.id)
       .not('scheduled_for', 'is', null)
-      .inFilter('status', ['placed', 'preparing'])
-      .order('scheduled_for', ascending: true);
+      .inFilter('status', ['placed', 'preparing']).order('scheduled_for',
+          ascending: true);
 
   return data.map((m) => Order.fromMap(m)).toList();
 });
@@ -56,8 +56,7 @@ class ScheduledOrdersStudentScreen extends ConsumerWidget {
                   Text(
                     'Schedule an order from checkout to see it here.',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface
-                          .withValues(alpha: 0.5),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -176,8 +175,18 @@ class _ScheduledOrderCard extends StatelessWidget {
 
   String _formatDateTime(DateTime dt) {
     final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
     ];
     final h = dt.hour.toString().padLeft(2, '0');
     final m = dt.minute.toString().padLeft(2, '0');

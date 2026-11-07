@@ -21,11 +21,11 @@ class MembershipCardScreen extends ConsumerWidget {
 
     final tier = statsAsync.valueOrNull?['membership_tier'] as String? ??
         profile.membershipTier;
-    final points =
-        statsAsync.valueOrNull?['reward_points'] as int? ?? profile.rewardPoints;
-    final spending = (statsAsync.valueOrNull?['lifetime_spending'] as num?)
-            ?.toDouble() ??
-        profile.lifetimeSpending;
+    final points = statsAsync.valueOrNull?['reward_points'] as int? ??
+        profile.rewardPoints;
+    final spending =
+        (statsAsync.valueOrNull?['lifetime_spending'] as num?)?.toDouble() ??
+            profile.lifetimeSpending;
     final totalOrders =
         statsAsync.valueOrNull?['total_orders'] as int? ?? profile.totalOrders;
 
@@ -87,9 +87,7 @@ class MembershipCardScreen extends ConsumerWidget {
                           value: '$points',
                           theme: theme),
                       _CardStat(
-                          label: 'Orders',
-                          value: '$totalOrders',
-                          theme: theme),
+                          label: 'Orders', value: '$totalOrders', theme: theme),
                       _CardStat(
                           label: 'Spent',
                           value: '₦${spending.toStringAsFixed(0)}',
@@ -104,8 +102,7 @@ class MembershipCardScreen extends ConsumerWidget {
 
             // ── Progress to next tier ───────────────────────────────────
             if (nextTier != null) ...[
-              Text('Progress to $nextTier',
-                  style: theme.textTheme.titleSmall),
+              Text('Progress to $nextTier', style: theme.textTheme.titleSmall),
               const SizedBox(height: AppSpacing.sm),
               ClipRRect(
                 borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -113,8 +110,7 @@ class MembershipCardScreen extends ConsumerWidget {
                   value: progress,
                   minHeight: 8,
                   backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                  valueColor:
-                      AlwaysStoppedAnimation<Color>(tierColor),
+                  valueColor: AlwaysStoppedAnimation<Color>(tierColor),
                 ),
               ),
               const SizedBox(height: 4),
@@ -139,8 +135,7 @@ class MembershipCardScreen extends ConsumerWidget {
                         size: 18, color: tierColor),
                     const SizedBox(width: AppSpacing.sm),
                     Expanded(
-                      child: Text(perk,
-                          style: theme.textTheme.bodyMedium),
+                      child: Text(perk, style: theme.textTheme.bodyMedium),
                     ),
                   ],
                 ),
@@ -152,14 +147,30 @@ class MembershipCardScreen extends ConsumerWidget {
             // ── All tiers overview ──────────────────────────────────────
             Text('All Tiers', style: theme.textTheme.titleSmall),
             const SizedBox(height: AppSpacing.sm),
-            _TierRow(tier: 'Bronze', spend: '₦0+', theme: theme,
-                color: AppColors.emerald, current: tier == 'Bronze'),
-            _TierRow(tier: 'Silver', spend: '₦5,000+', theme: theme,
-                color: AppColors.tierSilver, current: tier == 'Silver'),
-            _TierRow(tier: 'Gold', spend: '₦20,000+', theme: theme,
-                color: AppColors.tierGold, current: tier == 'Gold'),
-            _TierRow(tier: 'Platinum', spend: '₦50,000+', theme: theme,
-                color: AppColors.tierPlatinum, current: tier == 'Platinum'),
+            _TierRow(
+                tier: 'Bronze',
+                spend: '₦0+',
+                theme: theme,
+                color: AppColors.emerald,
+                current: tier == 'Bronze'),
+            _TierRow(
+                tier: 'Silver',
+                spend: '₦5,000+',
+                theme: theme,
+                color: AppColors.tierSilver,
+                current: tier == 'Silver'),
+            _TierRow(
+                tier: 'Gold',
+                spend: '₦20,000+',
+                theme: theme,
+                color: AppColors.tierGold,
+                current: tier == 'Gold'),
+            _TierRow(
+                tier: 'Platinum',
+                spend: '₦50,000+',
+                theme: theme,
+                color: AppColors.tierPlatinum,
+                current: tier == 'Platinum'),
 
             const SizedBox(height: AppSpacing.xl),
           ],
@@ -282,21 +293,18 @@ class _TierRow extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           Text(tier,
               style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight:
-                    current ? FontWeight.w700 : FontWeight.w400,
+                fontWeight: current ? FontWeight.w700 : FontWeight.w400,
               )),
           if (current) ...[
             const SizedBox(width: AppSpacing.xs),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(AppRadius.pill),
               ),
               child: Text('current',
-                  style: theme.textTheme.labelSmall
-                      ?.copyWith(color: color)),
+                  style: theme.textTheme.labelSmall?.copyWith(color: color)),
             ),
           ],
           const Spacer(),

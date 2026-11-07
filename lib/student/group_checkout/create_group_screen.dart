@@ -50,9 +50,8 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
       appBar: const UniflexAppBar(title: 'Group Order'),
       body: Padding(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
-        child: _groupId == null
-            ? _buildCreateView(theme)
-            : _buildShareView(theme),
+        child:
+            _groupId == null ? _buildCreateView(theme) : _buildShareView(theme),
       ),
     );
   }
@@ -67,8 +66,7 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
           decoration: BoxDecoration(
             color: AppColors.emerald.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(AppRadius.card),
-            border:
-                Border.all(color: AppColors.emerald.withValues(alpha: 0.3)),
+            border: Border.all(color: AppColors.emerald.withValues(alpha: 0.3)),
           ),
           child: Column(
             children: [
@@ -150,15 +148,15 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
         Center(
           child: Column(
             children: [
-              const Icon(Icons.check_circle, color: AppColors.emerald, size: 56),
+              const Icon(Icons.check_circle,
+                  color: AppColors.emerald, size: 56),
               const SizedBox(height: AppSpacing.md),
               Text('Group created!', style: theme.textTheme.titleLarge),
               const SizedBox(height: AppSpacing.sm),
               Text(
                 'Share this code so friends can join.',
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color:
-                      theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
                 textAlign: TextAlign.center,
               ),

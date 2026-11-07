@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/models/achievement.dart';
 import '../../shared/models/advertisement.dart';
-import '../../shared/models/gift.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
 import 'student_service.dart';
 
@@ -11,40 +10,19 @@ final studentServiceProvider = Provider<StudentService>((ref) {
 });
 
 /// Loyalty stats: total_orders, reward_points, membership_tier, etc.
-final studentStatsProvider =
-    FutureProvider<Map<String, dynamic>>((ref) async {
+final studentStatsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   return ref.watch(studentServiceProvider).getStudentStats();
 });
 
-/// Top-10 referral leaderboard.
-final referralLeaderboardProvider =
-    FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  return ref.watch(studentServiceProvider).getReferralLeaderboard();
-});
-
 /// Badges earned by the current student.
-final userAchievementsProvider =
-    FutureProvider<List<Achievement>>((ref) async {
+final userAchievementsProvider = FutureProvider<List<Achievement>>((ref) async {
   return ref.watch(studentServiceProvider).getUserAchievements();
-});
-
-/// Sent + received gifts for the current student.
-final giftsProvider = FutureProvider<List<Gift>>((ref) async {
-  return ref.watch(studentServiceProvider).getGifts();
 });
 
 /// Live member list for a group order session.
 final groupMembersProvider =
-    StreamProvider.family<List<Map<String, dynamic>>, String>(
-        (ref, groupId) {
+    StreamProvider.family<List<Map<String, dynamic>>, String>((ref, groupId) {
   return ref.watch(studentServiceProvider).streamGroupMembers(groupId);
-});
-
-/// Phase 10: the referral code Admin allocated to this student, or null if
-/// they have not been given one. Students no longer generate their own.
-final myReferralCodeProvider =
-    FutureProvider<Map<String, dynamic>?>((ref) async {
-  return ref.watch(studentServiceProvider).getMyReferralCode();
 });
 
 /// Phase 10: live home-page advertisement banners, admin-managed.

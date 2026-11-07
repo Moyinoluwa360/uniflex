@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../shared/models/advertisement.dart';
 import '../../shared/models/order.dart';
@@ -22,6 +21,8 @@ import '../ordering/order_repository.dart';
 import '../ordering/product_repository.dart';
 import '../services/student_providers.dart';
 import '../tracking/errand_tracking_screen.dart';
+import 'ad_popup.dart';
+import 'ad_carousel.dart';
 import 'all_vendors_screen.dart';
 import 'search_screen.dart';
 
@@ -105,8 +106,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> {
                 title: 'Vendors around you',
                 action: 'See all',
                 onAction: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                      builder: (_) => const AllVendorsScreen()),
+                  MaterialPageRoute(builder: (_) => const AllVendorsScreen()),
                 ),
               ),
             ),
@@ -327,9 +327,8 @@ class _HomeHeader extends StatelessWidget {
               decoration: BoxDecoration(
                 color: isDark ? AppColors.darkCard : white,
                 borderRadius: BorderRadius.circular(AppRadius.control),
-                border: isDark
-                    ? Border.all(color: AppColors.darkHairline)
-                    : null,
+                border:
+                    isDark ? Border.all(color: AppColors.darkHairline) : null,
               ),
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
               child: Row(
@@ -377,8 +376,8 @@ class _GlassCircle extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.pureWhite.withValues(alpha: 0.16),
           shape: BoxShape.circle,
-          border: Border.all(
-              color: AppColors.pureWhite.withValues(alpha: 0.18)),
+          border:
+              Border.all(color: AppColors.pureWhite.withValues(alpha: 0.18)),
         ),
         child: child,
       ),
@@ -549,9 +548,7 @@ class _ToggleTab extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                selected && label == 'Errand'
-                    ? Icons.check_circle
-                    : icon,
+                selected && label == 'Errand' ? Icons.check_circle : icon,
                 size: 16,
                 color: selected
                     ? theme.colorScheme.primary
@@ -577,244 +574,20 @@ class _ToggleTab extends StatelessWidget {
 
 // ── Promo banner carousel ────────────────────────────────────────────────────
 
-class _PromoBannerCarousel extends ConsumerStatefulWidget {
+/// Home banner strip: live ads in an [AdCarousel]. Tapping any ad opens the
+/// ad popup (the whole image, plus a Visit button when it has a link).
+class _PromoBannerCarousel extends ConsumerWidget {
   const _PromoBannerCarousel();
 
   @override
-  ConsumerState<_PromoBannerCarousel> createState() =>
-      _PromoBannerCarouselState();
-}
-
-class _PromoBannerCarouselState extends ConsumerState<_PromoBannerCarousel> {
-  final _controller = PageController(viewportFraction: 0.86);
-  int _page = 0;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  /// Acts on an ad's configured tap target. Unknown or malformed targets do
-  /// nothing rather than throwing — an ad is content, so a bad link should
-  /// never break the home screen.
-  Future<void> _openAd(Advertisement ad) async {
-    switch (ad.linkType) {
-      case AdLinkType.none:
-        return;
-      case AdLinkType.wallet:
-        ref.read(shellTabRequestProvider.notifier).state = _kWalletTabIndex;
-      case AdLinkType.vendor:
-        final vendorId = ad.linkValue;
-        if (vendorId == null) return;
-        final vendors = await ref.read(vendorsProvider.future);
-        final vendor = vendors.where((v) => v.id == vendorId).firstOrNull;
-        if (vendor == null || !mounted) return;
-        await Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => CatalogScreen(vendor: vendor)),
-        );
-      case AdLinkType.url:
-        final raw = ad.linkValue;
-        if (raw == null) return;
-        final uri = Uri.tryParse(raw);
-        if (uri == null || !uri.hasScheme) return;
-        try {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        } catch (_) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text("Couldn't open the link. Try again later."),
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-          }
-        }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final adsAsync = ref.watch(liveAdvertisementsProvider);
-    final ads = adsAsync.valueOrNull ?? const <Advertisement>[];
-
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ads = ref.watch(liveAdvertisementsProvider).valueOrNull ??
+        const <Advertisement>[];
     // No ads scheduled is a normal state, not an error — take up no space.
     if (ads.isEmpty) return const SizedBox.shrink();
-
-    // Guard against the page index dangling past the end when an ad expires
-    // or admin removes one while the screen is open.
-    final page = _page.clamp(0, ads.length - 1);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: AppSpacing.md),
-        SizedBox(
-          height: 128,
-          child: PageView.builder(
-            controller: _controller,
-            // Align the strip flush to the left gutter rather than
-            // centring each page in the viewport.
-            padEnds: false,
-            itemCount: ads.length,
-            onPageChanged: (p) => setState(() => _page = p),
-            itemBuilder: (context, i) {
-              final ad = ads[i];
-              return Padding(
-                padding: EdgeInsets.only(
-                  left: i == 0 ? AppSpacing.screenGutter : AppSpacing.sm,
-                  right: i == ads.length - 1
-                      ? AppSpacing.screenGutter
-                      : AppSpacing.sm,
-                ),
-                child: _PromoCard(
-                  title: ad.title,
-                  subtitle: ad.subtitle,
-                  dark: ad.isDark,
-                  imageUrl: ad.imageUrl,
-                  onTap: ad.linkType == AdLinkType.none
-                      ? null
-                      : () => _openAd(ad),
-                ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        // Dots — left-aligned under the strip, tracking the gutter.
-        Padding(
-          padding: const EdgeInsets.only(left: AppSpacing.screenGutter),
-          child: Row(
-            children: List.generate(
-              ads.length,
-              (i) => AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: page == i ? 16 : 6,
-                height: 6,
-                margin: const EdgeInsets.only(right: 6),
-                decoration: BoxDecoration(
-                  color: page == i
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.outline,
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// A promo strip card. Beyond the flat colour it carries a pair of very
-/// faint concentric circles bleeding off the right edge — the subtle
-/// interior shape the design uses so the cards don't read as plain boxes.
-class _PromoCard extends StatelessWidget {
-  const _PromoCard({
-    required this.title,
-    required this.subtitle,
-    required this.dark,
-    this.imageUrl,
-    this.onTap,
-  });
-
-  final String title;
-  final String subtitle;
-  final bool dark;
-
-  /// Optional artwork behind the text. When set it replaces the decorative
-  /// circles and gets a scrim so the copy stays readable over any photo.
-  final String? imageUrl;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final base = dark ? AppColors.matteBlack : AppColors.orange;
-    final shape = AppColors.pureWhite.withValues(alpha: dark ? 0.05 : 0.09);
-    final hasImage = imageUrl != null && imageUrl!.isNotEmpty;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(AppRadius.card),
-      child: Material(
-        color: base,
-        child: InkWell(
-          onTap: onTap,
-          child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (hasImage) ...[
-              AppImage(url: imageUrl, fit: BoxFit.cover),
-              // Left-weighted scrim: keeps the title legible without
-              // flattening the whole photo.
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                    colors: [
-                      AppColors.matteBlack.withValues(alpha: 0.72),
-                      AppColors.matteBlack.withValues(alpha: 0.15),
-                    ],
-                  ),
-                ),
-              ),
-            ] else ...[
-              // Subtle interior shapes — soft concentric circles off the right.
-              Positioned(
-                right: -34,
-                top: -30,
-                child: Container(
-                  width: 150,
-                  height: 150,
-                  decoration:
-                      BoxDecoration(shape: BoxShape.circle, color: shape),
-                ),
-              ),
-              Positioned(
-                right: 26,
-                bottom: -52,
-                child: Container(
-                  width: 96,
-                  height: 96,
-                  decoration:
-                      BoxDecoration(shape: BoxShape.circle, color: shape),
-                ),
-              ),
-            ],
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md,
-                vertical: AppSpacing.sm + 4,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    title,
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(color: AppColors.pureWhite),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: AppColors.pureWhite.withValues(alpha: 0.85),
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-          ],
-          ),
-        ),
-      ),
+    return AdCarousel(
+      ads: ads,
+      onTap: (ad) => showAdPopup(context, ad),
     );
   }
 }
@@ -868,8 +641,8 @@ class _VendorList extends ConsumerWidget {
                       (e) => Padding(
                         padding:
                             const EdgeInsets.only(bottom: AppSpacing.cardGap),
-                        child:
-                            _PartnerVendorCard(vendor: e.value, seed: e.key + 10),
+                        child: _PartnerVendorCard(
+                            vendor: e.value, seed: e.key + 10),
                       ),
                     ),
               ],
@@ -1005,8 +778,8 @@ class _UniflexVendorCard extends StatelessWidget {
                       backgroundColor: AppColors.emerald,
                       foregroundColor: AppColors.pureWhite,
                       minimumSize: const Size(0, 44),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.lg),
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                     ),
                     onPressed: () => Navigator.of(context).push(
                       MaterialPageRoute(
@@ -1070,8 +843,7 @@ class _PartnerVendorCard extends StatelessWidget {
                         ? vendor.description
                         : 'Swallow · Soups · Local',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color:
-                          theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1103,7 +875,8 @@ class _Badge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 3),
+      padding:
+          const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 3),
       decoration: BoxDecoration(
         color: background,
         borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -1190,7 +963,8 @@ class _ErrandSection extends ConsumerWidget {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.emerald,
               foregroundColor: AppColors.pureWhite,
-              minimumSize: const Size(double.infinity, AppSpacing.controlHeight),
+              minimumSize:
+                  const Size(double.infinity, AppSpacing.controlHeight),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppRadius.control),
               ),
@@ -1247,7 +1021,7 @@ class _ErrandOrderCardState extends ConsumerState<_ErrandOrderCard> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Cancel errand',
+            child: const Text('Cancel errand',
                 style: TextStyle(color: AppColors.error)),
           ),
         ],

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../shared/models/order.dart';
 import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
-import '../delivery/active_delivery_screen.dart';
+import '../jobs/active_jobs_screen.dart';
+import '../jobs/rider_job.dart';
 import '../services/rider_providers.dart';
 
 class RiderDashboardScreen extends ConsumerStatefulWidget {
@@ -35,16 +35,32 @@ class _RiderDashboardScreenState extends ConsumerState<RiderDashboardScreen> {
     }
   }
 
+  void _openActive(int food, int errands) {
+    switch (activeJobsTarget(food: food, errands: errands)) {
+      case ActiveJobsTarget.chooser:
+        showActiveJobsChooser(context, food: food, errands: errands);
+      case ActiveJobsTarget.errands:
+        openActiveJobsList(context, RiderJobKind.errand);
+      case ActiveJobsTarget.food:
+        openActiveJobsList(context, RiderJobKind.food);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final profile = ref.watch(currentProfileProvider).valueOrNull;
     final statsAsync = ref.watch(riderStatsProvider);
-    final activeAsync = ref.watch(activeDeliveriesProvider);
+    final activeJobs =
+        ref.watch(riderActiveJobsProvider).valueOrNull ?? const <RiderJob>[];
+    final activeFood = activeJobs.where((j) => j.isFood).length;
+    final activeErrands = activeJobs.where((j) => j.isErrand).length;
 
     final isOnline = statsAsync.valueOrNull?['is_online'] as bool? ?? false;
-    final todayCount = statsAsync.valueOrNull?['today_completed'] as int? ?? 0;
-    final totalCount = statsAsync.valueOrNull?['total_completed'] as int? ?? 0;
+    final todayCount =
+        (statsAsync.valueOrNull?['today_completed'] as num?)?.toInt() ?? 0;
+    final totalCount =
+        (statsAsync.valueOrNull?['total_completed'] as num?)?.toInt() ?? 0;
 
     return Scaffold(
       body: CustomScrollView(
@@ -62,7 +78,10 @@ class _RiderDashboardScreenState extends ConsumerState<RiderDashboardScreen> {
             ],
             flexibleSpace: FlexibleSpaceBar(
               titlePadding: const EdgeInsets.fromLTRB(
-                AppSpacing.screenGutter, 0, AppSpacing.screenGutter, AppSpacing.md,
+                AppSpacing.screenGutter,
+                0,
+                AppSpacing.screenGutter,
+                AppSpacing.md,
               ),
               title: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -85,7 +104,6 @@ class _RiderDashboardScreenState extends ConsumerState<RiderDashboardScreen> {
               ),
             ),
           ),
-
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(AppSpacing.screenGutter),
@@ -101,37 +119,22 @@ class _RiderDashboardScreenState extends ConsumerState<RiderDashboardScreen> {
 
                   const SizedBox(height: AppSpacing.lg),
 
-                  // ── Active delivery card ─────────────────────────────
-                  activeAsync.when(
-                    loading: () => const SizedBox.shrink(),
-                    error: (_, __) => const SizedBox.shrink(),
-                    data: (activeOrders) {
-                      if (activeOrders.isEmpty) return const SizedBox.shrink();
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            activeOrders.length == 1
-                                ? 'Active Delivery'
-                                : 'Active Deliveries (${activeOrders.length})',
-                            style: theme.textTheme.titleSmall,
-                          ),
-                          const SizedBox(height: AppSpacing.sm),
-                          ...activeOrders.map((o) => Padding(
-                            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                            child: _ActiveDeliveryBanner(order: o),
-                          )),
-                          const SizedBox(height: AppSpacing.md),
-                        ],
-                      );
-                    },
-                  ),
-
                   // ── Stats ────────────────────────────────────────────
                   Text("Today's stats", style: theme.textTheme.titleSmall),
                   const SizedBox(height: AppSpacing.sm),
                   Row(
                     children: [
+                      Expanded(
+                        child: _StatCard(
+                          key: const ValueKey('active-jobs-card'),
+                          label: 'Active jobs',
+                          value: '${activeFood + activeErrands}',
+                          icon: Icons.delivery_dining,
+                          color: AppColors.orange,
+                          onTap: () => _openActive(activeFood, activeErrands),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.cardGap),
                       Expanded(
                         child: _StatCard(
                           label: 'Today',
@@ -234,77 +237,26 @@ class _OnlineToggleCard extends StatelessWidget {
   }
 }
 
-class _ActiveDeliveryBanner extends ConsumerWidget {
-  const _ActiveDeliveryBanner({required this.order});
-
-  final Order order;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => ActiveDeliveryScreen(orderId: order.id),
-        ),
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: AppColors.orange.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: AppColors.orange.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.delivery_dining, color: AppColors.orange, size: 28),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    order.shortId,
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(
-                    order.deliveryLocation ?? '—',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _StatCard extends StatelessWidget {
   const _StatCard({
+    super.key,
     required this.label,
     required this.value,
     required this.icon,
     required this.color,
+    this.onTap,
   });
 
   final String label;
   final String value;
   final IconData icon;
   final Color color;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest,
@@ -330,6 +282,12 @@ class _StatCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+    if (onTap == null) return card;
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppRadius.card),
+      onTap: onTap,
+      child: card,
     );
   }
 }

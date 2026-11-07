@@ -82,8 +82,7 @@ class ErrandTrackingScreen extends ConsumerWidget {
                             horizontal: AppSpacing.sm, vertical: 3),
                         decoration: BoxDecoration(
                           color: statusColor.withValues(alpha: 0.15),
-                          borderRadius:
-                              BorderRadius.circular(AppRadius.pill),
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
                         ),
                         child: Text(
                           _errandLabel(o.status),
@@ -125,8 +124,7 @@ class ErrandTrackingScreen extends ConsumerWidget {
                         padding: const EdgeInsets.all(AppSpacing.md),
                         decoration: BoxDecoration(
                           color: theme.colorScheme.surfaceContainerHighest,
-                          borderRadius:
-                              BorderRadius.circular(AppRadius.card),
+                          borderRadius: BorderRadius.circular(AppRadius.card),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -149,13 +147,11 @@ class ErrandTrackingScreen extends ConsumerWidget {
                                 children: [
                                   Expanded(
                                     child: OutlinedButton.icon(
-                                      icon: const Icon(
-                                          Icons.phone_outlined,
+                                      icon: const Icon(Icons.phone_outlined,
                                           size: 16),
                                       label: const Text('Call'),
                                       onPressed: () async {
-                                        final uri =
-                                            Uri.parse('tel:$phone');
+                                        final uri = Uri.parse('tel:$phone');
                                         if (await canLaunchUrl(uri)) {
                                           await launchUrl(uri);
                                         }
@@ -165,21 +161,19 @@ class ErrandTrackingScreen extends ConsumerWidget {
                                   const SizedBox(width: AppSpacing.sm),
                                   Expanded(
                                     child: OutlinedButton.icon(
-                                      icon: const Icon(
-                                          Icons.chat_outlined,
+                                      icon: const Icon(Icons.chat_outlined,
                                           size: 16),
                                       label: const Text('WhatsApp'),
                                       onPressed: () async {
-                                        final normalized =
-                                            phone.replaceAll(
-                                                RegExp(r'[^\d]'), '');
+                                        final normalized = phone.replaceAll(
+                                            RegExp(r'[^\d]'), '');
                                         final uri = Uri.parse(
                                             'https://wa.me/$normalized');
                                         if (await canLaunchUrl(uri)) {
                                           await launchUrl(
                                             uri,
-                                            mode: LaunchMode
-                                                .externalApplication,
+                                            mode:
+                                                LaunchMode.externalApplication,
                                           );
                                         }
                                       },
@@ -346,8 +340,7 @@ class _ErrandTimeline extends StatelessWidget {
               child: Text(
                 step.label,
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight:
-                      isCurrent ? FontWeight.w600 : FontWeight.w400,
+                  fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w400,
                   color: done
                       ? theme.colorScheme.onSurface
                       : theme.colorScheme.onSurface.withValues(alpha: 0.4),

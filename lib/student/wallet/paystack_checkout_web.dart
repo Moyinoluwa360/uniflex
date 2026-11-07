@@ -88,8 +88,8 @@ class _PaystackCheckoutPageState extends State<PaystackCheckoutPage> {
     // If PaystackPop is already in window scope, nothing to do.
     // We test for an existing <script> tag rather than checking JS globals
     // (which would require dart:js).
-    final existing = html.document
-        .querySelectorAll('script[data-uniflex-paystack]');
+    final existing =
+        html.document.querySelectorAll('script[data-uniflex-paystack]');
     if (existing.isNotEmpty) {
       // Give the script a moment to fully initialise if it was just injected.
       await Future<void>.delayed(const Duration(milliseconds: 200));

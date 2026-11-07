@@ -161,9 +161,8 @@ class _AdCard extends StatelessWidget {
                 child: ad.imageUrl != null && ad.imageUrl!.isNotEmpty
                     ? AppImage(url: ad.imageUrl, fit: BoxFit.cover)
                     : ColoredBox(
-                        color: ad.isDark
-                            ? AppColors.matteBlack
-                            : AppColors.orange,
+                        color:
+                            ad.isDark ? AppColors.matteBlack : AppColors.orange,
                         child: const Icon(Icons.campaign_outlined,
                             color: AppColors.pureWhite, size: 20),
                       ),

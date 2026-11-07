@@ -49,16 +49,14 @@ class WalletTransaction {
       };
 
   /// Positive for credits, negative for debits — useful for display.
-  double get signedAmount =>
-      type == WalletTxType.credit ? amount : -amount;
+  double get signedAmount => type == WalletTxType.credit ? amount : -amount;
 }
 
 enum WalletTxType {
   credit,
   debit;
 
-  static WalletTxType fromString(String s) =>
-      s == 'credit' ? credit : debit;
+  static WalletTxType fromString(String s) => s == 'credit' ? credit : debit;
 }
 
 enum WalletTxSource {

@@ -80,7 +80,8 @@ abstract final class AppTheme {
   }) {
     final textTheme = AppTypography.textTheme(colorScheme.onSurface);
     final isDark = brightness == Brightness.dark;
-    final secondaryInk = isDark ? AppColors.darkInkSecondary : AppColors.mediumGrey;
+    final secondaryInk =
+        isDark ? AppColors.darkInkSecondary : AppColors.mediumGrey;
 
     return ThemeData(
       useMaterial3: true,
@@ -91,7 +92,6 @@ abstract final class AppTheme {
       fontFamily: textTheme.bodyMedium?.fontFamily,
       dividerColor: dividerColor,
       splashFactory: InkSparkle.splashFactory,
-
       appBarTheme: AppBarTheme(
         backgroundColor: scaffoldBackground,
         foregroundColor: colorScheme.onSurface,
@@ -101,7 +101,6 @@ abstract final class AppTheme {
         titleTextStyle: textTheme.titleLarge,
         iconTheme: IconThemeData(color: colorScheme.onSurface),
       ),
-
       cardTheme: CardThemeData(
         color: cardColor,
         elevation: 0,
@@ -111,7 +110,6 @@ abstract final class AppTheme {
           side: BorderSide(color: dividerColor),
         ),
       ),
-
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.orange,
@@ -126,7 +124,6 @@ abstract final class AppTheme {
           elevation: 0,
         ),
       ),
-
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: colorScheme.onSurface,
@@ -139,14 +136,12 @@ abstract final class AppTheme {
           ),
         ),
       ),
-
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: colorScheme.primary,
           textStyle: textTheme.labelLarge,
         ),
       ),
-
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: isDark ? AppColors.darkSurface : AppColors.softGrey,
@@ -172,7 +167,6 @@ abstract final class AppTheme {
           borderSide: const BorderSide(color: AppColors.error, width: 1.5),
         ),
       ),
-
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: scaffoldBackground,
         selectedItemColor: AppColors.emerald,
@@ -182,7 +176,6 @@ abstract final class AppTheme {
         type: BottomNavigationBarType.fixed,
         elevation: 0,
       ),
-
       snackBarTheme: SnackBarThemeData(
         backgroundColor: colorScheme.onSurface,
         contentTextStyle: textTheme.bodyMedium?.copyWith(
@@ -193,9 +186,7 @@ abstract final class AppTheme {
           borderRadius: BorderRadius.circular(AppRadius.control),
         ),
       ),
-
       dividerTheme: DividerThemeData(color: dividerColor, thickness: 1),
-
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
           // Native, platform-correct transitions rather than a generic

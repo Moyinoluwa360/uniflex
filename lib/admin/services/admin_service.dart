@@ -8,7 +8,6 @@ import '../../shared/models/order.dart';
 import '../../shared/models/order_item.dart';
 import '../../shared/models/product.dart';
 import '../../shared/models/vendor.dart';
-import '../../shared/services/notifications/notification_inbox_service.dart';
 
 /// A referral code as Admin sees it, with how many signups have used it.
 class ReferralCodeRow {
@@ -202,13 +201,27 @@ class AdminErrandRow {
 /// checks `is_admin()` itself. No client-side role check is needed in
 /// this service — a non-admin JWT would be rejected by the server.
 class AdminService {
-  const AdminService(this._client, this._notifications);
+  const AdminService(this._client);
 
   final SupabaseClient _client;
 
-  /// Used to tell the customer about status changes. Injected rather than
-  /// constructed here so the "who may notify whom" rule stays in one place.
-  final NotificationInboxService _notifications;
+  // ── Service charge (Pack 4A) ────────────────────────────────────────
+
+  /// Sets the per-order service charge (whole naira, 0 or more). The server
+  /// validates it and only a super admin may call it. Orders already placed
+  /// keep the charge they were placed with.
+  Future<void> setServiceCharge(int amount) async {
+    await _client.rpc('admin_set_service_charge', params: {'p_amount': amount});
+  }
+
+  /// Sets the support WhatsApp number (any of 0803…, +234803…, 234803…).
+  /// The server stores international digits and returns them; an empty value
+  /// clears the setting (students then see live chat only).
+  Future<String?> setSupportWhatsapp(String raw) async {
+    final result = await _client
+        .rpc('admin_set_support_whatsapp', params: {'p_number': raw});
+    return result as String?;
+  }
 
   // ── Vendors ─────────────────────────────────────────────────────────
 
@@ -258,10 +271,8 @@ class AdminService {
   /// Hard delete is not safe: vendors → products (cascade) → order_items
   /// (no cascade) → FK violation if any item was ever ordered.
   Future<void> deleteVendor(String id) async {
-    await _client
-        .from('vendors')
-        .update({'deleted_at': DateTime.now().toUtc().toIso8601String()})
-        .eq('id', id);
+    await _client.from('vendors').update(
+        {'deleted_at': DateTime.now().toUtc().toIso8601String()}).eq('id', id);
   }
 
   // ── Products ─────────────────────────────────────────────────────────
@@ -312,21 +323,28 @@ class AdminService {
     }
   }
 
+  /// Switches ONLY `is_available`. Used by the menu's on/off switch so that
+  /// toggling can never rewrite (or lose) the item's section / subsection.
+  Future<void> setProductAvailability(String id, bool isAvailable) async {
+    await _client
+        .from('products')
+        .update({'is_available': isAvailable}).eq('id', id);
+  }
+
   /// Soft-delete a product by setting deleted_at.
   ///
   /// Hard delete is not safe: order_items.product_id references products(id)
   /// without ON DELETE CASCADE, so deleting a product that any order
   /// references raises a FK violation.
   Future<void> deleteProduct(String id) async {
-    await _client
-        .from('products')
-        .update({'deleted_at': DateTime.now().toUtc().toIso8601String()})
-        .eq('id', id);
+    await _client.from('products').update(
+        {'deleted_at': DateTime.now().toUtc().toIso8601String()}).eq('id', id);
   }
 
   /// Upload image bytes to the `product-images` bucket under [prefix],
   /// returning the public URL.  Shared by all three upload helpers below.
-  Future<String> _uploadImage(String prefix, Uint8List bytes, String fileName) async {
+  Future<String> _uploadImage(
+      String prefix, Uint8List bytes, String fileName) async {
     final path = '$prefix/$fileName';
     await _client.storage.from('product-images').uploadBinary(
           path,
@@ -368,11 +386,16 @@ class AdminService {
       final now = DateTime.now();
       final active = rows.where((m) {
         if (m['type'] != 'food') return false;
+        // The kitchen only prepares PICKUP orders. Deliveries are sourced by
+        // the rider, and their per-vendor parts must never be listed here
+        // (marking one 'ready' used to push the whole group along).
+        if (m['delivery_group_id'] != null) return false;
+        if (m['delivery_type'] != 'pickup') return false;
         if (!const [
-          'being_sourced',           // commitment fee paid — kitchen starts here
+          'being_sourced', // commitment fee paid — kitchen starts here
           'placed',
           'preparing',
-          'awaiting_final_payment',  // kitchen marked ready — student pays food cost
+          'awaiting_final_payment', // kitchen marked ready — student pays food cost
           'ready',
           'ready_for_pickup',
           'out_for_delivery',
@@ -390,10 +413,8 @@ class AdminService {
       if (active.isEmpty) return [];
 
       final ids = active.map((m) => m['id'] as String).toList();
-      final itemsData = await _client
-          .from('order_items')
-          .select()
-          .inFilter('order_id', ids);
+      final itemsData =
+          await _client.from('order_items').select().inFilter('order_id', ids);
 
       final itemsByOrder = <String, List<OrderItem>>{};
       for (final m in itemsData) {
@@ -424,13 +445,13 @@ class AdminService {
     try {
       final orderStream = _client
           .from('orders')
-          .stream(primaryKey: ['id'])
-          .order('created_at', ascending: false);
+          .stream(primaryKey: ['id']).order('created_at', ascending: false);
 
       await for (final _ in orderStream) {
         try {
           final updated = await fetchKitchenOrders();
-          debugPrint('[KitchenQueue] Realtime update: ${updated.length} orders');
+          debugPrint(
+              '[KitchenQueue] Realtime update: ${updated.length} orders');
           yield updated;
         } catch (e) {
           debugPrint('[KitchenQueue] Realtime fetch error: $e');
@@ -451,20 +472,8 @@ class AdminService {
       'p_order_id': orderId,
       'p_new_status': newStatus,
     });
-    // Tell the customer. Deliberately after the RPC and non-throwing: the
-    // status change has already committed, so a failed push must not make
-    // the kitchen think the change did not stick.
-    await _notifications.notifyOrderStatus(orderId);
-  }
-
-  /// The "Transfer to Rider" action (Section 12) — explicitly pushes a
-  /// Ready Uniflex delivery order into the rider job pool, rather than
-  /// relying on an implicit status side-effect. Calls the
-  /// `transfer_order_to_rider` SECURITY DEFINER RPC (admin-only).
-  Future<void> transferOrderToRider(String orderId) async {
-    await _client.rpc('transfer_order_to_rider', params: {
-      'p_order_id': orderId,
-    });
+    // Customer notifications are written and pushed by database triggers
+    // (Pack 4A) — nothing to send from the client.
   }
 
   // ── Rider management (post-testing fixes, Section 7) ───────────────────
@@ -526,10 +535,8 @@ class AdminService {
   /// screen. Students only ever see the active ones (see
   /// activeErrandCategoriesProvider).
   Future<List<ErrandCategoryData>> fetchAllErrandCategories() async {
-    final data = await _client
-        .from('errand_categories')
-        .select()
-        .order('sort_order');
+    final data =
+        await _client.from('errand_categories').select().order('sort_order');
     return data.map((m) => ErrandCategoryData.fromMap(m)).toList();
   }
 
@@ -572,10 +579,8 @@ class AdminService {
   /// (no cascade). Soft delete hides it from students and admin list while
   /// keeping historical request records intact.
   Future<void> deleteErrandCategory(String id) async {
-    await _client
-        .from('errand_categories')
-        .update({'deleted_at': DateTime.now().toUtc().toIso8601String()})
-        .eq('id', id);
+    await _client.from('errand_categories').update(
+        {'deleted_at': DateTime.now().toUtc().toIso8601String()}).eq('id', id);
   }
 
   // ── Referral codes (Phase 10) ─────────────────────────────────────────
@@ -664,7 +669,9 @@ class AdminService {
       return 'People have already signed up with this code, so it cannot be '
           'deleted. Pause it instead.';
     }
-    if (raw.contains('OWNER_NOT_FOUND')) return 'That student no longer exists.';
+    if (raw.contains('OWNER_NOT_FOUND')) {
+      return 'That student no longer exists.';
+    }
     if (raw.contains('CODE_NOT_FOUND')) return 'That code no longer exists.';
     return raw;
   }
@@ -774,8 +781,7 @@ class AdminService {
     try {
       final stream = _client
           .from('delivery_groups')
-          .stream(primaryKey: ['id'])
-          .order('created_at', ascending: false);
+          .stream(primaryKey: ['id']).order('created_at', ascending: false);
       await for (final _ in stream) {
         try {
           yield await fetch();
@@ -791,11 +797,8 @@ class AdminService {
   /// from errand_requests. The screen applies status filtering client-side.
   Stream<List<AdminErrandRow>> streamErrandOrders() async* {
     Future<List<AdminErrandRow>> fetch() async {
-      final rows = await _client
-          .from('orders')
-          .select()
-          .inFilter('type', ['errand', 'around'])
-          .order('created_at', ascending: false);
+      final rows = await _client.from('orders').select().inFilter(
+          'type', ['errand', 'around']).order('created_at', ascending: false);
 
       if (rows.isEmpty) return [];
 
@@ -832,8 +835,7 @@ class AdminService {
     try {
       final stream = _client
           .from('orders')
-          .stream(primaryKey: ['id'])
-          .order('created_at', ascending: false);
+          .stream(primaryKey: ['id']).order('created_at', ascending: false);
       await for (final _ in stream) {
         try {
           yield await fetch();
@@ -866,7 +868,7 @@ class AdminService {
   // ── Dashboard ─────────────────────────────────────────────────────────
 
   /// Returns today's key metrics: order counts by status, pending count,
-  /// and Uniflex revenue. Calls the `get_dashboard_stats` SECURITY DEFINER
+  /// and money (fees vs food payments). Calls the `get_dashboard_stats` SECURITY DEFINER
   /// RPC, which verifies the caller is an admin.
   Future<Map<String, dynamic>> getDashboardStats() async {
     final result = await _client.rpc('get_dashboard_stats');
@@ -875,164 +877,16 @@ class AdminService {
 
   // ── Analytics ──────────────────────────────────────────────────────────
 
-  /// Aggregate analytics data for the admin Analytics screen.
-  /// Returns a map with: totalStudents, totalRiders, ordersToday,
-  /// ordersThisWeek, ordersThisMonth, revenueToday, revenueThisWeek,
-  /// revenueThisMonth, completedCount, cancelledCount, topItems,
-  /// riderPerformance, and byStatus breakdown.
+  /// Analytics for the Admin Analytics screen, computed in the database by
+  /// `get_admin_analytics()` (one entry per checkout, paid only, errands
+  /// included, Africa/Lagos days, single `completed_at`). Nothing is
+  /// calculated on the phone, so it cannot drift from the dashboard.
+  ///
+  /// Keys: orders_today/week/month, completed_*, cancelled_*, fees_*, food_*,
+  /// completion_rate, by_status, top_items, rider_performance, users.
   Future<Map<String, dynamic>> getAnalytics() async {
-    final now = DateTime.now().toUtc();
-    final startOfDay = DateTime.utc(now.year, now.month, now.day);
-    final startOfWeek = startOfDay.subtract(
-        Duration(days: startOfDay.weekday - 1)); // ISO Monday
-    final startOfMonth = DateTime.utc(now.year, now.month, 1);
-
-    // User counts
-    final studentRows = await _client
-        .from('profiles')
-        .select('id')
-        .eq('role', 'student');
-    final riderRows = await _client
-        .from('profiles')
-        .select('id')
-        .eq('role', 'rider');
-
-    // Standalone orders this month (delivery_group_id IS NULL excludes legs
-    // so multi-vendor checkouts are not counted multiple times).
-    final monthOrders = await _client
-        .from('orders')
-        .select('id, status, total_amount, created_at, rider_id')
-        .gte('created_at', startOfMonth.toIso8601String())
-        .filter('delivery_group_id', 'is', null);
-
-    // Delivery groups this month — each group is one checkout from the
-    // student's perspective, so we count it as one order.
-    final monthGroups = await _client
-        .from('delivery_groups')
-        .select('id, status, commitment_fee_total, created_at, rider_id')
-        .gte('created_at', startOfMonth.toIso8601String());
-
-    // Aggregate
-    int ordersToday = 0, ordersWeek = 0;
-    double revToday = 0, revWeek = 0, revMonth = 0;
-    int completed = 0, cancelled = 0;
-    final statusCounts = <String, int>{};
-    final itemFreq = <String, int>{};
-    final riderDeliveries = <String, int>{};
-
-    for (final row in monthOrders) {
-      final createdAt = DateTime.parse(row['created_at'] as String);
-      final amount = (row['total_amount'] as num).toDouble();
-      final status = row['status'] as String;
-      final riderId = row['rider_id'] as String?;
-
-      revMonth += amount;
-      if (createdAt.isAfter(startOfWeek)) {
-        ordersWeek++;
-        revWeek += amount;
-      }
-      if (createdAt.isAfter(startOfDay)) {
-        ordersToday++;
-        revToday += amount;
-      }
-      statusCounts[status] = (statusCounts[status] ?? 0) + 1;
-      if (status == 'completed') {
-        completed++;
-        if (riderId != null) {
-          riderDeliveries[riderId] = (riderDeliveries[riderId] ?? 0) + 1;
-        }
-      }
-      if (status == 'cancelled') cancelled++;
-    }
-
-    // Add delivery group counts (each group = one checkout).
-    for (final row in monthGroups) {
-      final createdAt = DateTime.parse(row['created_at'] as String);
-      // Use commitment_fee_total as the revenue figure for the group.
-      final amount = (row['commitment_fee_total'] as num?)?.toDouble() ?? 0;
-      final status = row['status'] as String;
-      final riderId = row['rider_id'] as String?;
-
-      revMonth += amount;
-      if (createdAt.isAfter(startOfWeek)) {
-        ordersWeek++;
-        revWeek += amount;
-      }
-      if (createdAt.isAfter(startOfDay)) {
-        ordersToday++;
-        revToday += amount;
-      }
-      if (status == 'completed') {
-        completed++;
-        if (riderId != null) {
-          riderDeliveries[riderId] = (riderDeliveries[riderId] ?? 0) + 1;
-        }
-      }
-      if (status == 'cancelled') cancelled++;
-    }
-
-    // Top-selling items (this month's completed order items)
-    final completedIds = monthOrders
-        .where((r) => r['status'] == 'completed')
-        .map((r) => r['id'] as String)
-        .toList();
-
-    if (completedIds.isNotEmpty) {
-      final itemRows = await _client
-          .from('order_items')
-          .select('product_name, quantity')
-          .inFilter('order_id', completedIds.take(200).toList());
-      for (final ir in itemRows) {
-        final name = ir['product_name'] as String;
-        final qty = ir['quantity'] as int? ?? 1;
-        itemFreq[name] = (itemFreq[name] ?? 0) + qty;
-      }
-    }
-
-    // Sort top items
-    final topItems = itemFreq.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    // Rider performance — resolve names
-    final riderPerf = <Map<String, dynamic>>[];
-    if (riderDeliveries.isNotEmpty) {
-      final riderIds = riderDeliveries.keys.toList();
-      final riderProfiles = await _client
-          .from('profiles')
-          .select('id, full_name')
-          .inFilter('id', riderIds);
-      final nameMap = {
-        for (final r in riderProfiles)
-          r['id'] as String: r['full_name'] as String? ?? 'Unknown'
-      };
-      for (final entry in riderDeliveries.entries) {
-        riderPerf.add({
-          'name': nameMap[entry.key] ?? 'Unknown',
-          'deliveries': entry.value,
-        });
-      }
-      riderPerf.sort(
-          (a, b) => (b['deliveries'] as int).compareTo(a['deliveries'] as int));
-    }
-
-    return {
-      'totalStudents': studentRows.length,
-      'totalRiders': riderRows.length,
-      'ordersToday': ordersToday,
-      'ordersThisWeek': ordersWeek,
-      'ordersThisMonth': monthOrders.length + monthGroups.length,
-      'revenueToday': revToday,
-      'revenueThisWeek': revWeek,
-      'revenueThisMonth': revMonth,
-      'completedCount': completed,
-      'cancelledCount': cancelled,
-      'byStatus': statusCounts,
-      'topItems': topItems.take(10).map((e) => {
-            'name': e.key,
-            'quantity': e.value,
-          }).toList(),
-      'riderPerformance': riderPerf,
-    };
+    final result = await _client.rpc('get_admin_analytics');
+    return Map<String, dynamic>.from(result as Map);
   }
 
   // ── Phase 6: Scheduled Orders ─────────────────────────────────────────
@@ -1045,8 +899,8 @@ class AdminService {
           .from('orders')
           .select()
           .not('scheduled_for', 'is', null)
-          .inFilter('status', ['placed', 'preparing'])
-          .order('scheduled_for', ascending: true);
+          .inFilter('status', ['placed', 'preparing']).order('scheduled_for',
+              ascending: true);
       return rows.map((m) => Order.fromMap(m)).toList();
     }
 
@@ -1062,8 +916,7 @@ class AdminService {
     try {
       final stream = _client
           .from('orders')
-          .stream(primaryKey: ['id'])
-          .order('scheduled_for', ascending: true);
+          .stream(primaryKey: ['id']).order('scheduled_for', ascending: true);
 
       await for (final _ in stream) {
         try {

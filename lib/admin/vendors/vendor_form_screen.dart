@@ -41,8 +41,8 @@ class _VendorFormScreenState extends ConsumerState<VendorFormScreen> {
     _descCtrl = TextEditingController(text: v?.description ?? '');
     _locationCtrl = TextEditingController(text: v?.location ?? '');
     _contactCtrl = TextEditingController(text: v?.contact ?? '');
-    _packPriceCtrl = TextEditingController(
-        text: (v?.packPrice ?? 200).toStringAsFixed(0));
+    _packPriceCtrl =
+        TextEditingController(text: (v?.packPrice ?? 200).toStringAsFixed(0));
     _isActive = v?.isActive ?? true;
     _imageUrl = v?.imageUrl;
   }
@@ -197,7 +197,7 @@ class _VendorFormScreenState extends ConsumerState<VendorFormScreen> {
 
               PrimaryButton(
                 label: isEditing ? 'Save Changes' : 'Add Vendor',
-                  icon: Icons.check,
+                icon: Icons.check,
                 isLoading: _isSaving,
                 onPressed: _save,
               ),

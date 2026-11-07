@@ -71,8 +71,7 @@ class AdminScheduledOrdersScreen extends ConsumerWidget {
                   Text(
                     'Pre-orders placed by students appear here.',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface
-                          .withValues(alpha: 0.5),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                     ),
                   ),
                 ],
@@ -166,8 +165,7 @@ class _ScheduledOrderCardState extends State<_ScheduledOrderCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final order = widget.order;
-    final isOverdue =
-        order.scheduledFor?.isBefore(DateTime.now()) ?? false;
+    final isOverdue = order.scheduledFor?.isBefore(DateTime.now()) ?? false;
 
     return Card(
       margin: const EdgeInsets.only(bottom: AppSpacing.cardGap),
@@ -205,15 +203,13 @@ class _ScheduledOrderCardState extends State<_ScheduledOrderCard> {
                   child: Text(
                     _countdown,
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color:
-                          isOverdue ? AppColors.error : AppColors.info,
+                      color: isOverdue ? AppColors.error : AppColors.info,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
               ],
             ),
-
             if (order.vendorName != null) ...[
               const SizedBox(height: 4),
               Text(
@@ -223,9 +219,7 @@ class _ScheduledOrderCardState extends State<_ScheduledOrderCard> {
                 ),
               ),
             ],
-
             const SizedBox(height: AppSpacing.sm),
-
             Row(
               children: [
                 const Icon(Icons.schedule_outlined, size: 14),
@@ -236,7 +230,6 @@ class _ScheduledOrderCardState extends State<_ScheduledOrderCard> {
                 ),
               ],
             ),
-
             if (order.deliveryLocation != null) ...[
               const SizedBox(height: 4),
               Row(
@@ -254,7 +247,6 @@ class _ScheduledOrderCardState extends State<_ScheduledOrderCard> {
                 ],
               ),
             ],
-
             if (order.isBulk) ...[
               const SizedBox(height: AppSpacing.sm),
               Container(
@@ -274,9 +266,7 @@ class _ScheduledOrderCardState extends State<_ScheduledOrderCard> {
                 ),
               ),
             ],
-
             const SizedBox(height: AppSpacing.md),
-
             Row(
               children: [
                 Text(
@@ -290,8 +280,8 @@ class _ScheduledOrderCardState extends State<_ScheduledOrderCard> {
                 if (order.status == OrderStatus.placed)
                   FilledButton(
                     onPressed: widget.onAdvance,
-                    style: FilledButton.styleFrom(
-                        minimumSize: const Size(0, 36)),
+                    style:
+                        FilledButton.styleFrom(minimumSize: const Size(0, 36)),
                     child: const Text('Start Preparing'),
                   )
                 else if (order.status == OrderStatus.preparing &&
@@ -314,8 +304,18 @@ class _ScheduledOrderCardState extends State<_ScheduledOrderCard> {
 
   String _formatDateTime(DateTime dt) {
     final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
     ];
     return '${dt.day} ${months[dt.month - 1]}, '
         '${dt.hour.toString().padLeft(2, '0')}:'

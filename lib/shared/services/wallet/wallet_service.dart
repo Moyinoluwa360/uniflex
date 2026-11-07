@@ -29,9 +29,7 @@ class WalletService {
         .order('created_at', ascending: false)
         .limit(limit);
 
-    return data
-        .map((m) => WalletTransaction.fromMap(m))
-        .toList();
+    return data.map((m) => WalletTransaction.fromMap(m)).toList();
   }
 
   /// Calls the `verify-paystack-payment` Edge Function with the given

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/models/delivery_group.dart';
+import '../../shared/models/order.dart';
 import '../../shared/models/support_conversation.dart';
 import '../../shared/models/support_message.dart';
 import '../../shared/services/auth/auth_providers.dart';
@@ -8,6 +10,10 @@ import '../../shared/services/support/support_chat_service.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/async/retry_section.dart';
+import '../../shared/widgets/chat/support_order_chip.dart';
+import '../orders/admin_order_details_screen.dart';
+import '../services/profile_basics.dart';
+import '../../shared/widgets/inputs/app_text_field.dart';
 
 /// Admin chat view for a specific student conversation.
 /// Shows student name + phone in the header, allows replying from any admin,
@@ -105,15 +111,18 @@ class _AdminSupportChatScreenState
     }
   }
 
+  /// Newest message at the bottom (WhatsApp order). Runs after the next
+  /// frame and again one frame later, once the list extent is final.
   void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    void jump() {
       if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-        );
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
       }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      jump();
+      WidgetsBinding.instance.addPostFrameCallback((_) => jump());
     });
   }
 
@@ -210,7 +219,7 @@ class _AdminSupportChatScreenState
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Expanded(
-                    child: TextField(
+                    child: AppTextField(
                       controller: _controller,
                       minLines: 1,
                       maxLines: 5,
@@ -223,8 +232,7 @@ class _AdminSupportChatScreenState
                           borderSide: BorderSide.none,
                         ),
                         filled: true,
-                        fillColor:
-                            theme.colorScheme.surfaceContainerHighest,
+                        fillColor: theme.colorScheme.surfaceContainerHighest,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: AppSpacing.md,
                           vertical: AppSpacing.sm,
@@ -280,57 +288,62 @@ class _StudentHeader extends ConsumerWidget implements PreferredSizeWidget {
   final VoidCallback? onResolve;
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  Size get preferredSize => const Size.fromHeight(68);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return FutureBuilder<Map<String, dynamic>?>(
-      future: ref
-          .read(supportChatServiceProvider)
-          .fetchStudentProfile(studentId),
-      builder: (context, snap) {
-        final profile = snap.data;
-        final fullName = profile?['full_name'] as String? ?? '—';
-        final nickname = profile?['nickname'] as String?;
-        final phone = profile?['phone'] as String?;
+    final profile = ref
+        .watch(adminProfileBasicsProvider(profileIdsKey([studentId])))
+        .valueOrNull?[studentId];
+    final theme = Theme.of(context);
+    final fullName = profile?.secondaryName;
+    final phone = profile?.phone;
 
-        return AppBar(
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                nickname != null ? '$nickname ($fullName)' : fullName,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: AppColors.pureWhite,
-                      fontWeight: FontWeight.w600,
-                    ),
-              ),
-              if (phone != null)
-                Text(
-                  phone,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: AppColors.pureWhite.withValues(alpha: 0.8),
-                      ),
-                ),
-            ],
+    return AppBar(
+      toolbarHeight: 68,
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            profile?.displayName('Student') ?? 'Student',
+            key: const ValueKey('chat-header-name'),
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: AppColors.pureWhite,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          foregroundColor: AppColors.pureWhite,
-          actions: [
-            if (onResolve != null)
-              TextButton.icon(
-                onPressed: onResolve,
-                icon: const Icon(Icons.check_circle_outline,
-                    color: AppColors.pureWhite, size: 16),
-                label: const Text(
-                  'Resolve',
-                  style: TextStyle(color: AppColors.pureWhite),
-                ),
+          if (fullName != null)
+            Text(
+              fullName,
+              key: const ValueKey('chat-header-full-name'),
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: AppColors.pureWhite.withValues(alpha: 0.9),
               ),
-          ],
-        );
-      },
+            ),
+          if (phone != null && phone.isNotEmpty)
+            Text(
+              phone,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: AppColors.pureWhite.withValues(alpha: 0.8),
+              ),
+            ),
+        ],
+      ),
+      backgroundColor: Theme.of(context).colorScheme.primary,
+      foregroundColor: AppColors.pureWhite,
+      actions: [
+        if (onResolve != null)
+          TextButton.icon(
+            onPressed: onResolve,
+            icon: const Icon(Icons.check_circle_outline,
+                color: AppColors.pureWhite, size: 16),
+            label: const Text(
+              'Resolve',
+              style: TextStyle(color: AppColors.pureWhite),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -363,15 +376,15 @@ class _AdminMessageListState extends ConsumerState<_AdminMessageList> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final msgsAsync = ref.watch(
-        conversationMessagesProvider(widget.conversationId));
+    final msgsAsync =
+        ref.watch(conversationMessagesProvider(widget.conversationId));
 
     return msgsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => RetrySection(
         message: 'Could not load messages.',
-        onRetry: () => ref.invalidate(
-            conversationMessagesProvider(widget.conversationId)),
+        onRetry: () =>
+            ref.invalidate(conversationMessagesProvider(widget.conversationId)),
       ),
       data: (msgs) {
         if (!_calledOnLoaded) {
@@ -405,14 +418,19 @@ class _AdminMessageListState extends ConsumerState<_AdminMessageList> {
           itemCount: msgs.length,
           itemBuilder: (context, i) {
             final msg = msgs[i];
-            final showDate = i == 0 ||
-                !_sameDay(msgs[i - 1].createdAt, msg.createdAt);
+            final showDate =
+                i == 0 || !_sameDay(msgs[i - 1].createdAt, msg.createdAt);
             final isMe = msg.senderId == widget.currentUserId;
 
             return Column(
               children: [
                 if (showDate) _AdminDateSep(date: msg.createdAt),
-                _AdminBubble(message: msg, isMe: isMe),
+                _AdminBubble(
+                  message: msg,
+                  isMe: isMe,
+                  onOpenRef:
+                      msg.attachedRefId == null ? null : () => _openRef(msg),
+                ),
               ],
             );
           },
@@ -423,6 +441,43 @@ class _AdminMessageListState extends ConsumerState<_AdminMessageList> {
 
   bool _sameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
+
+  /// Tapping the order chip opens that order's admin details: the delivery
+  /// group for a delivery, the order itself for an errand / pickup.
+  Future<void> _openRef(SupportMessage msg) async {
+    final service = ref.read(supportChatServiceProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      Widget? screen;
+      if (msg.deliveryGroupId != null) {
+        final row = await service.fetchDeliveryGroup(msg.deliveryGroupId!);
+        if (row != null) {
+          screen =
+              AdminOrderDetailsScreen.group(group: DeliveryGroup.fromMap(row));
+        }
+      } else if (msg.orderId != null) {
+        final row = await service.fetchOrder(msg.orderId!);
+        if (row != null) {
+          screen = AdminOrderDetailsScreen.order(order: Order.fromMap(row));
+        }
+      }
+      if (screen == null) {
+        messenger.showSnackBar(const SnackBar(
+          content: Text('That order could not be found.'),
+          behavior: SnackBarBehavior.floating,
+        ));
+        return;
+      }
+      final target = screen;
+      await navigator.push(MaterialPageRoute(builder: (_) => target));
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Could not open that order. Please try again.'),
+        behavior: SnackBarBehavior.floating,
+      ));
+    }
+  }
 }
 
 class _AdminDateSep extends StatelessWidget {
@@ -470,10 +525,17 @@ class _AdminDateSep extends StatelessWidget {
 }
 
 class _AdminBubble extends StatelessWidget {
-  const _AdminBubble({required this.message, required this.isMe});
+  const _AdminBubble({
+    required this.message,
+    required this.isMe,
+    this.onOpenRef,
+  });
 
   final SupportMessage message;
   final bool isMe;
+
+  /// Opens the attached order; null when the message has none.
+  final VoidCallback? onOpenRef;
 
   @override
   Widget build(BuildContext context) {
@@ -481,8 +543,7 @@ class _AdminBubble extends StatelessWidget {
     final bubbleColor = isMe
         ? theme.colorScheme.primary
         : theme.colorScheme.surfaceContainerHighest;
-    final textColor =
-        isMe ? AppColors.pureWhite : theme.colorScheme.onSurface;
+    final textColor = isMe ? AppColors.pureWhite : theme.colorScheme.onSurface;
     final labelColor = isMe
         ? AppColors.pureWhite.withValues(alpha: 0.7)
         : theme.colorScheme.onSurface.withValues(alpha: 0.5);
@@ -529,15 +590,18 @@ class _AdminBubble extends StatelessWidget {
                   ),
                 ),
               ),
-              if (message.orderId != null)
+              if (message.attachedRefId != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-                  child: _OrderChip(orderId: message.orderId!),
+                  child: SupportOrderChip(
+                    refId: message.attachedRefId!,
+                    foreground: textColor,
+                    onTap: onOpenRef,
+                  ),
                 ),
               Text(
                 message.body,
-                style:
-                    theme.textTheme.bodyMedium?.copyWith(color: textColor),
+                style: theme.textTheme.bodyMedium?.copyWith(color: textColor),
               ),
               const SizedBox(height: 2),
               Text(
@@ -558,43 +622,5 @@ class _AdminBubble extends StatelessWidget {
     final h = dt.hour.toString().padLeft(2, '0');
     final m = dt.minute.toString().padLeft(2, '0');
     return '$h:$m';
-  }
-}
-
-// ── Order chip (admin view) ───────────────────────────────────────────────────
-
-class _OrderChip extends StatelessWidget {
-  const _OrderChip({required this.orderId});
-  final String orderId;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final shortId = orderId.substring(0, 8).toUpperCase();
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppColors.pureWhite.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-        border: Border.all(
-            color: AppColors.pureWhite.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.receipt_long_outlined,
-              size: 12, color: AppColors.pureWhite),
-          const SizedBox(width: 4),
-          Text(
-            'Order #$shortId',
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: AppColors.pureWhite,
-              fontSize: 10,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
