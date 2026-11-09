@@ -44,6 +44,7 @@ abstract final class AppIcons {
   static const IconData arrowDown = Icons.arrow_downward;
   static const IconData arrowUp = Icons.arrow_upward;
   static const IconData chevronRight = Icons.chevron_right;
+  static const IconData chevronLeft = Icons.chevron_left;
   static const IconData chevronDown = Icons.expand_more;
   static const IconData chevronUp = Icons.expand_less;
   static const IconData refresh = Icons.refresh;
@@ -66,6 +67,12 @@ abstract final class AppIcons {
   static const IconData location = Icons.location_on_outlined;
   static const IconData phone = Icons.phone_outlined;
   static const IconData mail = Icons.mail_outline;
+  // Form-field leading icons (UI Polish 3). Same glyphs the fields used before.
+  static const IconData idCard = Icons.badge_outlined;
+  static const IconData atSign = Icons.alternate_email;
+  static const IconData calendar = Icons.calendar_today_outlined;
+  static const IconData sms = Icons.sms_outlined;
+  static const IconData pin = Icons.pin_outlined;
   static const IconData lock = Icons.lock_outline;
   static const IconData chat = Icons.chat_bubble_outline;
   static const IconData clock = Icons.schedule_outlined;

@@ -13,8 +13,9 @@ logic, models, SQL, Edge Functions, payment/PIN or fee logic, or status values.
 - Chart colours: `context.colors.chartFees / chartFood / chartPalette`.
 - Cards: plain `surface` + `border`. No tinted fills, no coloured glow.
 - Green (`brand`/`brandText`) = main action, money in, live status.
-- Orange (`promoOrange*`) = ads/promos and the cart button ONLY. Never for
-  spending amounts or status.
+- Orange (`promoOrange*`) = ads/promos, the cart button, the Home bell dot and
+  the auth header's accent circle (`context.colors.authAccent`). Never for
+  spending amounts or status, and **never text on the orange circle**.
 - Red = warnings (`dangerText`). Solid red (`dangerSolid`) only on the final
   confirm inside `AppDialog` (`destructive: true`).
 - Purple and blue are retired. Status = dot + words, never a coloured pill.
@@ -26,6 +27,12 @@ logic, models, SQL, Edge Functions, payment/PIN or fee logic, or status values.
 - Buttons: `AppButton` (primary / secondary / text / quietDanger / disabled).
   **Every Cancel is `quietDanger`.** Never a raw `FilledButton`/`ElevatedButton`
   for a new screen. `PrimaryButton`/`SecondaryButton` are thin wrappers.
+- Auth / sign-up (UI Polish 3): `AppAuthScaffold` (header + body scroll, one
+  pinned `AppPinnedFooter`), `AppAuthHeader.login/.compact`, `AppStepProgress`,
+  `AppTextField(large: true)` (56 px; label shows inside the box, a separate hint
+  becomes the helper line), `AppPickerField`/`AppDropdownField`, `AppOtpField`
+  (boxes over ONE hidden field), `AppFormSection`, `AppChoiceChip`,
+  `AppCheckboxRow`. Header sub-text uses `authSub`.
 - `AppCard`, `AppListGroup`+`AppListRow` (plain 22px icon, no coloured box),
   `AppSegmentedTabs`, `AppStatusLabel`, `AppIconButton`, `AppSectionLabel`,
   `AppAvatar`, `AppDialog`, `AppSheet`, `AppInlineNotice`, `TierHeader`,

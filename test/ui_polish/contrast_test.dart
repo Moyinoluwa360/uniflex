@@ -114,6 +114,37 @@ void main() {
         }
       });
 
+      test('UI Polish 3: auth header text on the green gradient', () {
+        // Worst case = the lightest stop of the gradient.
+        final stops = c.homeHeaderGradient.colors;
+        for (var i = 0; i < stops.length; i++) {
+          check('headerText on gradient stop $i', c.headerText, stops[i]);
+          check('authSub on gradient stop $i', c.authSub, stops[i]);
+        }
+      });
+
+      test('UI Polish 3: glass chip label on the gradient', () {
+        for (final bg in c.homeHeaderGradient.colors) {
+          final chip = _over(c.headerPanelFill, bg);
+          final r = ratio(c.headerText, chip);
+          // ignore: avoid_print
+          print('  [$name] chip label on glass over stop (info)'.padRight(52) +
+              r.toStringAsFixed(2));
+        }
+      });
+
+      test('UI Polish 3: input pairs', () {
+        check('hint (textTertiary) on surface', c.textTertiary, c.surface);
+        check('input text on surface', c.textPrimary, c.surface);
+        check('locked text (textSecondary) on surfaceRaised', c.textSecondary,
+            c.surfaceRaised);
+        check('error text on background', c.dangerText, c.background);
+        check('focused icon (brandText) on surface', c.brandText, c.surface);
+        check('selected chip label (brandText) on surface', c.brandText,
+            c.surface);
+        check('checked box tick (onBrand) on brand', c.onBrand, c.brand);
+      });
+
       test('tier text on its own wash', () {
         final brightness = c.isDark ? Brightness.dark : Brightness.light;
         for (final t in TierTokens.known) {

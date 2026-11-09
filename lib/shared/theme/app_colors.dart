@@ -12,7 +12,8 @@ import 'package:flutter/material.dart';
 /// Colour rules (enforced by `test/ui_guard_test.dart`):
 ///  * Cards are plain `surface` + `border`. No tinted fills, no glow.
 ///  * Green (`brand`) = the main action, positive money, "live" status.
-///  * Orange (`promoOrange*`) = ads/promos and the cart button ONLY.
+///  * Orange (`promoOrange*`) = ads/promos, the cart button and the auth
+///    header's accent circle (`authAccent`). Never text on it.
 ///  * Red = warnings (`dangerText`). `dangerSolid` only on the final confirm
 ///    inside a dialog. Purple and blue are retired.
 ///  * Status is a dot + words (`AppStatusLabel`), never a coloured pill.
@@ -233,6 +234,27 @@ class AppColors extends ThemeExtension<AppColors> {
 
   /// Wallet card text/ink (always on dark green).
   static const Color onWallet = Color(0xFFFFFFFF);
+
+  /// Auth header accent circle (UI Polish 3): the promo-orange gradient
+  /// (#F26A1B → #D9480F, 135°). Never put text on it (white on #F26A1B is
+  /// only about 3:1). Orange is allowed here, on promos, on the cart button
+  /// and on the Home bell dot — nowhere else.
+  LinearGradient get authAccent => promoOrangeGradient;
+
+  /// Secondary text on the auth header. Dark: the Home header's 78% ink.
+  /// Light: full white, because white at 88% on the lightest green
+  /// (#08855F) is only ~3.9:1 and this text must reach 4.5:1.
+  Color get authSub => isDark ? headerTextSecondary : headerText;
+
+  /// Soft concentric halo rings around the auth accent circle (white 6% / 4%).
+  static const Color authHaloInner = Color(0x0FFFFFFF);
+  static const Color authHaloOuter = Color(0x0AFFFFFF);
+
+  /// Plain disc, bottom-left of the auth header (white 5%).
+  static const Color authDisc = Color(0x0DFFFFFF);
+
+  /// Upcoming step segments on the green header (white 22%).
+  static const Color authProgressTrack = Color(0x38FFFFFF);
 
   /// Home header base colour (dot borders sit on it).
   Color get headerSolid =>
