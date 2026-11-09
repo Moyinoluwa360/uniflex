@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+import '../theme/app_typography.dart';
 import '../widgets/accordions/app_accordion_card.dart';
 import '../widgets/async/retry_section.dart';
 import 'order_breakdown_models.dart';
@@ -74,15 +75,9 @@ class _OrderBreakdownViewState extends State<OrderBreakdownView> {
   @override
   Widget build(BuildContext context) {
     final vendors = widget.data.vendors;
-    final theme = Theme.of(context);
 
     if (vendors.isEmpty) {
-      return Text(
-        'No items',
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-        ),
-      );
+      return Text('No items', style: AppTypography.meta(context.colors));
     }
 
     if (vendors.length == 1) {
@@ -175,9 +170,7 @@ class _VendorBody extends StatelessWidget {
           padding: const EdgeInsets.only(left: 26, top: 2),
           child: Text(
             vendor.vendorLocation!,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-            ),
+            style: AppTypography.meta(context.colors),
           ),
         ));
       }
@@ -213,39 +206,48 @@ class _VendorBody extends StatelessWidget {
       ));
     }
 
-    // Plain lists — only when the vendor actually has such items.
+    // Plain lists — only when the vendor actually has such items. A hairline
+    // divider separates each section from whatever is above it.
+    var hasAbove = vendor.packs.isNotEmpty;
     if (vendor.items.isNotEmpty) {
       children.add(_PlainList(
-          title: 'Items', lines: vendor.items, showPrices: showPrices));
+          title: 'Items',
+          lines: vendor.items,
+          showPrices: showPrices,
+          divider: hasAbove));
+      hasAbove = true;
     }
     if (vendor.drinks.isNotEmpty) {
       children.add(_PlainList(
-          title: 'Drinks', lines: vendor.drinks, showPrices: showPrices));
+          title: 'Drinks',
+          lines: vendor.drinks,
+          showPrices: showPrices,
+          divider: hasAbove));
+      hasAbove = true;
     }
     if (vendor.others.isNotEmpty) {
       children.add(_PlainList(
-          title: 'Others', lines: vendor.others, showPrices: showPrices));
+          title: 'Others',
+          lines: vendor.others,
+          showPrices: showPrices,
+          divider: hasAbove));
     }
 
     if (vendor.isEmpty) {
-      children.add(Text(
-        'No items',
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-        ),
-      ));
+      children.add(Text('No items', style: AppTypography.meta(context.colors)));
     } else if (showPrices) {
+      final c = context.colors;
       children.add(const SizedBox(height: AppSpacing.sm));
       children.add(Row(
         children: [
           Expanded(
-            child: Text('Vendor total', style: theme.textTheme.labelMedium),
+            child: Text('Vendor total', style: AppTypography.meta(c)),
           ),
           Text(
             '₦${vendor.vendorTotal.toStringAsFixed(0)}',
             key: ValueKey('vendor-total-$vendorKey'),
-            style: theme.textTheme.labelLarge
-                ?.copyWith(fontWeight: FontWeight.w700),
+            style: AppTypography.tabular(
+                AppTypography.body(c).copyWith(fontWeight: FontWeight.w700)),
           ),
         ],
       ));
@@ -258,30 +260,41 @@ class _VendorBody extends StatelessWidget {
   }
 }
 
+/// One plain section (Items / Drinks / Others). Label 16/700 `textPrimary`,
+/// at least 12 px above it, and a hairline divider from the section above.
 class _PlainList extends StatelessWidget {
-  const _PlainList(
-      {required this.title, required this.lines, required this.showPrices});
+  const _PlainList({
+    required this.title,
+    required this.lines,
+    required this.showPrices,
+    this.divider = false,
+  });
 
   final String title;
   final List<BreakdownLine> lines;
   final bool showPrices;
+  final bool divider;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final c = context.colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (divider)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.sm),
+            child: Divider(
+                key: ValueKey('section-divider-$title'),
+                height: 1,
+                color: c.border),
+          ),
         Padding(
-          padding:
-              const EdgeInsets.only(top: AppSpacing.sm, bottom: AppSpacing.xs),
+          padding: const EdgeInsets.only(top: 14, bottom: AppSpacing.xs),
           child: Text(
             title,
-            style: theme.textTheme.labelSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
+            key: ValueKey('section-label-$title'),
+            style: AppTypography.body(c).copyWith(fontWeight: FontWeight.w700),
           ),
         ),
         for (final l in lines)
@@ -294,6 +307,9 @@ class _PlainList extends StatelessWidget {
   }
 }
 
+/// An item line: quantity 16/700 (tabular) then the name 16/500, both
+/// `textPrimary`; names wrap (up to three lines) instead of being cut off so
+/// nobody misses an item. The amount (when shown) is 14 `textSecondary`.
 class _LineRow extends StatelessWidget {
   const _LineRow({required this.name, required this.quantity, this.amount});
 
@@ -303,21 +319,37 @@ class _LineRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final c = context.colors;
+    final base = AppTypography.body(c); // 16/500 textPrimary
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: Text('$quantity× $name', style: theme.textTheme.bodyMedium),
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: '$quantity×',
+                    style: AppTypography.tabular(
+                        base.copyWith(fontWeight: FontWeight.w700)),
+                  ),
+                  TextSpan(text: ' $name'),
+                ],
+              ),
+              style: base,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          if (amount != null)
+          if (amount != null) ...[
+            const SizedBox(width: AppSpacing.sm),
             Text(
               '₦${amount!.toStringAsFixed(0)}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-              ),
+              style: AppTypography.tabular(AppTypography.meta(c)),
             ),
+          ],
         ],
       ),
     );
