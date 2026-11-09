@@ -4,9 +4,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
+import '../../theme/app_typography.dart';
 import '../../widgets/buttons/app_button.dart';
 import '../../widgets/inputs/app_text_field.dart';
-import '../../widgets/wordmark/uniflex_wordmark.dart';
+import '../../widgets/auth/app_auth_header.dart';
+import '../../widgets/auth/auth_scaffold.dart';
 import '../../services/auth/auth_providers.dart';
 import '../validators.dart';
 import 'create_account_screen.dart';
@@ -71,117 +73,111 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final secondaryInk = context.colors.textSecondary;
+    final c = context.colors;
 
-    return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.screenGutter),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: AppSpacing.lg),
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: UniflexWordmark(fontSize: 28),
+    return AppAuthScaffold(
+      header: const AppAuthHeader.login(
+        headline: 'Welcome back',
+        subtitle: 'Log in to order food, book deliveries and send errands.',
+        chips: [
+          AuthHeaderChip(AppIcons.food, 'Food'),
+          AuthHeaderChip(AppIcons.delivery, 'Deliveries'),
+          AuthHeaderChip(AppIcons.errand, 'Errands'),
+        ],
+      ),
+      caption: Text("Redeemer's University", style: AppTypography.caption(c)),
+      body: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 30),
+            if (_errorText != null) ...[
+              AppInlineNotice(isError: true, text: _errorText!),
+              const SizedBox(height: AppSpacing.md),
+            ],
+            AppTextField(
+              large: true,
+              controller: _emailController,
+              label: 'Email address',
+              scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 260),
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              prefixIcon: AppIcons.mail,
+              validator: AuthValidators.email,
+            ),
+            const SizedBox(height: 14),
+            AppTextField(
+              large: true,
+              controller: _passwordController,
+              label: 'Password',
+              scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 180),
+              obscureText: _obscurePassword,
+              textInputAction: TextInputAction.done,
+              prefixIcon: AppIcons.lock,
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _obscurePassword ? AppIcons.eye : AppIcons.eyeOff,
                 ),
-                const SizedBox(height: AppSpacing.lg),
-                Text('Welcome back', style: textTheme.headlineMedium),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  'Log in to order food, book deliveries and send errands.',
-                  style: textTheme.bodyMedium?.copyWith(color: secondaryInk),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                if (_errorText != null) ...[
-                  AppInlineNotice(isError: true, text: _errorText!),
-                  const SizedBox(height: AppSpacing.md),
-                ],
-                AppTextField(
-                  controller: _emailController,
-                  label: 'Email address',
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  prefixIcon: AppIcons.mail,
-                  validator: AuthValidators.email,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                AppTextField(
-                  controller: _passwordController,
-                  label: 'Password',
-                  obscureText: _obscurePassword,
-                  textInputAction: TextInputAction.done,
-                  prefixIcon: AppIcons.lock,
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword ? AppIcons.eye : AppIcons.eyeOff,
-                    ),
-                    onPressed: () =>
-                        setState(() => _obscurePassword = !_obscurePassword),
-                  ),
-                  validator: (v) =>
-                      (v ?? '').isEmpty ? 'Enter your password' : null,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: AppButton(
-                    label: 'Forgot password?',
-                    variant: AppButtonVariant.text,
-                    size: AppButtonSize.small,
-                    expand: false,
-                    onPressed: _isLoading
-                        ? null
-                        : () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const ForgotPasswordScreen(),
-                              ),
-                            ),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                AppButton(
-                  label: 'Log In',
-                  isLoading: _isLoading,
-                  icon: AppIcons.forward,
-                  onPressed: _submit,
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                Row(
-                  children: [
-                    const Expanded(child: Divider()),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
-                      ),
-                      child: Text(
-                        'New here?',
-                        style: textTheme.labelSmall?.copyWith(
-                          color: secondaryInk,
-                        ),
-                      ),
-                    ),
-                    const Expanded(child: Divider()),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                AppButton(
-                  variant: AppButtonVariant.secondary,
-                  label: 'Create Account',
-                  onPressed: _isLoading
-                      ? null
-                      : () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const CreateAccountScreen(),
-                            ),
+                onPressed: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
+              ),
+              validator: (v) =>
+                  (v ?? '').isEmpty ? 'Enter your password' : null,
+            ),
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerRight,
+              child: AppButton(
+                label: 'Forgot password?',
+                variant: AppButtonVariant.text,
+                size: AppButtonSize.small,
+                expand: false,
+                onPressed: _isLoading
+                    ? null
+                    : () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const ForgotPasswordScreen(),
                           ),
+                        ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            AppButton(
+              label: 'Log In',
+              isLoading: _isLoading,
+              icon: AppIcons.forward,
+              onPressed: _submit,
+            ),
+            const SizedBox(height: 26),
+            Row(
+              children: [
+                Expanded(child: Divider(height: 1, color: c.border)),
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                  child: Text(
+                    'New here?',
+                    style: AppTypography.sectionLabel(c)
+                        .copyWith(color: c.textTertiary),
+                  ),
                 ),
+                Expanded(child: Divider(height: 1, color: c.border)),
               ],
             ),
-          ),
+            const SizedBox(height: AppSpacing.md),
+            AppButton(
+              variant: AppButtonVariant.secondary,
+              label: 'Create Account',
+              onPressed: _isLoading
+                  ? null
+                  : () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const CreateAccountScreen(),
+                        ),
+                      ),
+            ),
+          ],
         ),
       ),
     );

@@ -103,6 +103,8 @@ void main() {
     ));
     await _settleSplash(tester);
 
+    // The new green header makes Login taller than this test window.
+    await tester.ensureVisible(find.text('Create Account'));
     await tester.tap(find.text('Create Account'));
     await tester.pumpAndSettle();
 
@@ -123,6 +125,8 @@ void main() {
     ));
     await _settleSplash(tester);
 
+    // The new green header makes Login taller than this test window.
+    await tester.ensureVisible(find.text('Create Account'));
     await tester.tap(find.text('Create Account'));
     await tester.pumpAndSettle();
 

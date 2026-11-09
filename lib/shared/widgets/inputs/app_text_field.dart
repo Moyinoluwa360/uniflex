@@ -72,6 +72,7 @@ class AppTextField extends StatefulWidget {
     this.autofillHints,
     this.showCursor,
     this.enableInteractiveSelection,
+    this.scrollPadding = const EdgeInsets.all(20),
   });
 
   final TextEditingController? controller;
@@ -112,6 +113,10 @@ class AppTextField extends StatefulWidget {
   final Iterable<String>? autofillHints;
   final bool? showCursor;
   final bool? enableInteractiveSelection;
+
+  /// Extra room kept visible around the field when it scrolls into view
+  /// above the keyboard (a screen can ask for room to also show its button).
+  final EdgeInsets scrollPadding;
 
   @override
   State<AppTextField> createState() => _AppTextFieldState();
@@ -190,6 +195,7 @@ class _AppTextFieldState extends State<AppTextField> {
       onTap: w.onTap,
       autofillHints: w.autofillHints,
       showCursor: w.showCursor,
+      scrollPadding: w.scrollPadding,
       enableInteractiveSelection: w.enableInteractiveSelection,
       errorBuilder: large ? _errorRow : null,
       controller: _controller,
