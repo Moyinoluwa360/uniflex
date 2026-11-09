@@ -4,10 +4,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/auth/auth_providers.dart';
 import '../../theme/app_colors.dart';
-import '../../theme/app_spacing.dart';
+import '../../theme/app_typography.dart';
 import '../../widgets/buttons/app_button.dart';
 import '../../widgets/inputs/app_text_field.dart';
-import '../../widgets/progress/onboarding_progress_bar.dart';
+import '../../widgets/auth/app_auth_header.dart';
+import '../../widgets/auth/auth_scaffold.dart';
 import '../signup/signup_draft.dart';
 import '../signup/signup_flow_controller.dart';
 import '../signup/signup_widgets.dart';
@@ -166,131 +167,121 @@ class _SignupDetailsStepState extends State<SignupDetailsStep> {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final secondaryInk = context.colors.textSecondary;
+    final c = context.colors;
     final busy = _c.busy;
 
-    return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.screenGutter),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+    return AppAuthScaffold(
+      header: AppAuthHeader.compact(
+        title: 'Create your\naccount',
+        subtitle: 'Food, deliveries and errands across campus. '
+            'Takes about a minute.',
+        onBack: () => Navigator.of(context).maybePop(),
+        step: 1,
+        totalSteps: 3,
+        stepLabel: '1 / 3',
+      ),
+      body: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 26),
+            if (_c.error != null) SignupErrorBanner(_c.error!),
+            AppTextField(
+              large: true,
+              controller: _emailController,
+              label: 'Email address',
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              prefixIcon: AppIcons.mail,
+              validator: AuthValidators.email,
+            ),
+            const SizedBox(height: 10),
+            AppTextField(
+              large: true,
+              controller: _passwordController,
+              label: 'Password',
+              hint: '8+ characters, at least one number',
+              obscureText: _obscurePassword,
+              textInputAction: TextInputAction.next,
+              prefixIcon: AppIcons.lock,
+              suffixIcon: IconButton(
+                icon: Icon(_obscurePassword ? AppIcons.eye : AppIcons.eyeOff),
+                onPressed: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
+              ),
+              validator: AuthValidators.password,
+            ),
+            const SizedBox(height: 10),
+            AppTextField(
+              large: true,
+              controller: _confirmPasswordController,
+              label: 'Confirm password',
+              obscureText: _obscureConfirm,
+              textInputAction: TextInputAction.next,
+              prefixIcon: AppIcons.lock,
+              suffixIcon: IconButton(
+                icon: Icon(_obscureConfirm ? AppIcons.eye : AppIcons.eyeOff),
+                onPressed: () =>
+                    setState(() => _obscureConfirm = !_obscureConfirm),
+              ),
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Confirm your password';
+                if (v != _passwordController.text) {
+                  return 'Passwords do not match';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 10),
+            AppTextField(
+              large: true,
+              controller: _phoneController,
+              label: 'Phone number',
+              hint: '08012345678',
+              keyboardType: TextInputType.phone,
+              textInputAction: TextInputAction.done,
+              prefixIcon: AppIcons.phone,
+              validator: AuthValidators.phone,
+            ),
+          ],
+        ),
+      ),
+      footer: AppPinnedFooter(
+        primary: AppButton(
+          label: 'Continue',
+          icon: AppIcons.forward,
+          isLoading: busy,
+          onPressed: busy ? null : _submit,
+        ),
+        secondary: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                OnboardingProgressHeader(
-                  step: 1,
-                  totalSteps: 3,
-                  onBack: () => Navigator.of(context).maybePop(),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                Text('Create your\naccount', style: textTheme.headlineMedium),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  'Food, deliveries and errands across campus. '
-                  'Takes about a minute.',
-                  style: textTheme.bodyMedium?.copyWith(color: secondaryInk),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                if (_c.error != null) SignupErrorBanner(_c.error!),
-                AppTextField(
-                  controller: _emailController,
-                  label: 'Email address',
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  prefixIcon: AppIcons.mail,
-                  validator: AuthValidators.email,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                AppTextField(
-                  controller: _passwordController,
-                  label: 'Password',
-                  hint: '8+ characters, at least one number',
-                  obscureText: _obscurePassword,
-                  textInputAction: TextInputAction.next,
-                  prefixIcon: AppIcons.lock,
-                  suffixIcon: IconButton(
-                    icon:
-                        Icon(_obscurePassword ? AppIcons.eye : AppIcons.eyeOff),
-                    onPressed: () =>
-                        setState(() => _obscurePassword = !_obscurePassword),
-                  ),
-                  validator: AuthValidators.password,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                AppTextField(
-                  controller: _confirmPasswordController,
-                  label: 'Confirm password',
-                  obscureText: _obscureConfirm,
-                  textInputAction: TextInputAction.next,
-                  prefixIcon: AppIcons.lock,
-                  suffixIcon: IconButton(
-                    icon:
-                        Icon(_obscureConfirm ? AppIcons.eye : AppIcons.eyeOff),
-                    onPressed: () =>
-                        setState(() => _obscureConfirm = !_obscureConfirm),
-                  ),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Confirm your password';
-                    if (v != _passwordController.text) {
-                      return 'Passwords do not match';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: AppSpacing.md),
-                AppTextField(
-                  controller: _phoneController,
-                  label: 'Phone number',
-                  hint: '08012345678',
-                  keyboardType: TextInputType.phone,
-                  textInputAction: TextInputAction.done,
-                  prefixIcon: AppIcons.phone,
-                  validator: AuthValidators.phone,
-                ),
-                const SizedBox(height: AppSpacing.xl),
+                Text('Already have an account? ', style: AppTypography.meta(c)),
                 AppButton(
-                  label: 'Continue',
-                  icon: AppIcons.forward,
-                  isLoading: busy,
-                  onPressed: busy ? null : _submit,
+                  label: 'Log in',
+                  variant: AppButtonVariant.text,
+                  size: AppButtonSize.small,
+                  expand: false,
+                  onPressed:
+                      busy ? null : () => Navigator.of(context).maybePop(),
                 ),
-                const SizedBox(height: AppSpacing.lg),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Already have an account? ',
-                      style:
-                          textTheme.bodyMedium?.copyWith(color: secondaryInk),
-                    ),
-                    AppButton(
-                      label: 'Log in',
-                      variant: AppButtonVariant.text,
-                      size: AppButtonSize.small,
-                      expand: false,
-                      onPressed:
-                          busy ? null : () => Navigator.of(context).maybePop(),
-                    ),
-                  ],
-                ),
-                if (_c.hasProgress) ...[
-                  const SizedBox(height: AppSpacing.sm),
-                  Center(
-                    child: AppButton(
-                      key: const ValueKey('start-over'),
-                      label: 'Start over',
-                      variant: AppButtonVariant.text,
-                      size: AppButtonSize.small,
-                      expand: false,
-                      onPressed: busy ? null : _startOver,
-                    ),
-                  ),
-                ],
               ],
             ),
-          ),
+            if (_c.hasProgress)
+              AppButton(
+                key: const ValueKey('start-over'),
+                label: 'Start over',
+                variant: AppButtonVariant.text,
+                size: AppButtonSize.small,
+                expand: false,
+                onPressed: busy ? null : _startOver,
+              ),
+          ],
         ),
       ),
     );

@@ -73,6 +73,7 @@ abstract final class AppIcons {
   static const IconData calendar = Icons.calendar_today_outlined;
   static const IconData sms = Icons.sms_outlined;
   static const IconData pin = Icons.pin_outlined;
+  static const IconData building = Icons.apartment_outlined;
   static const IconData lock = Icons.lock_outline;
   static const IconData chat = Icons.chat_bubble_outline;
   static const IconData clock = Icons.schedule_outlined;

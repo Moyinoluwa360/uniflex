@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -47,13 +49,13 @@ class AppOtpField extends StatefulWidget {
   State<AppOtpField> createState() => _AppOtpFieldState();
 }
 
-class _AppOtpFieldState extends State<AppOtpField>
-    with SingleTickerProviderStateMixin {
+class _AppOtpFieldState extends State<AppOtpField> {
   FocusNode? _ownNode;
-  late final AnimationController _blink = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1000),
-  )..repeat();
+
+  // Caret blink: a plain timer that only runs while the field has focus (like
+  // the platform caret), so nothing animates — and tests can settle — otherwise.
+  Timer? _blinkTimer;
+  bool _caretOn = true;
 
   FocusNode get _node => widget.focusNode ?? (_ownNode ??= FocusNode());
 
@@ -61,7 +63,7 @@ class _AppOtpFieldState extends State<AppOtpField>
   void initState() {
     super.initState();
     widget.controller.addListener(_onText);
-    _node.addListener(_rebuild);
+    _node.addListener(_onFocus);
   }
 
   @override
@@ -76,14 +78,26 @@ class _AppOtpFieldState extends State<AppOtpField>
   @override
   void dispose() {
     widget.controller.removeListener(_onText);
-    (widget.focusNode ?? _ownNode)?.removeListener(_rebuild);
+    (widget.focusNode ?? _ownNode)?.removeListener(_onFocus);
+    _blinkTimer?.cancel();
     _ownNode?.dispose();
-    _blink.dispose();
     super.dispose();
   }
 
   void _rebuild() {
     if (mounted) setState(() {});
+  }
+
+  void _onFocus() {
+    _blinkTimer?.cancel();
+    _blinkTimer = null;
+    _caretOn = true;
+    if (_node.hasFocus) {
+      _blinkTimer = Timer.periodic(const Duration(milliseconds: 530), (_) {
+        if (mounted) setState(() => _caretOn = !_caretOn);
+      });
+    }
+    _rebuild();
   }
 
   void _onText() {
@@ -143,7 +157,7 @@ class _AppOtpFieldState extends State<AppOtpField>
                               showCaret:
                                   focused && i == active && i >= text.length,
                               hasError: hasError,
-                              blink: _blink,
+                              caretOn: _caretOn,
                               digitStyle: digitStyle,
                               colors: c,
                             ),
@@ -213,7 +227,7 @@ class _Box extends StatelessWidget {
     required this.isActive,
     required this.showCaret,
     required this.hasError,
-    required this.blink,
+    required this.caretOn,
     required this.digitStyle,
     required this.colors,
   });
@@ -222,7 +236,7 @@ class _Box extends StatelessWidget {
   final bool isActive;
   final bool showCaret;
   final bool hasError;
-  final Animation<double> blink;
+  final bool caretOn;
   final TextStyle digitStyle;
   final AppColors colors;
 
@@ -242,13 +256,8 @@ class _Box extends StatelessWidget {
         boxShadow: c.cardShadow,
       ),
       child: showCaret
-          ? FadeTransition(
-              opacity: blink.drive(
-                TweenSequence<double>([
-                  TweenSequenceItem(tween: ConstantTween(1.0), weight: 50),
-                  TweenSequenceItem(tween: ConstantTween(0.0), weight: 50),
-                ]),
-              ),
+          ? Opacity(
+              opacity: caretOn ? 1 : 0,
               child: Container(
                 key: const ValueKey('otp-caret'),
                 width: 2,

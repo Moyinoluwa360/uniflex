@@ -1,16 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
+import '../../theme/app_typography.dart';
 import '../../widgets/buttons/app_button.dart';
-import '../../widgets/inputs/app_text_field.dart';
-import '../../widgets/progress/onboarding_progress_bar.dart';
+import '../../widgets/auth/app_auth_header.dart';
+import '../../widgets/auth/auth_scaffold.dart';
+import '../../widgets/inputs/app_otp_field.dart';
 import '../signup/signup_api.dart';
 import '../signup/signup_flow_controller.dart';
-import '../signup/signup_widgets.dart';
 import '../../theme/app_icons.dart';
 
 /// Step 2 of sign-up — "Verify your phone". Shows the masked number and a
@@ -82,71 +82,65 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final secondaryInk = context.colors.textSecondary;
+    final c = context.colors;
     final busy = _c.busy;
     final wait = _c.cooldownRemaining;
     final error = _localError ?? _c.error;
 
-    return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.screenGutter),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              OnboardingProgressHeader(
-                step: 2,
-                totalSteps: 3,
-                onBack: busy ? null : _c.changeNumber,
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              Text('Verify your\nphone', style: textTheme.headlineMedium),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'We sent a 6-digit code to ${maskPhone(_c.phoneE164)}.',
-                key: const ValueKey('masked-phone'),
-                style: textTheme.bodyMedium?.copyWith(color: secondaryInk),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              if (error != null) SignupErrorBanner(error),
-              AppTextField(
-                controller: _codeController,
-                label: 'Verification code',
-                keyboardType: TextInputType.number,
-                textInputAction: TextInputAction.done,
-                prefixIcon: Icons.sms_outlined,
-                maxLength: 6,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              AppButton(
-                label: 'Verify',
-                icon: AppIcons.success,
-                isLoading: busy,
-                onPressed: busy ? null : _verify,
-              ),
-              const SizedBox(height: AppSpacing.md),
-              AppButton(
-                key: const ValueKey('resend'),
-                label: wait > 0
-                    ? 'Resend code in ${_countdown(wait)}'
-                    : 'Resend code',
-                variant: AppButtonVariant.text,
-                size: AppButtonSize.small,
-                expand: false,
-                onPressed: (busy || wait > 0) ? null : _resend,
-              ),
-              AppButton(
-                key: const ValueKey('change-number'),
-                label: 'Change number',
-                variant: AppButtonVariant.text,
-                size: AppButtonSize.small,
-                expand: false,
-                onPressed: busy ? null : _c.changeNumber,
-              ),
-            ],
+    return AppAuthScaffold(
+      header: AppAuthHeader.compact(
+        title: 'Verify your\nphone',
+        onBack: busy ? null : _c.changeNumber,
+        step: 2,
+        totalSteps: 3,
+        stepLabel: '2 / 3',
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 28),
+          Text(
+            'We sent a 6-digit code to ${maskPhone(_c.phoneE164)}.',
+            key: const ValueKey('masked-phone'),
+            style: AppTypography.meta(c),
           ),
+          const SizedBox(height: 20),
+          AppOtpField(
+            controller: _codeController,
+            length: 6,
+            errorText: error,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Center(
+            child: AppButton(
+              key: const ValueKey('resend'),
+              label: wait > 0
+                  ? 'Resend code in ${_countdown(wait)}'
+                  : 'Resend code',
+              variant: AppButtonVariant.text,
+              size: AppButtonSize.small,
+              expand: false,
+              onPressed: (busy || wait > 0) ? null : _resend,
+            ),
+          ),
+          Center(
+            child: AppButton(
+              key: const ValueKey('change-number'),
+              label: 'Change number',
+              variant: AppButtonVariant.text,
+              size: AppButtonSize.small,
+              expand: false,
+              onPressed: busy ? null : _c.changeNumber,
+            ),
+          ),
+        ],
+      ),
+      footer: AppPinnedFooter(
+        primary: AppButton(
+          label: 'Verify',
+          icon: AppIcons.success,
+          isLoading: busy,
+          onPressed: busy ? null : _verify,
         ),
       ),
     );

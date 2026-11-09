@@ -182,3 +182,35 @@ class AppCheckboxRow extends StatelessWidget {
     );
   }
 }
+
+/// Two short inputs side by side (equal width, 10 px apart) where a form
+/// already pairs them. Each half needs ~160 px to show its text, so when the
+/// row is too narrow for the current text size they stack instead (same order,
+/// 10 px apart) rather than cutting the text off.
+class AppFieldPair extends StatelessWidget {
+  const AppFieldPair({super.key, required this.left, required this.right});
+
+  final Widget left;
+  final Widget right;
+
+  @override
+  Widget build(BuildContext context) {
+    final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
+    return LayoutBuilder(builder: (context, cons) {
+      if (cons.maxWidth / scale < 320) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [left, const SizedBox(height: 10), right],
+        );
+      }
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: left),
+          const SizedBox(width: 10),
+          Expanded(child: right),
+        ],
+      );
+    });
+  }
+}

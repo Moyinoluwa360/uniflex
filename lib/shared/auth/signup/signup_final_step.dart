@@ -5,9 +5,13 @@ import 'package:flutter/services.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
+import '../../theme/app_typography.dart';
 import '../../widgets/buttons/app_button.dart';
+import '../../widgets/auth/app_auth_header.dart';
+import '../../widgets/auth/auth_scaffold.dart';
+import '../../widgets/inputs/app_form_parts.dart';
+import '../../widgets/inputs/app_picker_field.dart';
 import '../../widgets/inputs/app_text_field.dart';
-import '../../widgets/progress/onboarding_progress_bar.dart';
 import '../validators.dart';
 import 'signup_draft.dart';
 import 'signup_flow_controller.dart';
@@ -236,165 +240,140 @@ class _SignupFinalStepState extends State<SignupFinalStep> {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final secondaryInk = context.colors.textSecondary;
+    final c = context.colors;
     final busy = _c.busy;
     final banner = _localError ?? _c.error;
 
-    return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.screenGutter),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                OnboardingProgressHeader(
-                  step: 3,
-                  totalSteps: 3,
-                  // Leaving keeps the draft; "Create account" resumes here.
-                  onBack: () => Navigator.of(context).maybePop(),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                Text('Complete your\nprofile', style: textTheme.headlineMedium),
-                const SizedBox(height: AppSpacing.sm),
-                Row(children: [
-                  Icon(AppIcons.success,
-                      size: 16, color: context.colors.brandText),
-                  const SizedBox(width: AppSpacing.xs),
-                  Text('Phone verified',
-                      style:
-                          textTheme.bodySmall?.copyWith(color: secondaryInk)),
-                ]),
-                const SizedBox(height: AppSpacing.xl),
-                if (banner != null) SignupErrorBanner(banner),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: AppTextField(
-                        controller: _nickname,
-                        label: 'Nickname',
-                        prefixIcon: Icons.alternate_email,
-                        textInputAction: TextInputAction.next,
-                        suffixIcon: _statusIcon(_nickCheck.state),
-                        errorText:
-                            _liveError(_nickCheck.state, 'Nickname is taken'),
-                        onChanged: (v) {
-                          _nickCheck.input(v);
-                          _saveSoon();
-                        },
-                        validator: (v) =>
-                            AuthValidators.required(v, fieldName: 'a nickname'),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: InkWell(
-                        onTap: _pickDob,
-                        child: InputDecorator(
-                          decoration: InputDecoration(
-                            labelText: 'Date of birth',
-                            suffixIcon:
-                                const Icon(Icons.calendar_today_outlined),
-                            errorText:
-                                _dobError ? 'Select your date of birth' : null,
-                          ),
-                          child: Text(_dob == null
-                              ? 'Date of birth'
-                              : _formatDate(_dob!)),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.md),
-                AppTextField(
-                  controller: _fullName,
-                  label: 'Full name',
-                  hint: 'As written on your ID card',
-                  prefixIcon: Icons.badge_outlined,
-                  textInputAction: TextInputAction.next,
-                  onChanged: (_) => _saveSoon(),
-                  validator: (v) =>
-                      AuthValidators.required(v, fieldName: 'your full name'),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                AppTextField(
-                  controller: _matric,
-                  label: 'Matric number (optional)',
-                  hint: 'RUN / CMP / 22 / 1234',
-                  prefixIcon: Icons.badge_outlined,
-                  textInputAction: TextInputAction.next,
-                  suffixIcon: _statusIcon(_matricCheck.state),
-                  errorText: _liveError(_matricCheck.state,
-                      'This matric number is already registered'),
-                  onChanged: (v) {
-                    _matricCheck.input(v);
-                    _saveSoon();
-                  },
-                ),
-                const SizedBox(height: AppSpacing.md),
-                DropdownButtonFormField<String>(
-                  initialValue: _school,
-                  decoration:
-                      const InputDecoration(labelText: 'Region / School'),
-                  items: [
-                    for (final s in _availableSchools)
-                      DropdownMenuItem(value: s, child: Text(s)),
-                  ],
-                  onChanged: (v) {
-                    setState(() => _school = v ?? _school);
-                    _saveSoon();
-                  },
-                ),
-                const SizedBox(height: AppSpacing.md),
-                AppTextField(
-                  controller: _referral,
-                  label: 'Referral code',
-                  hint: 'FLEX500 (optional)',
-                  prefixIcon: Icons.card_giftcard_outlined,
-                  textInputAction: TextInputAction.done,
-                  suffixIcon: _statusIcon(_referralCheck.state),
-                  errorText:
-                      _liveError(_referralCheck.state, "That code isn't valid"),
-                  onChanged: (v) {
-                    _referralCheck.input(v);
-                    _saveSoon();
-                  },
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                Text('Transaction PIN', style: textTheme.titleSmall),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  "You'll enter this 4-digit PIN to confirm every order.",
-                  style: textTheme.bodySmall?.copyWith(color: secondaryInk),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Row(
-                  children: [
-                    Expanded(child: _pinField(_pin, 'PIN')),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(child: _pinField(_pinConfirm, 'Confirm PIN')),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                AppButton(
-                  label: 'Finish setup',
-                  icon: AppIcons.success,
-                  isLoading: busy,
-                  onPressed: busy ? null : _submit,
-                ),
-              ],
+    return AppAuthScaffold(
+      header: AppAuthHeader.compact(
+        title: 'Complete your\nprofile',
+        subtitleWidget: Row(children: [
+          Icon(AppIcons.success, size: 16, color: c.authSub),
+          const SizedBox(width: AppSpacing.xs),
+          const Text('Phone verified'),
+        ]),
+        // Leaving keeps the draft; "Create account" resumes here.
+        onBack: () => Navigator.of(context).maybePop(),
+        step: 3,
+        totalSteps: 3,
+        stepLabel: '3 / 3',
+      ),
+      body: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 22),
+            if (banner != null) SignupErrorBanner(banner),
+            AppFieldPair(
+              left: AppTextField(
+                large: true,
+                controller: _nickname,
+                label: 'Nickname',
+                textInputAction: TextInputAction.next,
+                suffixIcon: _statusIcon(_nickCheck.state),
+                errorText: _liveError(_nickCheck.state, 'Nickname is taken'),
+                onChanged: (v) {
+                  _nickCheck.input(v);
+                  _saveSoon();
+                },
+                validator: (v) =>
+                    AuthValidators.required(v, fieldName: 'a nickname'),
+              ),
+              right: AppPickerField(
+                placeholder: 'Date of birth',
+                valueText: _dob == null ? null : _formatDate(_dob!),
+                trailingIcon: AppIcons.calendar,
+                errorText: _dobError ? 'Select your date of birth' : null,
+                onTap: _pickDob,
+              ),
             ),
-          ),
+            const SizedBox(height: 10),
+            AppTextField(
+              large: true,
+              controller: _fullName,
+              label: 'Full name',
+              hint: 'As written on your ID card',
+              prefixIcon: AppIcons.idCard,
+              textInputAction: TextInputAction.next,
+              onChanged: (_) => _saveSoon(),
+              validator: (v) =>
+                  AuthValidators.required(v, fieldName: 'your full name'),
+            ),
+            const SizedBox(height: 10),
+            AppTextField(
+              large: true,
+              controller: _matric,
+              label: 'Matric number (optional)',
+              hint: 'RUN / CMP / 22 / 1234',
+              prefixIcon: AppIcons.idCard,
+              textInputAction: TextInputAction.next,
+              suffixIcon: _statusIcon(_matricCheck.state),
+              errorText: _liveError(_matricCheck.state,
+                  'This matric number is already registered'),
+              onChanged: (v) {
+                _matricCheck.input(v);
+                _saveSoon();
+              },
+            ),
+            const SizedBox(height: 10),
+            AppDropdownField<String>(
+              label: 'Region / School',
+              leadingIcon: AppIcons.building,
+              value: _school,
+              items: [
+                for (final s in _availableSchools) AppDropdownItem(s, s),
+              ],
+              onChanged: (v) {
+                setState(() => _school = v);
+                _saveSoon();
+              },
+            ),
+            const SizedBox(height: 10),
+            AppTextField(
+              large: true,
+              controller: _referral,
+              label: 'Referral code',
+              hint: 'FLEX500 (optional)',
+              prefixIcon: AppIcons.gift,
+              textInputAction: TextInputAction.done,
+              suffixIcon: _statusIcon(_referralCheck.state),
+              errorText:
+                  _liveError(_referralCheck.state, "That code isn't valid"),
+              onChanged: (v) {
+                _referralCheck.input(v);
+                _saveSoon();
+              },
+            ),
+            const SizedBox(height: 22),
+            const AppFormSection(title: 'Transaction PIN'),
+            Padding(
+              padding: const EdgeInsets.only(left: 2, bottom: 10),
+              child: Text(
+                "You'll enter this 4-digit PIN to confirm every order.",
+                style: AppTypography.meta(c),
+              ),
+            ),
+            AppFieldPair(
+              left: _pinField(_pin, 'PIN'),
+              right: _pinField(_pinConfirm, 'Confirm PIN'),
+            ),
+          ],
+        ),
+      ),
+      footer: AppPinnedFooter(
+        primary: AppButton(
+          label: 'Finish setup',
+          icon: AppIcons.success,
+          isLoading: busy,
+          onPressed: busy ? null : _submit,
         ),
       ),
     );
   }
 
   Widget _pinField(TextEditingController c, String label) => AppTextField(
+        large: true,
         controller: c,
         label: label,
         obscureText: true,
