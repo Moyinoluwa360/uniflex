@@ -31,6 +31,8 @@ import 'package:uniflex/shared/services/wallet/wallet_providers.dart';
 import 'package:uniflex/shared/theme/app_theme.dart';
 import 'package:uniflex/shared/utils/app_error_mapper.dart';
 import 'package:uniflex/shared/utils/uuid_v4.dart';
+import 'package:uniflex/shared/widgets/buttons/app_button.dart';
+import 'package:uniflex/shared/widgets/buttons/primary_button.dart';
 import 'package:uniflex/shared/widgets/chat/support_order_chip.dart';
 import 'package:uniflex/student/ordering/cart_notice_listener.dart';
 import 'package:uniflex/student/ordering/cart_provider.dart';
@@ -436,8 +438,8 @@ void main() {
         (tester) async {
       final (_, repo) = await openDelivery(tester, balance: 100);
       expect(find.textContaining('Top up your wallet'), findsOneWidget);
-      final pay = tester.widget<ElevatedButton>(
-          find.widgetWithText(ElevatedButton, 'Pay ₦630'));
+      final pay = tester.widget<AppButton>(
+          find.widgetWithText(AppButton, 'Pay ₦630'));
       expect(pay.onPressed, isNull);
       expect(repo.deliveryCalls, 0);
     });
@@ -461,7 +463,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       // Button is now busy; hammer it.
       for (var i = 0; i < 3; i++) {
-        await tester.tap(find.byType(ElevatedButton).first, warnIfMissed: false);
+        await tester.tap(find.byType(PrimaryButton).first, warnIfMissed: false);
         await tester.pump(const Duration(milliseconds: 20));
       }
       expect(repo.deliveryCalls, 1);

@@ -413,37 +413,61 @@ Two more gaps fixed in the same pass:
 
 ## Design system
 
-Matched to a visual design handoff (produced in Claude Design) rather
-than invented — see the "Design system update" entry in
-[CHANGELOG.md](CHANGELOG.md) for the full rationale behind each token.
+Rebuilt in **UI Polish 1** (2026-11-09). Rules in one page:
+[.claude/rules/ui.md](.claude/rules/ui.md). Audit of the screens it has to
+reach: [docs/ui-audit.md](docs/ui-audit.md).
 
-`lib/shared/theme/`:
+**Tokens — `lib/shared/theme/`**
 
-- `app_colors.dart` — the only place brand hex values should be defined.
-  Light mode and dark mode are separate palettes, not one palette with a
-  dark filter — dark mode has its own canvas/card/ink/hairline tokens.
-- `app_typography.dart` — Clash Display (wordmark only) + Switzer
-  (everything else), bundled as local font assets under `assets/fonts/`
-  (declared in `pubspec.yaml`'s `fonts:` key) — not Google Fonts.
-- `app_spacing.dart` — `AppSpacing` (general spacing scale, plus
-  `screenGutter`/`cardGap`/`controlHeight`/`minTapTarget`) and
-  `AppRadius` (`control`/`card`/`sheet`/`pill`).
-- `app_theme.dart` — builds the light and dark `ThemeData` from the
-  above. Both modes are first-class; `themeModeProvider` defaults to
+- `app_colors.dart` — `AppColors`, a `ThemeExtension` with a light and a dark
+  value for every token, read as `context.colors.surface` etc. (falls back to
+  the ambient brightness if a test has no `AppTheme`). It also still holds the
+  *legacy* static palette (`AppColors.emerald`, `.orange`, `.info`, ...) so
+  screens not yet migrated keep compiling; `test/ui_polish/ui_guard_test.dart`
+  counts those uses per file and only lets the number go down. UI Polish 2
+  removes them.
+- `tier_tokens.dart` — membership tier washes (Bronze, Silver, Gold, Platinum;
+  unknown tier = plain surface).
+- `app_typography.dart` — **Plus Jakarta Sans** (static 400/500/600/700,
+  bundled in `assets/fonts/`, no runtime fetching) for all UI text. Picked
+  after checking the font files: it has the naira sign (U+20A6) and tabular
+  figures; Figtree, Manrope, Switzer and Clash Display do not have `₦`.
+  **Clash Display Semibold stays only for the "Uniflex" wordmark and splash.**
+  No negative letter spacing except −0.01em on 28px+ headings; no negative
+  word spacing (the old headings lost their word gaps: Clash's space glyph is
+  0.154em and every title also got −0.02em tracking).
+- `app_spacing.dart` — `AppSpacing` (gutter 20, card padding 16, list row 56,
+  nav bar sizes, `navClearance` / `navClearanceOf(context)`) and `AppRadius`
+  (card 20, large card 24, button 14, sheet 28, nav 34, ...).
+- `app_icons.dart` — the single icon source: Material *outlined* only.
+- `app_theme.dart` — light/dark `ThemeData` built entirely from the tokens
+  (colour scheme, text theme, buttons, inputs, dialog, sheet, snackbar, tabs,
+  switch, checkbox, progress, selection). `themeModeProvider` defaults to
   `ThemeMode.system`.
 
-`lib/shared/widgets/` is the component library every screen should build
-from: `buttons/` (`PrimaryButton` for CTAs, `SecondaryButton` for
-secondary actions), `cards/app_card.dart`, `inputs/app_text_field.dart`,
-`app_bar/uniflex_app_bar.dart`, `navigation/app_bottom_nav_shell.dart`,
-`progress/onboarding_progress_bar.dart` (the back-button + progress-bar
-header used by both onboarding steps), and `wordmark/uniflex_wordmark.dart`
-(the text-only "Uniflex" wordmark — per the handoff, the wordmark never
-uses the logo mark; the mark itself only appears as the app icon,
-`assets/icon/app_icon.png`, generated via `flutter_launcher_icons`).
+**Components — `lib/shared/widgets/`**
 
-Don't hardcode colours, fonts, or one-off paddings in screen code — pull
-from these files so a design change only has to happen in one place.
+`buttons/app_button.dart` (`AppButton`: primary / secondary / text /
+quietDanger / disabled; solid red exists only inside `AppDialog`, which is a
+`part` of the same library so nothing else can build it) with
+`buttons/tap_guard.dart` (fire-once guard); `PrimaryButton` /
+`SecondaryButton` now just wrap `AppButton`. `cards/app_card.dart`,
+`lists/app_list_group.dart` (`AppListGroup`/`AppListRow`),
+`tabs/app_segmented_tabs.dart`, `status/app_status_label.dart` (dot + words,
+never a pill) and `status/status_presentation.dart` (`StatusPresenter`: every
+order / delivery-group / gift status -> label + tone), `buttons/app_icon_button.dart`,
+`text/app_section_label.dart`, `avatar/app_avatar.dart`,
+`dialogs/app_dialog.dart`, `sheets/app_sheet.dart`,
+`notice/app_inline_notice.dart`, `tier/tier_header.dart`,
+`format/money.dart` (`Money`, `MoneyText`, `MoneyHero`: `₦39,210`, tabular
+figures), `accordions/app_accordion_card.dart` (an `AppCard` now),
+`inputs/app_text_field.dart` (styled by the theme), and
+`navigation/app_glass_nav_bar.dart` (floating glass bar: one blur, sliding
+capsule, same index/callback as the shells; **not wired into the shells yet** —
+`navigation/app_bottom_nav_shell.dart` still builds a `BottomNavigationBar`).
+
+Don't hardcode colours, fonts, or one-off paddings in screen code. Pull from
+the tokens and components so a design change happens in one place.
 
 ## Config / environment variables
 

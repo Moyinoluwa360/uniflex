@@ -102,7 +102,7 @@ Migration approach used by the guard test: legacy `AppColors.<name>` statics sta
 ## 5. Fonts
 - `GoogleFonts.`: **0**. Nothing fetched at runtime. `fontFamily:` in features: 1 (`'monospace'`, `create_group_screen.dart:181`).
 - Clash Display 600 for display/headline/title slots; Switzer 400/500/600 for body/labels. Wordmark uses Clash Display.
-- **Cause of the collapsed word spacing:** Clash Display's space glyph is 0.154 em wide (Switzer 0.20, Plus Jakarta ≈0.25) and `_display()` adds `letterSpacing = size × −0.02` to every title/headline. Result: gaps shrink to ≈0.11 em. No `wordSpacing` is set anywhere.
+- **Cause of the collapsed word spacing:** Clash Display's space glyph is 0.154 em wide (Switzer 0.20, Plus Jakarta 0.17–0.18) and `_display()` adds `letterSpacing = size × −0.02` to every title/headline. Result: gaps shrink to ≈0.11 em. No `wordSpacing` is set anywhere.
 - Neither Clash nor Switzer contains `₦` (U+20A6), and Switzer has no `tnum`; `₦` falls back to the OS font. `tabularFigures` used: 0.
 - `letterSpacing` in features (18): all positive, for PIN/OTP/codes (8–16) or small caps labels (0.5–2). Fine.
 - `fontSize:` literals 19, `TextStyle(` 24, `FontWeight.` 148, `textTheme.` 660 (healthy).

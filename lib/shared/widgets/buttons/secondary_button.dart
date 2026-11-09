@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
-/// Secondary action button — outlined, neutral. Sits alongside a
-/// [PrimaryButton] for the "cancel" / "not now" / "skip" side of a choice.
+import 'app_button.dart';
+
+/// Compatibility wrapper: an outlined, neutral [AppButton] (secondary). New
+/// code: use [AppButton] directly (and `quietDanger` for Cancel).
 class SecondaryButton extends StatelessWidget {
   const SecondaryButton({
     super.key,
@@ -18,21 +20,12 @@ class SecondaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final button = OutlinedButton(
+    return AppButton(
+      label: label,
       onPressed: onPressed,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 20),
-            const SizedBox(width: 8),
-          ],
-          Text(label),
-        ],
-      ),
+      variant: AppButtonVariant.secondary,
+      icon: icon,
+      expand: expand,
     );
-
-    return expand ? SizedBox(width: double.infinity, child: button) : button;
   }
 }

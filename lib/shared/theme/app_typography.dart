@@ -1,96 +1,130 @@
+
 import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
 
-/// Typography scale — **Clash Display** (Semibold) for the wordmark and all
-/// display/headline slots (anything that acts as a screen title or section
-/// header), **Switzer** for body text, buttons, labels, and all other UI
-/// text. Both are bundled as local assets (see `assets/fonts/` and the
-/// `fonts:` section of pubspec.yaml) — this is the real brand type from the
-/// design handoff, not a Google Fonts approximation.
+/// Typography (UI Polish 1).
 ///
-/// Clash Display ships here as a single Semibold (600) weight, which is the
-/// only weight the design uses for display/titles, so every display slot is
-/// set at w600. Switzer ships in Regular (400), Medium (500), and Semibold
-/// (600).
+/// **One UI font: Plus Jakarta Sans**, static 400/500/600/700 files bundled in
+/// `assets/fonts/` (no runtime fetching). It was picked after checking the
+/// font files themselves: it has the naira sign U+20A6 and tabular figures
+/// (`tnum`); Figtree, Manrope, Switzer and Clash Display do not have `₦`.
+/// Clash Display Semibold is bundled ONLY for the "Uniflex" wordmark/splash.
 ///
-/// Built on Material's type scale so it plugs directly into
-/// [ThemeData.textTheme] and every built-in widget picks it up
-/// automatically. Only the four sizes the design specifies (H1, H2,
-/// Body, Meta) map to a named design token; the remaining Material slots
-/// are filled in at sensible sizes so nothing is left unstyled.
+/// Rules (the pack's, and why the old headings looked wrong):
+///  * No negative letter spacing except −0.01 em on 28 px+ headings.
+///  * No negative word spacing anywhere. (The old headings lost the gaps
+///    between words because Clash Display's space glyph is only 0.154 em and
+///    every title also got −0.02 em tracking.)
+///  * Money always uses tabular figures — see [tabular] / `Money`.
 abstract final class AppTypography {
-  /// Family names as declared in pubspec.yaml's `fonts:` section.
-  static const String displayFamily = 'ClashDisplay';
-  static const String bodyFamily = 'Switzer';
+  static const String fontFamily = 'PlusJakartaSans';
 
-  static TextTheme textTheme(Color baseColor) {
+  /// Wordmark-only family.
+  static const String wordmarkFamily = 'ClashDisplay';
+
+  // ── The named scale (colour passed in so each is theme-correct) ───────
+
+  /// Heading 28/700.
+  static TextStyle heading(AppColors c) =>
+      _s(28, FontWeight.w700, c.textPrimary, height: 1.2, tracking: -0.28);
+
+  /// Title 18/700.
+  static TextStyle title(AppColors c) =>
+      _s(18, FontWeight.w700, c.textPrimary, height: 1.3);
+
+  /// Body 16/500.
+  static TextStyle body(AppColors c) =>
+      _s(16, FontWeight.w500, c.textPrimary, height: 1.45);
+
+  /// Meta 14/400 textSecondary.
+  static TextStyle meta(AppColors c) =>
+      _s(14, FontWeight.w400, c.textSecondary, height: 1.4);
+
+  /// Caption 12.5/400 textTertiary.
+  static TextStyle caption(AppColors c) =>
+      _s(12.5, FontWeight.w400, c.textTertiary, height: 1.35);
+
+  /// Section label 13/600 textSecondary, +0.01 em.
+  static TextStyle sectionLabel(AppColors c) =>
+      _s(13, FontWeight.w600, c.textSecondary, tracking: 0.13);
+
+  /// Button 16/600.
+  static TextStyle button(Color color) => _s(16, FontWeight.w600, color);
+
+  /// Small button 14/600.
+  static TextStyle buttonSmall(Color color) => _s(14, FontWeight.w600, color);
+
+  /// Nav label 11.5/600.
+  static TextStyle navLabel(Color color) => _s(11.5, FontWeight.w600, color);
+
+  /// Balance hero 40/700 (decimals use [balanceDecimals]).
+  static TextStyle balanceHero(Color color) =>
+      tabular(_s(40, FontWeight.w700, color, height: 1.1, tracking: -0.4));
+
+  /// Balance decimals 22/600.
+  static TextStyle balanceDecimals(Color color) =>
+      tabular(_s(22, FontWeight.w600, color, height: 1.1));
+
+  /// Greeting name 22/700.
+  static TextStyle greetingName(Color color) =>
+      _s(22, FontWeight.w700, color, height: 1.2);
+
+  /// Adds tabular (fixed-width) figures to [style]. Use on every amount.
+  static TextStyle tabular(TextStyle style) => style.copyWith(
+        fontFeatures: const [FontFeature.tabularFigures()],
+      );
+
+  // ── Material text theme, mapped from the scale ────────────────────────
+
+  static TextTheme textTheme(AppColors c) {
     return TextTheme(
-      // ---- Display / Headlines — Clash Display 600 ----
-      displayLarge: _display(40, FontWeight.w600, baseColor),
-      displayMedium: _display(34, FontWeight.w600, baseColor),
-      headlineLarge: _display(32, FontWeight.w600, baseColor),
-      // H1 — Clash Display 600/28. Screen titles ("Good morning").
-      headlineMedium: _display(28, FontWeight.w600, baseColor),
-      headlineSmall: _display(24, FontWeight.w600, baseColor),
-      titleLarge: _display(22, FontWeight.w600, baseColor),
-      // H2 — Clash Display 600/20. Section headers ("Vendors near you").
-      titleMedium: _display(20, FontWeight.w600, baseColor),
-      titleSmall: _display(17, FontWeight.w600, baseColor),
-      // ---- Body / Labels — Switzer ----
-      bodyLarge: _body(17, FontWeight.w400, baseColor, height: 1.5),
-      // Body — Switzer 400/15.
-      bodyMedium: _body(15, FontWeight.w400, baseColor, height: 1.5),
-      bodySmall: _body(14, FontWeight.w400, baseColor, height: 1.4),
-      labelLarge: _body(15, FontWeight.w600, baseColor),
-      labelMedium: _body(14, FontWeight.w500, baseColor),
-      // Meta — Switzer 500/13. Fine print ("15-20 min · ₦300 delivery").
-      labelSmall: _body(13, FontWeight.w500, baseColor),
+      displayLarge: _s(40, FontWeight.w700, c.textPrimary, height: 1.1, tracking: -0.4),
+      displayMedium: _s(34, FontWeight.w700, c.textPrimary, height: 1.15, tracking: -0.34),
+      displaySmall: _s(28, FontWeight.w700, c.textPrimary, height: 1.2, tracking: -0.28),
+      headlineLarge: _s(32, FontWeight.w700, c.textPrimary, height: 1.2, tracking: -0.32),
+      headlineMedium: heading(c), // Heading 28/700
+      headlineSmall: _s(24, FontWeight.w700, c.textPrimary, height: 1.25),
+      titleLarge: greetingName(c.textPrimary), // 22/700
+      titleMedium: title(c), // Title 18/700
+      titleSmall: _s(16, FontWeight.w600, c.textPrimary, height: 1.3),
+      bodyLarge: body(c), // Body 16/500
+      bodyMedium: body(c),
+      bodySmall: meta(c), // Meta 14/400 textSecondary
+      labelLarge: button(c.textPrimary), // Button 16/600
+      labelMedium: sectionLabel(c), // Section label 13/600
+      labelSmall: caption(c), // Caption 12.5/400 textTertiary
     );
   }
 
-  static TextStyle _display(
+  static TextStyle _s(
     double size,
     FontWeight weight,
     Color color, {
     double? height,
+    double tracking = 0,
   }) {
     return TextStyle(
-      fontFamily: displayFamily,
+      fontFamily: fontFamily,
       fontSize: size,
       fontWeight: weight,
       color: color,
       height: height,
-      // Clash Display reads tight — a small negative tracking on the larger
-      // display sizes keeps titles crisp, matching the handoff.
-      letterSpacing: size * -0.02,
+      // Only ≥28 px headings carry negative tracking (−0.01 em). Everything
+      // else is 0 or positive. Word spacing is never touched.
+      letterSpacing: tracking,
     );
   }
 
-  static TextStyle _body(
-    double size,
-    FontWeight weight,
-    Color color, {
-    double? height,
-  }) {
-    return TextStyle(
-      fontFamily: bodyFamily,
-      fontSize: size,
-      fontWeight: weight,
-      color: color,
-      height: height,
-    );
-  }
-
-  /// Wordmark style — the "Uniflex" text logo. Clash Display 600,
-  /// −3.5% tracking, brand emerald. Used by [UniflexWordmark].
+  /// Wordmark style — the "Uniflex" text logo (Clash Display 600, −3.5%
+  /// tracking, brand green). Used by `UniflexWordmark` and the splash only.
   static TextStyle wordmark({double fontSize = 40, Color? color}) {
     return TextStyle(
-      fontFamily: displayFamily,
+      fontFamily: wordmarkFamily,
       fontSize: fontSize,
       fontWeight: FontWeight.w600,
       letterSpacing: fontSize * -0.035,
-      color: color ?? AppColors.emerald,
+      color: color ?? AppColors.light.brand,
     );
   }
 }

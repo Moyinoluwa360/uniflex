@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import '../../theme/app_icons.dart';
 import '../../theme/app_spacing.dart';
+import '../../theme/app_typography.dart';
+import '../cards/app_card.dart';
 
 /// A bold, clearly-boxed accordion card — the standard collapsible section
 /// component used on the vendor page (Drinks, Others), inside each pack
 /// (Meals, Proteins/Toppings), and in the cart (one section per vendor when
 /// there are multiple vendors).
 ///
-/// [leading]        — A pre-built 40×40 widget (icon in tinted square or
+/// [leading]        — A pre-built 40×40 widget (icon in icon or
 ///                    vendor image). Build with [buildAccordionLeadingIcon]
 ///                    for icon sections, or wrap an AppImage for the cart.
 /// [title]          — Primary label (~18 sp, bold).
@@ -47,42 +50,22 @@ class AppAccordionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final c = context.colors;
+    const radius = AppRadius.card;
 
-    final borderColor = isExpanded
-        ? AppColors.emerald
-        : theme.colorScheme.outline.withValues(alpha: isDark ? 0.3 : 0.2);
-
+    // A plain AppCard: surface + hairline border. Open = `borderStrong`
+    // (no green tint, no glow).
     return Padding(
       padding: outerPadding ??
           const EdgeInsets.symmetric(
             horizontal: AppSpacing.screenGutter,
             vertical: AppSpacing.xs,
           ),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-        decoration: BoxDecoration(
-          color: isExpanded
-              ? AppColors.emerald.withValues(alpha: isDark ? 0.07 : 0.03)
-              : (theme.cardTheme.color ?? theme.colorScheme.surface),
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: borderColor, width: isExpanded ? 1.5 : 1.0),
-          boxShadow: (isExpanded || isDark)
-              ? null
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          clipBehavior: Clip.antiAlias,
+      child: AppCard(
+        padding: EdgeInsets.zero,
+        strongBorder: isExpanded,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(radius),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -104,21 +87,9 @@ class AppAccordionCard extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(
-                                title,
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 18,
-                                ),
-                              ),
+                              Text(title, style: AppTypography.title(c)),
                               const SizedBox(height: 2),
-                              Text(
-                                subtitle,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurface
-                                      .withValues(alpha: 0.55),
-                                ),
-                              ),
+                              Text(subtitle, style: AppTypography.meta(c)),
                             ],
                           ),
                         ),
@@ -126,32 +97,14 @@ class AppAccordionCard extends StatelessWidget {
                           trailingAction!,
                           const SizedBox(width: AppSpacing.xs),
                         ],
-                        // Chevron circle ─────────────────────────────────
-                        SizedBox(
-                          width: 32,
-                          height: 32,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: isExpanded
-                                  ? AppColors.emerald.withValues(alpha: 0.12)
-                                  : theme.colorScheme.surfaceContainerHighest,
-                            ),
-                            child: Center(
-                              child: AnimatedRotation(
-                                turns: isExpanded ? 0.5 : 0,
-                                duration: const Duration(milliseconds: 200),
-                                curve: Curves.easeInOut,
-                                child: Icon(
-                                  Icons.expand_more_rounded,
-                                  size: 20,
-                                  color: isExpanded
-                                      ? AppColors.emerald
-                                      : theme.colorScheme.onSurface
-                                          .withValues(alpha: 0.6),
-                                ),
-                              ),
-                            ),
+                        AnimatedRotation(
+                          turns: isExpanded ? 0.5 : 0,
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeInOut,
+                          child: Icon(
+                            AppIcons.chevronDown,
+                            size: AppIconSize.regular,
+                            color: c.textSecondary,
                           ),
                         ),
                       ],
@@ -170,11 +123,7 @@ class AppAccordionCard extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Divider(
-                              height: 1,
-                              thickness: 1,
-                              color: borderColor.withValues(alpha: 0.4),
-                            ),
+                            Divider(height: 1, thickness: 1, color: c.border),
                             child,
                             const SizedBox(height: AppSpacing.sm),
                           ],
@@ -190,21 +139,21 @@ class AppAccordionCard extends StatelessWidget {
   }
 }
 
-/// Builds the standard 40×40 icon-in-rounded-square leading widget for
-/// [AppAccordionCard].
+/// The accordion's leading icon: a plain 22px glyph in textSecondary — no
+/// tinted tile behind it. ([color] is accepted only so existing call sites
+/// still compile; it is ignored by design.)
 Widget buildAccordionLeadingIcon({
   required BuildContext context,
   required IconData icon,
   Color? color,
 }) {
-  final c = color ?? Theme.of(context).colorScheme.primary;
-  return Container(
+  return SizedBox(
     width: 40,
     height: 40,
-    decoration: BoxDecoration(
-      color: c.withValues(alpha: 0.12),
-      borderRadius: BorderRadius.circular(10),
+    child: Icon(
+      icon,
+      size: AppIconSize.regular,
+      color: context.colors.textSecondary,
     ),
-    child: Icon(icon, color: c, size: 22),
   );
 }

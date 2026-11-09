@@ -83,21 +83,25 @@ flutter:
   assets:
     - .env
 
-  # Real brand type from the design handoff, bundled as local assets:
-  # Clash Display (Semibold) for the wordmark + display/headline slots,
-  # Switzer for body/labels/UI text. See lib/shared/theme/app_typography.dart.
+  # UI Polish 1: ONE UI font, Plus Jakarta Sans (OFL), bundled as static
+  # 400/500/600/700 files cut from Google's variable font. Chosen because it
+  # contains the naira sign U+20A6 and tabular figures (`tnum`), which
+  # Figtree/Manrope/Switzer/Clash Display lack. No runtime font fetching.
+  # Clash Display Semibold stays ONLY for the "Uniflex" wordmark + splash.
   fonts:
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/PlusJakartaSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/PlusJakartaSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/PlusJakartaSans-Bold.ttf
+          weight: 700
     - family: ClashDisplay
       fonts:
         - asset: assets/fonts/ClashDisplay-Semibold.ttf
-          weight: 600
-    - family: Switzer
-      fonts:
-        - asset: assets/fonts/Switzer-Regular.ttf
-          weight: 400
-        - asset: assets/fonts/Switzer-Medium.ttf
-          weight: 500
-        - asset: assets/fonts/Switzer-Semibold.ttf
           weight: 600
 
 flutter_launcher_icons:

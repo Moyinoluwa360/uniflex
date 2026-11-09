@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
-/// The CTA button — Order, Pay, Confirm, Continue. Solid orange, full
-/// width by default. Use [SecondaryButton] for anything that isn't the
-/// one action a screen wants the user to take.
+import 'app_button.dart';
+
+/// Compatibility wrapper: the CTA button used by ~35 call sites. It now just
+/// renders an [AppButton] (primary), so it picks up the new look and the
+/// double-tap guard without any call site changing. New code: use
+/// [AppButton] directly.
 class PrimaryButton extends StatelessWidget {
   const PrimaryButton({
     super.key,
@@ -21,30 +24,12 @@ class PrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final button = ElevatedButton(
-      onPressed: isLoading ? null : onPressed,
-      child: isLoading
-          ? const SizedBox(
-              height: 22,
-              width: 22,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            )
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (icon != null) ...[
-                  Icon(icon, size: 20),
-                  const SizedBox(width: 8),
-                ],
-                Text(label),
-              ],
-            ),
+    return AppButton(
+      label: label,
+      onPressed: onPressed,
+      isLoading: isLoading,
+      icon: icon,
+      expand: expand,
     );
-
-    return expand ? SizedBox(width: double.infinity, child: button) : button;
   }
 }

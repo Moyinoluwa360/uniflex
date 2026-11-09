@@ -2,6 +2,52 @@
 
 All notable changes to this project are documented here, phase by phase.
 
+## UI Polish 1 — design-system foundation (2026-11-09)
+
+The layouts are fine; what felt "vibe coded" was the finish. This pack builds
+the foundation that fixes it everywhere. **Presentation only, and no screen was
+restyled** — UI Polish 2 moves the screens onto it. Do not ship Pack 1 on its
+own: the global theme changed (green buttons, new font, new surfaces), so
+unmigrated screens now look like a mix of old and new.
+
+**Added**
+- `AppColors` is now a `ThemeExtension` (`context.colors.x`) with light + dark
+  values for every token in the spec, plus home-header / wallet-card / ad
+  gradients, glass + nav tokens, and membership tier tokens (Bronze, Silver,
+  Platinum from the spec; **Gold added by me**, same pattern, because the app
+  has a Gold tier).
+- Font: **Plus Jakarta Sans** (static 400/500/600/700, bundled, OFL).
+  Figtree (the pack's choice) and its fallback Manrope were checked and have no
+  naira sign, so the owner picked Plus Jakarta Sans, which has `₦` and
+  tabular figures. Switzer removed. Clash Display kept for the wordmark and
+  splash only.
+- Components: `AppButton` (+ `TapGuard`), `AppIconButton`, `AppListGroup` /
+  `AppListRow`, `AppSegmentedTabs`, `AppStatusLabel`, `AppSectionLabel`,
+  `AppAvatar`, `AppDialog` (the only place solid red exists), `AppSheet`,
+  `AppInlineNotice`, `TierHeader`, `AppGlassNavBar`.
+- Helpers: `Money` / `MoneyText` / `MoneyHero`, `StatusPresenter` (every order,
+  delivery-group and gift status -> label + tone; "In Rider Pool" now reads
+  "Finding a rider"), `AppIcons` (outline family only).
+- Guards: `test/ui_polish/ui_guard_test.dart` (no hard-coded or legacy colours;
+  an allowlist of 80 files / 644 uses that can only shrink) and
+  `contrast_test.dart` (WCAG ratios for the token pairs in both themes).
+  `.claude/rules/ui.md`, `CLAUDE.md`, `docs/ui-audit.md`.
+
+**Changed**
+- `ThemeData` rebuilt entirely from the tokens (buttons, inputs, dialog, sheet,
+  snackbar, tabs, switch, checkbox, progress, selection colours, ...).
+- `PrimaryButton` / `SecondaryButton` now render `AppButton`, so their ~40 call
+  sites pick up the new look and a double-tap guard. There was no shared
+  fire-once guard before (only per-screen flags, which are untouched).
+- `AppCard` and `AppAccordionCard` restyled (plain surface + border, no tint,
+  no glow; the accordion icon is a plain glyph). `AppTextField` is styled by
+  the theme (behaviour untouched).
+- `AppRadius` / `AppSpacing` values per spec (card 20, sheet 28, control 52).
+- Two tests in `pack_4a_test.dart` now find the pay button as `AppButton` /
+  `PrimaryButton` instead of `ElevatedButton` (same assertions).
+
+**Found, not fixed** — see the report-only list in `docs/ui-audit.md` (section 11).
+
 ## Push fix — phones now register on login, one row per phone (2026-11-08)
 
 Reported after the first real-phone test: bell shows messages, but iPhone gets
