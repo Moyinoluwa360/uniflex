@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../notifications/notification_service.dart';
+
 /// Thin wrapper around Supabase Auth. Screens depend on this (via
 /// [authServiceProvider] in auth_providers.dart) rather than reaching for
 /// `Supabase.instance.client.auth` directly, so sign-in/out logic has one
@@ -31,7 +33,12 @@ class AuthService {
     return _client.auth.signInWithPassword(email: email, password: password);
   }
 
-  Future<void> signOut() => _client.auth.signOut();
+  Future<void> signOut() async {
+    // Stop pushes for this person on THIS phone first — the server only
+    // accepts that while the session is still valid. It never throws.
+    await NotificationService.unregisterDevice();
+    await _client.auth.signOut();
+  }
 
   // ── Forgot password (post-testing fixes, Section 3) ────────────────────
   //

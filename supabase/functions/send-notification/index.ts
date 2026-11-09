@@ -165,6 +165,19 @@ serve(async (req: Request) => {
           token,
           notification: { title, body },
           data: data ?? {},
+          // Android: HIGH priority is what wakes a phone that is dozing —
+          // without it the push can arrive minutes late or not at all. The
+          // channel must match the one the app creates (uniflex_high), or
+          // Android files it under a silent "Miscellaneous" channel.
+          android: {
+            priority: 'HIGH',
+            notification: { channel_id: 'uniflex_high', sound: 'default' },
+          },
+          // iOS: an alert push, delivered immediately, with the default sound.
+          apns: {
+            headers: { 'apns-priority': '10', 'apns-push-type': 'alert' },
+            payload: { aps: { sound: 'default' } },
+          },
         },
       }),
     })
@@ -183,6 +196,7 @@ serve(async (req: Request) => {
           .from('profiles')
           .update({ fcm_token: null })
           .eq('fcm_token', token)
+        await admin.from('push_devices').delete().eq('token', token)
       } catch (cleanupErr) {
         console.warn('Token cleanup failed:', cleanupErr)
       }

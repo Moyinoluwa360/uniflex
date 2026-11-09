@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:firebase_core/firebase_core.dart';
@@ -14,13 +15,16 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 ///
 /// The service:
 ///   1. Requests notification permission.
-///   2. Gets the FCM token and stores it in `profiles.fcm_token` via RPC.
+///   2. Gets the FCM token and registers this phone for the signed-in user
+///      (`register_push_token`) — at launch, on every sign-in, and whenever
+///      the token changes.
 ///   3. Configures flutter_local_notifications for foreground messages.
 ///   4. Listens for token refreshes and updates the DB.
 ///   5. Handles notification taps (background + terminated) and stores the
 ///      payload in [_pendingNavigation] for the active shell to consume.
-///   6. Clears the FCM token on sign-out so a logged-out device stops
-///      receiving pushes for the previous user.
+///   6. Unregisters this phone on sign-out ([unregisterDevice], called by
+///      `AuthService.signOut` while the session is still valid) so a
+///      logged-out device stops receiving pushes for the previous user.
 class NotificationService {
   NotificationService._();
 
@@ -50,16 +54,15 @@ class NotificationService {
   /// google-services.json); failures are caught and logged silently.
   static Future<void> init() async {
     try {
-      // Request permission (iOS; Android 13+ also needs this)
-      await _messaging.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-
       // Configure local notifications plugin
       const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-      const iosInit = DarwinInitializationSettings();
+      // Permission is requested once, by Firebase Messaging (below), so the
+      // two plugins never race to show the iOS prompt.
+      const iosInit = DarwinInitializationSettings(
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
+      );
       await _localNotifications.initialize(
         const InitializationSettings(android: androidInit, iOS: iosInit),
         // Tapping the in-app banner behaves exactly like tapping a push.
@@ -81,27 +84,30 @@ class NotificationService {
               AndroidFlutterLocalNotificationsPlugin>()
           ?.createNotificationChannel(_androidChannel);
 
-      // Store token in DB. On iOS the FCM token only exists once Apple has
-      // handed the app its APNs token, so wait briefly for that first. If it
-      // still is not there (or getToken throws), carry on: the listeners
-      // below must still be registered, and onTokenRefresh delivers the
-      // token as soon as it exists.
-      try {
-        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
-          for (var i = 0;
-              i < 20 && await _messaging.getAPNSToken() == null;
-              i++) {
-            await Future<void>.delayed(const Duration(milliseconds: 500));
-          }
-        }
-        final token = await _messaging.getToken();
-        if (token != null) await _storeToken(token);
-      } catch (e) {
-        debugPrint('[NotificationService] token fetch deferred: $e');
-      }
+      _ready = true;
 
-      // Update token on refresh.
-      _messaging.onTokenRefresh.listen(_storeToken);
+      // Register this phone whenever the token changes, and whenever
+      // someone signs in. The app usually launches signed OUT, so the
+      // launch-time token fetch alone would never reach the server.
+      _messaging.onTokenRefresh.listen((t) {
+        _token = t;
+        unawaited(_register());
+      });
+      Supabase.instance.client.auth.onAuthStateChange.listen((event) {
+        switch (event.event) {
+          case AuthChangeEvent.signedIn:
+          case AuthChangeEvent.initialSession:
+          case AuthChangeEvent.tokenRefreshed:
+            unawaited(_register());
+          case AuthChangeEvent.signedOut:
+            _registeredKey = null;
+            // A tap meant for the previous account must not open anything
+            // for whoever signs in next on this device.
+            pendingNavigation.value = null;
+          default:
+            break;
+        }
+      });
 
       // Show local notification when app is in foreground.
       FirebaseMessaging.onMessage.listen(_showLocalNotification);
@@ -113,19 +119,102 @@ class NotificationService {
       final initial = await _messaging.getInitialMessage();
       if (initial != null) _handleTap(initial);
 
-      // Clear FCM token when user signs out so this device stops receiving
-      // pushes for the previous user's account.
-      Supabase.instance.client.auth.onAuthStateChange.listen((event) {
-        if (event.event == AuthChangeEvent.signedOut) {
-          _clearToken();
-          // A tap meant for the previous account must not open anything
-          // for whoever signs in next on this device.
-          pendingNavigation.value = null;
-        }
-      });
+      // Permission prompt + token fetch can take seconds (iOS waits for
+      // Apple's APNs token): never hold up the app's first frame for it.
+      unawaited(_fetchTokenAndRegister());
     } catch (e) {
       debugPrint('[NotificationService] init error: $e');
     }
+  }
+
+  static bool _ready = false;
+
+  /// This phone's current FCM token, once known.
+  static String? _token;
+
+  /// `userId|token` last registered successfully — stops repeat calls.
+  static String? _registeredKey;
+
+  /// Asks for permission, then gets the FCM token (retrying while Apple /
+  /// Google hand it over) and registers it for whoever is signed in.
+  static Future<void> _fetchTokenAndRegister() async {
+    try {
+      // iOS + Android 13+ permission prompt.
+      await _messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+    } catch (e) {
+      debugPrint('[NotificationService] permission request failed: $e');
+    }
+
+    // On iOS the FCM token only exists once Apple has given the app its APNs
+    // token, which can take a while on first launch — keep trying instead of
+    // giving up after one attempt.
+    for (var attempt = 0; attempt < 12 && _token == null; attempt++) {
+      try {
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+          for (var i = 0;
+              i < 10 && await _messaging.getAPNSToken() == null;
+              i++) {
+            await Future<void>.delayed(const Duration(milliseconds: 500));
+          }
+        }
+        _token = await _messaging.getToken();
+      } catch (e) {
+        debugPrint('[NotificationService] token fetch retry $attempt: $e');
+      }
+      if (_token == null) {
+        await Future<void>.delayed(const Duration(seconds: 5));
+      }
+    }
+    await _register();
+  }
+
+  /// Registers this phone for the signed-in user. A no-op until both a token
+  /// and a session exist, and when this exact pair is already registered.
+  static Future<void> _register() async {
+    final token = _token;
+    if (!_ready || token == null) return;
+    try {
+      final client = Supabase.instance.client;
+      final uid = client.auth.currentUser?.id;
+      if (uid == null) return;
+      final key = '$uid|$token';
+      if (_registeredKey == key) return;
+      final platform = (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS)
+          ? 'ios'
+          : 'android';
+      try {
+        await client.rpc('register_push_token',
+            params: {'p_token': token, 'p_platform': platform});
+      } catch (_) {
+        // Server not updated yet: the old single-token call still works.
+        await client.rpc('store_fcm_token', params: {'p_token': token});
+      }
+      _registeredKey = key;
+    } catch (e) {
+      debugPrint('[NotificationService] register token error: $e');
+    }
+  }
+
+  /// Stops pushes for the current user on THIS phone. Call it BEFORE the
+  /// session ends — the server only accepts it from a signed-in user.
+  /// Never throws and never waits long: signing out must always work.
+  static Future<void> unregisterDevice() async {
+    final token = _token;
+    if (!_ready || token == null) return;
+    try {
+      final client = Supabase.instance.client;
+      if (client.auth.currentUser == null) return;
+      await client
+          .rpc('unregister_push_token', params: {'p_token': token})
+          .timeout(const Duration(seconds: 3));
+    } catch (e) {
+      debugPrint('[NotificationService] unregister error: $e');
+    }
+    _registeredKey = null;
   }
 
   /// Returns and clears any pending navigation payload from a notification tap.
@@ -139,27 +228,6 @@ class NotificationService {
   static void _handleTap(RemoteMessage message) {
     if (message.data.isNotEmpty) {
       pendingNavigation.value = Map<String, dynamic>.from(message.data);
-    }
-  }
-
-  static Future<void> _clearToken() async {
-    try {
-      final client = Supabase.instance.client;
-      if (client.auth.currentUser == null) return;
-      // Set token to null so this device no longer receives pushes.
-      await client.rpc('store_fcm_token', params: {'p_token': null});
-    } catch (e) {
-      debugPrint('[NotificationService] clear token error: $e');
-    }
-  }
-
-  static Future<void> _storeToken(String token) async {
-    try {
-      final client = Supabase.instance.client;
-      if (client.auth.currentUser == null) return;
-      await client.rpc('store_fcm_token', params: {'p_token': token});
-    } catch (e) {
-      debugPrint('[NotificationService] store token error: $e');
     }
   }
 

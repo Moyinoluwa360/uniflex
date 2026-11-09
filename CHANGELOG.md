@@ -2,6 +2,40 @@
 
 All notable changes to this project are documented here, phase by phase.
 
+## Push fix — phones now register on login, one row per phone (2026-11-08)
+
+Reported after the first real-phone test: bell shows messages, but iPhone gets
+no push and Android is hit-and-miss.
+
+**Causes found in the code**
+- The phone's push address (FCM token) was only sent to the server at *app
+  launch*, and only if someone was already signed in. Open app → log in → the
+  token was never sent (until the next restart). Worst on iPhone, where the
+  token also arrives late.
+- Sign-out never cleared the token (the call ran after the session had ended,
+  so the server ignored it). A phone that changed account kept pushing to the
+  old one.
+- One token per account: a second phone overwrote the first.
+- The push had no Android priority/channel → Doze delays it, and it files into
+  a silent channel. A bad payload (`INVALID_ARGUMENT`) also erased the token.
+
+**Fix**
+- `supabase/push_devices.sql` (+ `push_devices_test.sql`, 12/12): table
+  `push_devices` (one row per phone; a phone belongs to whoever is signed in on
+  it), RPCs `register_push_token` / `unregister_push_token`; `store_fcm_token`
+  kept for old builds. Existing tokens are backfilled. Nothing deleted.
+- App: registers on every sign-in / token change, retries while iOS hands over
+  its APNs token, unregisters in `AuthService.signOut` *before* the session
+  ends, no longer holds up startup. iOS AppDelegate shows banners while the app
+  is open; Android manifest sets the default channel.
+- `push-notification` sends to **all** the person's phones and only drops a
+  token when Google says the phone is gone. `send-notification` marks Android
+  `HIGH` priority + channel `uniflex_high`, and sends iOS as an immediate alert.
+- `supabase/push_diagnose.sql`: read-only health check.
+
+**Deploy order:** run `push_devices.sql` → deploy `push-notification` and
+`send-notification` (`--no-verify-jwt`) → build/install the new app.
+
 ## Pack 6 — Food gifting ("Send as a gift") + stuck text-selection fix (2026-11-07)
 
 Last of the five packs. A gift is a normal food delivery order with a different

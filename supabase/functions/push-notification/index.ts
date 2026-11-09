@@ -96,14 +96,25 @@ Deno.serve(async (req: Request) => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
   const admin = createClient(supabaseUrl, callKey)
 
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('fcm_token')
-    .eq('id', userId)
-    .maybeSingle()
+  // Every phone this person is signed in on (push_devices), plus the legacy
+  // single token as a fallback for old builds / before the table exists.
+  const tokens = new Set<string>()
+  {
+    const { data: devices } = await admin
+      .from('push_devices')
+      .select('token')
+      .eq('user_id', userId)
+    for (const d of devices ?? []) if (d.token) tokens.add(d.token as string)
 
-  const token = profile?.fcm_token as string | null | undefined
-  if (!token) {
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('fcm_token')
+      .eq('id', userId)
+      .maybeSingle()
+    if (profile?.fcm_token) tokens.add(profile.fcm_token as string)
+  }
+
+  if (tokens.size === 0) {
     // The inbox row already exists; there is just no device to push to.
     return json({ delivered: 'inbox_only', reason: 'no device token' })
   }
@@ -116,35 +127,57 @@ Deno.serve(async (req: Request) => {
   if (row.group_id) data.group_id = String(row.group_id)
   if (row.conversation_id) data.conversation_id = String(row.conversation_id)
 
-  try {
-    const res = await fetch(`${supabaseUrl}/functions/v1/send-notification`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${callKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ token, title, body, data }),
-    })
-
-    if (!res.ok) {
-      const text = await res.text()
-      console.warn(`Push failed for user ${userId}: ${res.status} ${text}`)
-
-      // Clear dead tokens so they do not accumulate.
-      let code: string | undefined
-      try {
-        const parsed = JSON.parse(text)
-        code = parsed?.error?.details?.[0]?.errorCode ?? parsed?.error?.status
-      } catch { /* not JSON */ }
-      if (code === 'UNREGISTERED' || code === 'INVALID_ARGUMENT' || res.status === 404) {
-        await admin.from('profiles').update({ fcm_token: null }).eq('id', userId)
-      }
-      return json({ delivered: 'inbox_only', reason: 'push failed', status: res.status })
-    }
-  } catch (err) {
-    console.warn(`Push request threw for user ${userId}:`, err)
-    return json({ delivered: 'inbox_only', reason: 'push error' })
+  // A token is only dropped when FCM says the phone itself is gone. Any
+  // other failure (our payload, Apple/Google outage, bad credentials) keeps
+  // the token — wiping it would silence a perfectly good phone.
+  const isDeadToken = (status: number, text: string): boolean => {
+    let code = ''
+    let message = ''
+    try {
+      const parsed = JSON.parse(text)
+      code = parsed?.error?.details?.[0]?.errorCode ?? parsed?.error?.status ?? ''
+      message = String(parsed?.error?.message ?? '')
+    } catch { /* not JSON */ }
+    if (code === 'UNREGISTERED' || code === 'NOT_FOUND') return true
+    return code === 'INVALID_ARGUMENT' && /registration token/i.test(message)
   }
 
-  return json({ delivered: 'push' })
+  let sent = 0
+  let failed = 0
+  await Promise.all(
+    [...tokens].map(async (token) => {
+      try {
+        const res = await fetch(`${supabaseUrl}/functions/v1/send-notification`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${callKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ token, title, body, data }),
+        })
+        if (res.ok) {
+          sent++
+          return
+        }
+        failed++
+        const text = await res.text()
+        console.warn(
+          `Push failed for user ${userId} token ${token.slice(0, 10)}…: ${res.status} ${text}`,
+        )
+        if (isDeadToken(res.status, text)) {
+          await admin.from('push_devices').delete().eq('token', token)
+          await admin.from('profiles').update({ fcm_token: null }).eq('fcm_token', token)
+        }
+      } catch (err) {
+        failed++
+        console.warn(`Push request threw for user ${userId}:`, err)
+      }
+    }),
+  )
+
+  if (sent === 0) {
+    return json({ delivered: 'inbox_only', reason: 'push failed', failed })
+  }
+  return json({ delivered: 'push', sent, failed })
+
 })

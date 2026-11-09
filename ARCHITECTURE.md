@@ -1082,9 +1082,13 @@ every active admin; admin reply → that student, `type = 'support'`,
   function. Admins: `type == 'support'` opens the support inbox. The Rider
   shell does not route taps yet (Pack 4B).
 
-**Token hygiene:** unchanged — `store_fcm_token(null)` on sign-out, plus
-`UNREGISTERED` cleanup in the push functions. Sign-out also clears any
-pending tap payload.
+**Token hygiene (updated 2026-11-08):** one row per phone in `push_devices`
+(`register_push_token` / `unregister_push_token`; a token belongs to whoever
+is signed in on that phone). The app registers on every sign-in and token
+refresh, and `AuthService.signOut` unregisters *before* ending the session.
+`push-notification` pushes to all of a person's phones and removes a token only
+on `UNREGISTERED` / "invalid registration token". `profiles.fcm_token` is kept
+as a fallback for old builds. Sign-out also clears any pending tap payload.
 
 **Chip / order identity:** a support message carries `order_id` (errand,
 pickup) **or** `delivery_group_id` (a delivery — the one order the student,

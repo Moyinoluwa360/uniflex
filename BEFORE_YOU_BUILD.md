@@ -136,3 +136,21 @@ scroll the page; tap a button; tap Cancel/back. Each time the highlight and
 handles must vanish and the keyboard close. Also: tap from one field straight
 into another — the second must focus normally.
 
+
+
+## 8. Push notifications check (after the 2026-11-08 push fix)
+
+Do this order: run `supabase/push_devices.sql` → deploy `push-notification` and
+`send-notification` with `--no-verify-jwt` → build the new app.
+
+1. Install, open the app **signed out**, then log in. Run `supabase/push_diagnose.sql`
+   (query 1): your account must now show a row with the right platform
+   (`ios` / `android`). No row = the phone never registered → check the phone's
+   Settings → Notifications → Uniflex is allowed.
+2. Lock the phone, trigger any notification from another account. It should
+   arrive within seconds, with sound.
+3. Log in on a second phone with the same account: both phones get the push.
+4. Sign out on one phone: only the other one gets it.
+5. iPhone only: if step 1 shows a row but nothing arrives, check Firebase →
+   Project settings → Cloud Messaging → the APNs key (p8) is uploaded for
+   `com.uniflex.uniflex`; and the App ID has the Push Notifications capability.
