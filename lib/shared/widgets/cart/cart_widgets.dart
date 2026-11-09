@@ -18,8 +18,11 @@ class QuantityStepper extends StatelessWidget {
   });
 
   final int quantity;
-  final VoidCallback onMinus;
-  final VoidCallback onPlus;
+
+  /// `null` greys that button out and ignores taps (e.g. at the minimum or
+  /// when a pack is full).
+  final VoidCallback? onMinus;
+  final VoidCallback? onPlus;
 
   @override
   Widget build(BuildContext context) {
@@ -63,19 +66,20 @@ class _StepButton extends StatelessWidget {
 
   final IconData icon;
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     return Semantics(
       button: true,
+      enabled: onTap != null,
       label: label,
       child: Material(
         color: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.buttonSmall),
-          side: BorderSide(color: c.borderStrong),
+          side: BorderSide(color: onTap == null ? c.border : c.borderStrong),
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -83,7 +87,9 @@ class _StepButton extends StatelessWidget {
           child: SizedBox(
             width: 32,
             height: 32,
-            child: Icon(icon, size: AppIconSize.small, color: c.textSecondary),
+            child: Icon(icon,
+                size: AppIconSize.small,
+                color: onTap == null ? c.textTertiary : c.textSecondary),
           ),
         ),
       ),
@@ -235,6 +241,42 @@ class CartTotalRow extends StatelessWidget {
               : base.copyWith(color: c.textPrimary),
         ),
       ],
+    );
+  }
+}
+
+/// The 36×36 outlined "add" button (radius 12, brand outline and plus) shown
+/// before an item is in the cart. `onTap: null` disables it.
+class AddItemButton extends StatelessWidget {
+  const AddItemButton({super.key, required this.onTap});
+
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final enabled = onTap != null;
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: 'Add',
+      child: Material(
+        color: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.iconButton),
+          side: BorderSide(color: enabled ? c.brand : c.border, width: 1.5),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: SizedBox(
+            width: 36,
+            height: 36,
+            child: Icon(AppIcons.add,
+                color: enabled ? c.brandText : c.textTertiary, size: 20),
+          ),
+        ),
+      ),
     );
   }
 }

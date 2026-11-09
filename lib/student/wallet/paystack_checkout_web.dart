@@ -6,7 +6,10 @@ import 'dart:html' as html;
 import 'package:flutter/material.dart';
 
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 
 /// Web implementation of the Paystack checkout flow.
 ///
@@ -225,9 +228,12 @@ class _PaystackCheckoutPageState extends State<PaystackCheckoutPage> {
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium),
                   const SizedBox(height: 24),
-                  TextButton(
+                  AppButton(
+                    label: 'Go back',
+                    variant: AppButtonVariant.text,
+                    size: AppButtonSize.small,
+                    expand: false,
                     onPressed: () => Navigator.of(context).pop(null),
-                    child: const Text('Go back'),
                   ),
                 ],
               ),
@@ -255,18 +261,16 @@ class _PaystackCheckoutPageState extends State<PaystackCheckoutPage> {
                     'If the popup did not appear, check that your browser\n'
                     'is not blocking popups for this site.',
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color:
-                          theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                    ),
+                    style: AppTypography.meta(context.colors),
                   ),
                   const SizedBox(height: 32),
-                  TextButton.icon(
+                  AppButton(
+                    label: 'Cancel',
+                    variant: AppButtonVariant.quietDanger,
+                    size: AppButtonSize.small,
+                    expand: false,
+                    icon: AppIcons.close,
                     onPressed: () => Navigator.of(context).pop(null),
-                    icon: const Icon(Icons.close,
-                        size: 16, color: AppColors.error),
-                    label: const Text('Cancel',
-                        style: TextStyle(color: AppColors.error)),
                   ),
                 ],
               ),

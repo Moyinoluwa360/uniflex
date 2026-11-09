@@ -7,7 +7,12 @@ import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
+import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/cards/app_card.dart';
+import '../../shared/widgets/cart/summary_row.dart';
+import '../../shared/widgets/format/money.dart';
 import '../../shared/widgets/pin/pin_entry_sheet.dart';
 import '../ordering/cart_provider.dart';
 import '../ordering/order_confirmation_screen.dart';
@@ -80,27 +85,15 @@ class _JoinGroupScreenState extends ConsumerState<JoinGroupScreen> {
             const SizedBox(height: AppSpacing.md),
             AppTextField(
               controller: _controller,
-              decoration: const InputDecoration(
-                hintText: 'Paste group ID here',
-                border: OutlineInputBorder(),
-              ),
+              hint: 'Paste group ID here',
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => _join(),
             ),
             const SizedBox(height: AppSpacing.lg),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _isJoining ? null : _join,
-                child: _isJoining
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: AppColors.pureWhite),
-                      )
-                    : const Text('Join Group'),
-              ),
+            AppButton(
+              label: 'Join Group',
+              isLoading: _isJoining,
+              onPressed: _isJoining ? null : _join,
             ),
           ],
         ),
@@ -214,6 +207,7 @@ class _GroupCheckoutScreenState extends ConsumerState<GroupCheckoutScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = context.colors;
     final cart = ref.watch(cartProvider);
     final membersAsync = ref.watch(groupMembersProvider(widget.groupId));
 
@@ -237,14 +231,20 @@ class _GroupCheckoutScreenState extends ConsumerState<GroupCheckoutScreen> {
                 runSpacing: AppSpacing.sm,
                 children: List.generate(members.length, (i) {
                   final paid = members[i]['paid'] as bool? ?? false;
-                  return Chip(
-                    label: Text(
-                      paid ? 'Member ${i + 1} ✓' : 'Member ${i + 1}',
-                      style: theme.textTheme.labelSmall,
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md, vertical: 6),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                      border: Border.all(color: paid ? c.brand : c.border),
                     ),
-                    backgroundColor: paid
-                        ? AppColors.emerald.withValues(alpha: 0.12)
-                        : theme.colorScheme.surfaceContainerHighest,
+                    child: Text(
+                      paid ? 'Member ${i + 1} ✓' : 'Member ${i + 1}',
+                      style: AppTypography.caption(c).copyWith(
+                        color: paid ? c.brandText : c.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   );
                 }),
               ),
@@ -259,61 +259,45 @@ class _GroupCheckoutScreenState extends ConsumerState<GroupCheckoutScreen> {
             if (cart.isEmpty)
               Text(
                 'No items yet — go back to the menu to add items.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                ),
+                style: AppTypography.meta(c),
               )
             else ...[
-              ...cart.items.map(
-                (item) => Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                  child: Row(
-                    children: [
-                      Text(
-                        '${item.quantity}×',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: 0.55),
+              AppCard(
+                child: Column(
+                  children: [
+                    ...cart.items.map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                        child: Row(
+                          children: [
+                            Text('${item.quantity}×',
+                                style: AppTypography.tabular(
+                                    AppTypography.meta(c))),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                                child: Text(item.product.name,
+                                    style: theme.textTheme.bodyMedium)),
+                            Text(Money.format(item.lineTotal),
+                                style: AppTypography.tabular(
+                                    theme.textTheme.labelMedium!)),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                          child: Text(item.product.name,
-                              style: theme.textTheme.bodyMedium)),
-                      Text('₦${item.lineTotal.toStringAsFixed(0)}',
-                          style: theme.textTheme.labelMedium),
-                    ],
-                  ),
-                ),
-              ),
-              const Divider(height: AppSpacing.lg),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Your total', style: theme.textTheme.titleSmall),
-                  Text(
-                    '₦${cart.subtotal.toStringAsFixed(0)}',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      color: theme.colorScheme.primary,
                     ),
-                  ),
-                ],
+                    Divider(height: AppSpacing.lg, color: c.border),
+                    SummaryRow(
+                      label: 'Your total',
+                      value: Money.format(cart.subtotal),
+                      bold: true,
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: AppSpacing.xl),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _isCheckingOut ? null : _checkout,
-                  child: _isCheckingOut
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: AppColors.pureWhite),
-                        )
-                      : Text(
-                          'Pay My Share  ₦${cart.subtotal.toStringAsFixed(0)}'),
-                ),
+              AppButton(
+                label: 'Pay My Share  ${Money.format(cart.subtotal)}',
+                isLoading: _isCheckingOut,
+                onPressed: _isCheckingOut ? null : _checkout,
               ),
             ],
           ],

@@ -10,8 +10,17 @@ import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/services/wallet/wallet_service.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/widgets/async/retry_section.dart';
+import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/format/money.dart';
+import '../../shared/widgets/lists/app_list_group.dart';
+import '../../shared/widgets/sheets/app_sheet.dart';
+import '../../shared/widgets/text/app_section_label.dart';
+import '../../shared/widgets/wallet/transaction_row.dart';
+import '../../shared/widgets/wallet/wallet_card.dart';
 import 'paystack_checkout_page.dart';
 import 'saving_plan_screen.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
@@ -128,10 +137,9 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            'Wallet funded! New balance: ₦${newBalance.toStringAsFixed(2)}',
+            'Wallet funded! New balance: ${Money.hero(newBalance)}',
           ),
           behavior: SnackBarBehavior.floating,
-          backgroundColor: AppColors.emerald,
         ),
       );
     } catch (e) {
@@ -148,11 +156,9 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
         SnackBar(
           content: Text(message),
           behavior: SnackBarBehavior.floating,
-          backgroundColor: AppColors.error,
           duration: const Duration(seconds: 6),
           action: SnackBarAction(
             label: 'Retry',
-            textColor: AppColors.pureWhite,
             onPressed: () => _retryVerification(paystackRef),
           ),
         ),
@@ -175,9 +181,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Confirmed. Balance: ₦${balance.toStringAsFixed(2)}'),
+          content: Text('Confirmed. Balance: ${Money.hero(balance)}'),
           behavior: SnackBarBehavior.floating,
-          backgroundColor: AppColors.emerald,
         ),
       );
     } catch (_) {
@@ -200,23 +205,12 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     final controller = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
-    return showModalBottomSheet<double>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppRadius.sheet),
-        ),
-      ),
+    return AppSheet.show<double>(
+      context,
       builder: (ctx) {
         final theme = Theme.of(ctx);
         return Padding(
-          padding: EdgeInsets.only(
-            left: AppSpacing.screenGutter,
-            right: AppSpacing.screenGutter,
-            top: AppSpacing.lg,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.lg,
-          ),
+          padding: const EdgeInsets.only(top: AppSpacing.sm),
           child: Form(
             key: formKey,
             child: Column(
@@ -228,9 +222,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   'Minimum ₦100 • Test mode — no real money is moved',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                  ),
+                  style: AppTypography.meta(ctx.colors),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 AppTextField(
@@ -241,12 +233,9 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
                   ],
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     prefixText: '₦ ',
                     hintText: '500',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.control),
-                    ),
                   ),
                   validator: (v) {
                     final n = double.tryParse(v ?? '');
@@ -257,16 +246,13 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                   },
                 ),
                 const SizedBox(height: AppSpacing.md),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () {
-                      if (formKey.currentState!.validate()) {
-                        Navigator.of(ctx).pop(double.parse(controller.text));
-                      }
-                    },
-                    child: const Text('Proceed to Pay'),
-                  ),
+                AppButton(
+                  label: 'Proceed to Pay',
+                  onPressed: () {
+                    if (formKey.currentState!.validate()) {
+                      Navigator.of(ctx).pop(double.parse(controller.text));
+                    }
+                  },
                 ),
               ],
             ),
@@ -279,6 +265,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = context.colors;
     final infoAsync = ref.watch(walletInfoProvider);
     final txAsync = ref.watch(walletTransactionsProvider);
 
@@ -306,35 +293,36 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                       Text('Wallet', style: theme.textTheme.headlineMedium),
                       const SizedBox(height: AppSpacing.lg),
 
-                      // ── Balance card ───────────────────────────────────
-                      _BalanceCard(
+                      // ── Wallet card (balance + virtual account) ────────
+                      _WalletSection(
                         infoAsync: infoAsync,
+                        van: _van,
+                        vanLoading: _vanLoading,
                         onFundTap: _openFundWallet,
                         onRetry: () => ref.invalidate(walletInfoProvider),
                       ),
 
                       const SizedBox(height: AppSpacing.md),
 
-                      // ── Virtual Account card ───────────────────────────
-                      _VirtualAccountCard(
-                        van: _van,
-                        isLoading: _vanLoading,
-                      ),
-
-                      const SizedBox(height: AppSpacing.md),
-
                       // ── Saving Plan shortcut ───────────────────────────
-                      _SavingPlanTile(
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const SavingPlanScreen(),
+                      AppListGroup(
+                        children: [
+                          AppListRow(
+                            leadingIcon: AppIcons.savings,
+                            title: 'Saving Plan',
+                            subtitle:
+                                'Set a daily, weekly, or monthly spending budget',
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const SavingPlanScreen(),
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
 
                       const SizedBox(height: AppSpacing.lg),
-                      Text('Transaction history',
-                          style: theme.textTheme.titleSmall),
+                      const AppSectionLabel('Transaction history'),
                       const SizedBox(height: AppSpacing.sm),
                     ],
                   ),
@@ -369,19 +357,12 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                       ),
                       child: Column(
                         children: [
-                          Icon(
-                            Icons.receipt_long_outlined,
-                            size: 48,
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.25),
-                          ),
+                          Icon(AppIcons.orders,
+                              size: 48, color: c.textTertiary),
                           const SizedBox(height: AppSpacing.sm),
                           Text(
                             'No transactions yet',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurface
-                                  .withValues(alpha: 0.55),
-                            ),
+                            style: AppTypography.meta(c),
                           ),
                         ],
                       ),
@@ -389,18 +370,31 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                   );
                 }
 
+                // Grouped Today / Yesterday / Earlier on the phone — the
+                // query and the order of `txs` are untouched.
+                final groups = _groupByDay(txs);
                 return SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(
+                  padding: EdgeInsets.fromLTRB(
                     AppSpacing.screenGutter,
                     0,
                     AppSpacing.screenGutter,
-                    AppSpacing.xl,
+                    AppSpacing.navClearanceOf(context) + AppSpacing.md,
                   ),
-                  sliver: SliverList.separated(
-                    itemCount: txs.length,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(height: AppSpacing.xs),
-                    itemBuilder: (_, i) => _TransactionTile(tx: txs[i]),
+                  sliver: SliverList.list(
+                    children: [
+                      for (final g in groups) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(
+                              top: AppSpacing.sm, bottom: AppSpacing.sm),
+                          child: AppSectionLabel(g.$1),
+                        ),
+                        AppListGroup(
+                          children: [
+                            for (final tx in g.$2) _TransactionTile(tx: tx),
+                          ],
+                        ),
+                      ],
+                    ],
                   ),
                 );
               },
@@ -412,245 +406,86 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
   }
 }
 
-// ── Balance card ──────────────────────────────────────────────────────────────
+// ── Wallet card section ───────────────────────────────────────────────────────
 
-class _BalanceCard extends StatelessWidget {
-  const _BalanceCard({
+/// Maps the wallet + virtual-account data onto the presentational
+/// [WalletCard]. Copying the account number is the only behaviour here, and it
+/// is the same clipboard call + snackbar as before.
+class _WalletSection extends StatelessWidget {
+  const _WalletSection({
     required this.infoAsync,
+    required this.van,
+    required this.vanLoading,
     required this.onFundTap,
     required this.onRetry,
   });
 
   final AsyncValue<Map<String, dynamic>?> infoAsync;
+  final VirtualAccountResult? van;
+  final bool vanLoading;
   final VoidCallback onFundTap;
   final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.emerald, AppColors.darkEmerald],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Available Balance',
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: AppColors.pureWhite.withValues(alpha: 0.8),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          infoAsync.when(
-            data: (info) => Text(
-              '₦${((info?['balance'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}',
-              style: theme.textTheme.headlineLarge?.copyWith(
-                color: AppColors.pureWhite,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            loading: () => const SizedBox(
-              height: 36,
-              child: CircularProgressIndicator(
-                  color: AppColors.pureWhite, strokeWidth: 2),
-            ),
-            error: (_, __) => Row(
-              children: [
-                Text(
-                  '₦--',
-                  style: theme.textTheme.headlineLarge
-                      ?.copyWith(color: AppColors.pureWhite),
+    final v = van;
+    return WalletCard(
+      balance: infoAsync.hasValue
+          ? ((infoAsync.value?['balance'] as num?)?.toDouble() ?? 0)
+          : null,
+      isLoading: infoAsync.isLoading && !infoAsync.hasValue,
+      hasError: infoAsync.hasError && !infoAsync.hasValue,
+      onRetry: onRetry,
+      onFund: onFundTap,
+      accountLoading: vanLoading,
+      accountTitle: v == null
+          ? null
+          : (v.isRealAccount
+              ? v.bankName
+              : 'Virtual Account (Pending Activation)'),
+      accountValue: v == null
+          ? null
+          : (v.isRealAccount
+              ? v.accountNumber
+              : 'Awaiting Paystack business verification'),
+      onCopyAccount: v?.isRealAccount == true
+          ? () {
+              Clipboard.setData(ClipboardData(text: v!.accountNumber));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Account number copied'),
+                  behavior: SnackBarBehavior.floating,
+                  duration: Duration(seconds: 2),
                 ),
-                const SizedBox(width: AppSpacing.sm),
-                TextButton.icon(
-                  onPressed: onRetry,
-                  icon: const Icon(Icons.refresh,
-                      size: 16, color: AppColors.pureWhite),
-                  label: const Text('Retry',
-                      style: TextStyle(color: AppColors.pureWhite)),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          SizedBox(
-            height: 40,
-            child: FilledButton.icon(
-              onPressed: onFundTap,
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Fund Wallet'),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.pureWhite.withValues(alpha: 0.2),
-                foregroundColor: AppColors.pureWhite,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.control),
-                  side: BorderSide(
-                    color: AppColors.pureWhite.withValues(alpha: 0.4),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+              );
+            }
+          : null,
     );
   }
 }
 
-// ── Virtual Account card ──────────────────────────────────────────────────────
+// ── Transaction grouping + tile ───────────────────────────────────────────────
 
-class _VirtualAccountCard extends StatelessWidget {
-  const _VirtualAccountCard({required this.van, required this.isLoading});
-
-  final VirtualAccountResult? van;
-  final bool isLoading;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: theme.dividerColor),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.account_balance_outlined,
-              size: 20, color: theme.colorScheme.primary),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: isLoading
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Virtual Account',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.5),
-                          )),
-                      const SizedBox(height: 4),
-                      const SizedBox(
-                        height: 14,
-                        width: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ],
-                  )
-                : van == null
-                    ? Text('Virtual account unavailable',
-                        style: theme.textTheme.bodySmall)
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            van!.isRealAccount
-                                ? van!.bankName
-                                : 'Virtual Account (Pending Activation)',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurface
-                                  .withValues(alpha: 0.5),
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            van!.isRealAccount
-                                ? van!.accountNumber
-                                : 'Awaiting Paystack business verification',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight:
-                                  van!.isRealAccount ? FontWeight.w600 : null,
-                            ),
-                          ),
-                        ],
-                      ),
-          ),
-          if (van?.isRealAccount == true)
-            IconButton(
-              icon: const Icon(Icons.copy_outlined, size: 18),
-              tooltip: 'Copy account number',
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: van!.accountNumber));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Account number copied'),
-                    behavior: SnackBarBehavior.floating,
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              },
-            ),
-        ],
-      ),
-    );
+/// Splits the already-loaded list into Today / Yesterday / Earlier, keeping
+/// the original (newest-first) order.
+List<(String, List<WalletTransaction>)> _groupByDay(
+    List<WalletTransaction> txs) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final yesterday = today.subtract(const Duration(days: 1));
+  final buckets = <String, List<WalletTransaction>>{};
+  for (final tx in txs) {
+    final l = tx.createdAt.toLocal();
+    final day = DateTime(l.year, l.month, l.day);
+    final key = day == today
+        ? 'Today'
+        : day == yesterday
+            ? 'Yesterday'
+            : 'Earlier';
+    buckets.putIfAbsent(key, () => []).add(tx);
   }
+  return [for (final e in buckets.entries) (e.key, e.value)];
 }
-
-// ── Saving Plan shortcut tile ─────────────────────────────────────────────────
-
-class _SavingPlanTile extends StatelessWidget {
-  const _SavingPlanTile({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.card),
-      child: Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.primary.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(
-            color: theme.colorScheme.primary.withValues(alpha: 0.2),
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.savings_outlined,
-                size: 20, color: theme.colorScheme.primary),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Saving Plan',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                      )),
-                  Text(
-                    'Set a daily, weekly, or monthly spending budget',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right,
-                color: theme.colorScheme.primary.withValues(alpha: 0.6)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Transaction tile ──────────────────────────────────────────────────────────
 
 class _TransactionTile extends StatelessWidget {
   const _TransactionTile({required this.tx});
@@ -659,74 +494,12 @@ class _TransactionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isCredit = tx.type == WalletTxType.credit;
-    final amountColor = isCredit ? AppColors.emerald : AppColors.orange;
-    final amountPrefix = isCredit ? '+' : '−';
-
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: theme.dividerColor),
-      ),
-      child: Row(
-        children: [
-          // Icon badge
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: amountColor.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              isCredit
-                  ? Icons.arrow_downward_rounded
-                  : Icons.arrow_upward_rounded,
-              size: 18,
-              color: amountColor,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(tx.label, style: theme.textTheme.labelMedium),
-                Text(
-                  _formatDate(tx.createdAt),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '$amountPrefix₦${tx.amount.toStringAsFixed(0)}',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: amountColor,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              Text(
-                'Bal: ₦${tx.balanceAfter.toStringAsFixed(0)}',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+    return TransactionRow(
+      title: tx.label,
+      dateText: _formatDate(tx.createdAt),
+      amount: tx.amount,
+      isCredit: tx.type == WalletTxType.credit,
+      balanceAfter: tx.balanceAfter,
     );
   }
 

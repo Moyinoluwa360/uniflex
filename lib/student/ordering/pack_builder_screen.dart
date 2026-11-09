@@ -6,11 +6,16 @@ import '../../shared/models/cart_item.dart';
 import '../../shared/models/product.dart';
 import '../../shared/models/vendor.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/widgets/accordions/app_accordion_card.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
-import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/cart/cart_widgets.dart';
+import '../../shared/widgets/format/money.dart';
 import '../../shared/widgets/media/app_image.dart';
+import '../../shared/widgets/notice/app_inline_notice.dart';
 import 'cart_provider.dart';
 
 /// Pack-first ordering flow for food items.
@@ -143,6 +148,7 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = context.colors;
     final spoons = _mealSpoonsInPack(_activePack);
     final emptyErr = _emptyPackError();
     final canAdd = emptyErr == null;
@@ -157,7 +163,10 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
               horizontal: AppSpacing.screenGutter,
               vertical: AppSpacing.lg,
             ),
-            color: theme.colorScheme.surfaceContainerHighest,
+            decoration: BoxDecoration(
+              color: c.surface,
+              border: Border(bottom: BorderSide(color: c.border)),
+            ),
             child: Column(
               children: [
                 Text(
@@ -169,7 +178,7 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     _PackCountButton(
-                      icon: Icons.remove,
+                      icon: AppIcons.remove,
                       onTap: _packCount > 1
                           ? () => _setPackCount(_packCount - 1)
                           : null,
@@ -179,24 +188,23 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
                           const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                       child: Text(
                         '$_packCount',
-                        style: theme.textTheme.headlineLarge?.copyWith(
+                        style: AppTypography.tabular(
+                            theme.textTheme.headlineLarge!.copyWith(
                           fontWeight: FontWeight.w700,
-                        ),
+                        )),
                       ),
                     ),
                     _PackCountButton(
-                      icon: Icons.add,
+                      icon: AppIcons.add,
                       onTap: () => _setPackCount(_packCount + 1),
                     ),
                   ],
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  '₦${widget.vendor.packPrice.toStringAsFixed(0)} per pack'
-                  ' · Total: ₦${_totalPackFee.toStringAsFixed(0)}',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
+                  '${Money.format(widget.vendor.packPrice)} per pack'
+                  ' · Total: ${Money.format(_totalPackFee)}',
+                  style: AppTypography.tabular(AppTypography.meta(c)),
                 ),
               ],
             ),
@@ -223,8 +231,7 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
                           Text('Pack ${i + 1}'),
                           if (isEmpty) ...[
                             const SizedBox(width: 4),
-                            const Icon(Icons.warning_amber_rounded,
-                                size: 14, color: AppColors.orange),
+                            Icon(AppIcons.error, size: 14, color: c.dangerText),
                           ],
                         ],
                       ),
@@ -238,43 +245,30 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
 
           // ── Pack-full warning (only visible at capacity) ──────────
           if (spoons >= kPackMealCapacity)
-            Container(
-              margin: const EdgeInsets.symmetric(
+            Padding(
+              padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.screenGutter,
                 vertical: AppSpacing.sm,
               ),
-              padding: const EdgeInsets.all(AppSpacing.sm),
-              decoration: BoxDecoration(
-                color: AppColors.orange.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(AppRadius.control),
-                border:
-                    Border.all(color: AppColors.orange.withValues(alpha: 0.3)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.info_outline,
-                      size: 16, color: AppColors.orange),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      'This pack is full. Add another pack to get more.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppColors.orange,
+              child: AppInlineNotice.custom(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'This pack is full. Add another pack to get more.',
+                        style: AppTypography.meta(c),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  TextButton(
-                    onPressed: () => _setPackCount(_packCount + 1),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.orange,
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                      visualDensity: VisualDensity.compact,
+                    const SizedBox(width: AppSpacing.sm),
+                    AppButton(
+                      label: 'Add pack',
+                      variant: AppButtonVariant.text,
+                      size: AppButtonSize.small,
+                      expand: false,
+                      onPressed: () => _setPackCount(_packCount + 1),
                     ),
-                    child: const Text('Add pack'),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
 
@@ -287,7 +281,7 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
                   AppAccordionCard(
                     leading: buildAccordionLeadingIcon(
                       context: context,
-                      icon: Icons.dinner_dining_outlined,
+                      icon: AppIcons.food,
                     ),
                     title: 'Meals',
                     subtitle:
@@ -315,7 +309,7 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
                   AppAccordionCard(
                     leading: buildAccordionLeadingIcon(
                       context: context,
-                      icon: Icons.egg_alt_outlined,
+                      icon: AppIcons.pack,
                     ),
                     title: 'Proteins / Toppings',
                     subtitle:
@@ -360,26 +354,28 @@ class _PackBuilderScreenState extends ConsumerState<PackBuilderScreen> {
                   padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                   child: Text(
                     emptyErr,
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: AppColors.error),
+                    style: AppTypography.meta(c).copyWith(color: c.dangerText),
                     textAlign: TextAlign.center,
                   ),
                 ),
-              PrimaryButton(
+              AppButton(
                 label: 'Add to Cart'
                     ' ($_packCount pack${_packCount > 1 ? 's' : ''},'
-                    ' ₦${_totalPackFee.toStringAsFixed(0)})',
-                icon: Icons.shopping_cart_outlined,
+                    ' ${Money.format(_totalPackFee)})',
+                icon: AppIcons.cart,
                 onPressed: canAdd ? _addToCart : null,
               ),
               if (_packCount > 1)
                 Padding(
                   padding: const EdgeInsets.only(top: AppSpacing.sm),
-                  child: TextButton(
+                  child: AppButton(
+                    label: 'Remove last empty pack',
+                    variant: AppButtonVariant.text,
+                    size: AppButtonSize.small,
+                    expand: false,
                     onPressed: _isPackEmpty(_packCount - 1)
                         ? () => _setPackCount(_packCount - 1)
                         : null,
-                    child: const Text('Remove last empty pack'),
                   ),
                 ),
             ],
@@ -408,6 +404,7 @@ class _PackProductTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = context.colors;
     // For meals: block adding if pack is full.
     final atCapacity = isMeal && spoonsUsed >= kPackMealCapacity;
 
@@ -436,22 +433,16 @@ class _PackProductTile extends StatelessWidget {
               children: [
                 Text(product.name, style: theme.textTheme.labelLarge),
                 Text(
-                  '₦${product.basePrice.toStringAsFixed(0)}'
+                  '${Money.format(product.basePrice)}'
                   '${isMeal ? ' · 1 spoon each' : ''}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                  ),
+                  style: AppTypography.tabular(AppTypography.meta(c)),
                 ),
               ],
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
           if (quantity == 0)
-            IconButton(
-              onPressed: atCapacity ? null : () => onChanged(1),
-              icon: const Icon(Icons.add_circle_outline),
-              color: atCapacity ? theme.disabledColor : AppColors.orange,
-            )
+            AddItemButton(onTap: atCapacity ? null : () => onChanged(1))
           else
             _CountStepper(
               value: quantity,
@@ -477,23 +468,28 @@ class _PackCountButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final c = context.colors;
     final enabled = onTap != null;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 52,
-        height: 52,
-        decoration: BoxDecoration(
-          color: enabled
-              ? theme.colorScheme.primary.withValues(alpha: 0.1)
-              : theme.colorScheme.onSurface.withValues(alpha: 0.05),
-          shape: BoxShape.circle,
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      child: Material(
+        color: Colors.transparent,
+        shape: CircleBorder(
+          side: BorderSide(color: enabled ? c.borderStrong : c.border),
         ),
-        child: Icon(
-          icon,
-          size: 28,
-          color: enabled ? theme.colorScheme.primary : theme.disabledColor,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: SizedBox(
+            width: 52,
+            height: 52,
+            child: Icon(
+              icon,
+              size: 28,
+              color: enabled ? c.textPrimary : c.textTertiary,
+            ),
+          ),
         ),
       ),
     );
@@ -515,42 +511,10 @@ class _CountStepper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(AppRadius.control),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            onPressed: value > min ? () => onChanged(value - 1) : null,
-            icon: const Icon(Icons.remove, size: 16),
-            color: theme.colorScheme.primary,
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-          SizedBox(
-            width: 24,
-            child: Text(
-              '$value',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.labelLarge,
-            ),
-          ),
-          IconButton(
-            onPressed: maxReached ? null : () => onChanged(value + 1),
-            icon: const Icon(Icons.add, size: 16),
-            color: maxReached ? theme.disabledColor : theme.colorScheme.primary,
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-        ],
-      ),
+    return QuantityStepper(
+      quantity: value,
+      onMinus: value > min ? () => onChanged(value - 1) : null,
+      onPlus: maxReached ? null : () => onChanged(value + 1),
     );
   }
 }

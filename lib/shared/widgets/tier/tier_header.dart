@@ -17,13 +17,15 @@ class TierHeader extends StatelessWidget {
     super.key,
     required this.tier,
     required this.name,
-    required this.nickname,
+    this.nickname,
     required this.initial,
   });
 
   final String? tier;
   final String name;
-  final String nickname;
+
+  /// Shown as `@nickname` under the name; omitted when null or empty.
+  final String? nickname;
   final String initial;
 
   @override
@@ -79,13 +81,15 @@ class TierHeader extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: AppTypography.greetingName(c.textPrimary),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '@$nickname',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.meta(c),
-                        ),
+                        if (nickname != null && nickname!.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            '@$nickname',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.meta(c),
+                          ),
+                        ],
                         if (tierName.isNotEmpty) ...[
                           const SizedBox(height: AppSpacing.sm + 2),
                           DecoratedBox(

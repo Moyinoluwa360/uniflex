@@ -7,10 +7,17 @@ import '../../shared/models/wallet_transaction.dart';
 import '../../shared/services/saving_plan/saving_plan_providers.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
-import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/cards/app_card.dart';
+import '../../shared/widgets/cart/summary_row.dart';
+import '../../shared/widgets/format/money.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
+import '../../shared/widgets/tabs/app_segmented_tabs.dart';
+import '../../shared/widgets/text/app_section_label.dart';
 
 /// Saving Plan screen — lets the student set a spending budget for a
 /// chosen period (Daily / Weekly / Monthly).
@@ -66,25 +73,13 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
   }
 
   Future<void> _removePlan() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Remove saving plan?'),
-        content: const Text(
-          'Your spending will no longer be tracked against a budget.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('Remove',
-                style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
-          ),
-        ],
-      ),
+    final confirmed = await AppDialog.show(
+      context,
+      title: 'Remove saving plan?',
+      body: 'Your spending will no longer be tracked against a budget.',
+      secondaryLabel: 'Cancel',
+      confirmLabel: 'Remove',
+      destructive: true,
     );
     if (confirmed != true || !mounted) return;
 
@@ -101,7 +96,7 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final c = context.colors;
     final planAsync = ref.watch(activeSavingPlanProvider);
     final notifierState = ref.watch(savingPlanNotifierProvider);
     final txAsync = ref.watch(walletTransactionsProvider);
@@ -126,41 +121,22 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
                 ],
 
                 // ── Period picker ────────────────────────────────────────
-                Text(
+                AppSectionLabel(
                   plan != null ? 'Update your plan' : 'Set a budget',
-                  style: theme.textTheme.titleSmall,
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   'Your wallet spending will be tracked against this budget. You\'ll be warned if you go over.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
+                  style: AppTypography.meta(c),
                 ),
                 const SizedBox(height: AppSpacing.md),
 
-                // Period chips
-                Row(
-                  children: BudgetPeriod.values.map((p) {
-                    final selected = _selectedPeriod == p;
-                    return Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: AppSpacing.sm),
-                        child: ChoiceChip(
-                          label: Text(p.label),
-                          selected: selected,
-                          onSelected: (_) =>
-                              setState(() => _selectedPeriod = p),
-                          selectedColor:
-                              theme.colorScheme.primary.withValues(alpha: 0.15),
-                          labelStyle: theme.textTheme.labelMedium?.copyWith(
-                            color: selected ? theme.colorScheme.primary : null,
-                            fontWeight: selected ? FontWeight.w600 : null,
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
+                // Period picker
+                AppSegmentedTabs(
+                  labels: [for (final p in BudgetPeriod.values) p.label],
+                  index: BudgetPeriod.values.indexOf(_selectedPeriod),
+                  onChanged: (i) =>
+                      setState(() => _selectedPeriod = BudgetPeriod.values[i]),
                 ),
 
                 const SizedBox(height: AppSpacing.md),
@@ -179,9 +155,6 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
                       prefixText: '₦ ',
                       labelText: '${_selectedPeriod.label} budget',
                       hintText: '5000',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.control),
-                      ),
                     ),
                     validator: (v) {
                       final n = double.tryParse(v ?? '');
@@ -195,9 +168,9 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
 
                 const SizedBox(height: AppSpacing.md),
 
-                PrimaryButton(
+                AppButton(
                   label: plan != null ? 'Update Plan' : 'Set Plan',
-                  icon: Icons.savings_outlined,
+                  icon: AppIcons.savings,
                   isLoading: notifierState.isLoading,
                   onPressed: _savePlan,
                 ),
@@ -205,27 +178,23 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
                 if (plan != null) ...[
                   const SizedBox(height: AppSpacing.sm),
                   Center(
-                    child: TextButton(
+                    child: AppButton(
+                      label: 'Remove saving plan',
+                      variant: AppButtonVariant.quietDanger,
+                      size: AppButtonSize.small,
+                      expand: false,
                       onPressed: _removePlan,
-                      child: Text(
-                        'Remove saving plan',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: theme.colorScheme.error,
-                        ),
-                      ),
                     ),
                   ),
                 ],
 
                 // ── Budget history ───────────────────────────────────────
                 const SizedBox(height: AppSpacing.xl),
-                Text('Budget history', style: theme.textTheme.titleSmall),
+                const AppSectionLabel('Budget history'),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   'Order payments in your current plan period.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                  ),
+                  style: AppTypography.meta(c),
                 ),
                 const SizedBox(height: AppSpacing.sm),
 
@@ -256,10 +225,7 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
                             const EdgeInsets.symmetric(vertical: AppSpacing.md),
                         child: Text(
                           'No spending yet this period.',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.5),
-                          ),
+                          style: AppTypography.meta(c),
                         ),
                       );
                     }
@@ -273,14 +239,16 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
                               Expanded(
                                 child: Text(
                                   t.label,
-                                  style: theme.textTheme.bodySmall,
+                                  style: AppTypography.meta(c),
                                 ),
                               ),
                               Text(
-                                '−₦${t.amount.toStringAsFixed(0)}',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                  color: AppColors.orange,
-                                  fontWeight: FontWeight.w600,
+                                Money.minus(t.amount),
+                                style: AppTypography.tabular(
+                                  AppTypography.meta(c).copyWith(
+                                    color: c.textPrimary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
                             ],
@@ -310,143 +278,68 @@ class _PlanSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final c = context.colors;
     final overBudget = plan.isOverBudget;
 
-    return Container(
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: overBudget
-            ? AppColors.error.withValues(alpha: 0.06)
-            : theme.colorScheme.primary.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(
-          color: overBudget
-              ? AppColors.error.withValues(alpha: 0.3)
-              : theme.colorScheme.primary.withValues(alpha: 0.2),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                overBudget
-                    ? Icons.warning_amber_rounded
-                    : Icons.savings_outlined,
-                size: 18,
-                color: overBudget ? AppColors.error : theme.colorScheme.primary,
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              Text(
-                plan.periodLabel,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color:
-                      overBudget ? AppColors.error : theme.colorScheme.primary,
-                  fontWeight: FontWeight.w600,
+      child: AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  overBudget ? AppIcons.error : AppIcons.savings,
+                  size: 18,
+                  color: overBudget ? c.dangerText : c.textSecondary,
                 ),
-              ),
-              if (overBudget) ...[
-                const SizedBox(width: AppSpacing.sm),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.sm,
-                    vertical: 2,
+                const SizedBox(width: AppSpacing.xs),
+                Text(
+                  plan.periodLabel,
+                  style: AppTypography.meta(c).copyWith(
+                    color: c.textPrimary,
+                    fontWeight: FontWeight.w600,
                   ),
-                  decoration: BoxDecoration(
-                    color: AppColors.error.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                  ),
-                  child: Text(
+                ),
+                if (overBudget) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  Text(
                     'Over budget',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: AppColors.error,
+                    style: AppTypography.caption(c).copyWith(
+                      color: c.dangerText,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                ),
+                ],
               ],
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          _BudgetRow(
-            label: 'Budget',
-            value: '₦${plan.budget.toStringAsFixed(0)}',
-            theme: theme,
-          ),
-          _BudgetRow(
-            label: 'Spent',
-            value: '₦${plan.spent.toStringAsFixed(0)}',
-            theme: theme,
-            valueColor: overBudget ? AppColors.error : AppColors.orange,
-          ),
-          _BudgetRow(
-            label: 'Remaining',
-            value: overBudget
-                ? '−₦${(plan.spent - plan.budget).toStringAsFixed(0)}'
-                : '₦${plan.remainingBudget.toStringAsFixed(0)}',
-            theme: theme,
-            valueColor: overBudget ? AppColors.error : AppColors.emerald,
-            bold: true,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          // Progress bar
-          ClipRRect(
-            borderRadius: BorderRadius.circular(2),
-            child: LinearProgressIndicator(
-              value: (plan.spent / plan.budget).clamp(0.0, 1.0),
-              backgroundColor:
-                  theme.colorScheme.onSurface.withValues(alpha: 0.1),
-              valueColor: AlwaysStoppedAnimation<Color>(
-                overBudget ? AppColors.error : AppColors.emerald,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            SummaryRow(label: 'Budget', value: Money.format(plan.budget)),
+            SummaryRow(label: 'Spent', value: Money.format(plan.spent)),
+            SummaryRow(
+              label: 'Remaining',
+              value: overBudget
+                  ? Money.minus(plan.spent - plan.budget)
+                  : Money.format(plan.remainingBudget),
+              valueColor: overBudget ? c.dangerText : c.brandText,
+              bold: true,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            // Progress bar (8px)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: (plan.spent / plan.budget).clamp(0.0, 1.0),
+                backgroundColor: c.surfaceRaised,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  overBudget ? c.dangerText : c.brand,
+                ),
+                minHeight: 8,
               ),
-              minHeight: 6,
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BudgetRow extends StatelessWidget {
-  const _BudgetRow({
-    required this.label,
-    required this.value,
-    required this.theme,
-    this.valueColor,
-    this.bold = false,
-  });
-
-  final String label;
-  final String value;
-  final ThemeData theme;
-  final Color? valueColor;
-  final bool bold;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-              )),
-          Text(
-            value,
-            style:
-                (bold ? theme.textTheme.labelMedium : theme.textTheme.bodySmall)
-                    ?.copyWith(
-              color: valueColor,
-              fontWeight: bold ? FontWeight.w700 : null,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../shared/models/order.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
-import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/cards/app_card.dart';
 import '../tracking/errand_tracking_screen.dart';
 
 /// Shown after a successful errand placement.
@@ -20,6 +23,7 @@ class ErrandConfirmationScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = context.colors;
 
     return Scaffold(
       appBar: const UniflexAppBar(title: 'Errand sent'),
@@ -33,13 +37,9 @@ class ErrandConfirmationScreen extends StatelessWidget {
               height: 80,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppColors.emerald.withValues(alpha: 0.12),
+                color: c.brand,
               ),
-              child: const Icon(
-                Icons.check_circle_outline,
-                color: AppColors.emerald,
-                size: 40,
-              ),
+              child: Icon(AppIcons.check, color: c.onBrand, size: 40),
             ),
             const SizedBox(height: AppSpacing.lg),
             Text(
@@ -52,34 +52,28 @@ class ErrandConfirmationScreen extends StatelessWidget {
             const SizedBox(height: AppSpacing.sm),
             Text(
               'A rider will accept your errand and call you to sort out the details.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
-              ),
+              style: AppTypography.meta(c),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSpacing.xl),
-            // Order reference pill
-            Container(
+            // Order reference
+            AppCard(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.md,
                 vertical: AppSpacing.sm,
               ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(AppRadius.card),
-              ),
               child: Text(
                 'Errand ID: ${order.shortId}',
                 style: theme.textTheme.labelMedium?.copyWith(
-                  color: theme.colorScheme.primary,
+                  color: c.textPrimary,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ),
             const SizedBox(height: AppSpacing.xl),
-            PrimaryButton(
+            AppButton(
               label: 'Track errand',
-              icon: Icons.location_on_outlined,
+              icon: AppIcons.location,
               onPressed: () {
                 Navigator.of(context).pushReplacement(
                   MaterialPageRoute(
@@ -89,12 +83,13 @@ class ErrandConfirmationScreen extends StatelessWidget {
               },
             ),
             const SizedBox(height: AppSpacing.md),
-            TextButton(
+            AppButton(
+              label: 'Back to home',
+              variant: AppButtonVariant.text,
               onPressed: () {
                 // Pop back to root (home screen).
                 Navigator.of(context).popUntil((route) => route.isFirst);
               },
-              child: const Text('Back to home'),
             ),
           ],
         ),

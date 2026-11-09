@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
+import '../../shared/widgets/cards/app_card.dart';
+import '../../shared/widgets/text/app_section_label.dart';
 import '../services/student_providers.dart';
 
 /// Badges / achievements screen. Shows earned badges prominently and
@@ -30,7 +34,7 @@ class BadgesScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
+    final c = context.colors;
     final badgesAsync = ref.watch(userAchievementsProvider);
 
     return Scaffold(
@@ -53,34 +57,27 @@ class BadgesScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Progress summary
-                      Container(
+                      SizedBox(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        decoration: BoxDecoration(
-                          color: AppColors.emerald.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(AppRadius.card),
-                          border: Border.all(
-                              color: AppColors.emerald.withValues(alpha: 0.3)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.emoji_events,
-                                color: AppColors.emerald),
-                            const SizedBox(width: AppSpacing.sm),
-                            Expanded(
-                              child: Text(
-                                '$earnedCount / ${_allCodes.length} badges earned',
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  color: AppColors.emerald,
+                        child: AppCard(
+                          child: Row(
+                            children: [
+                              Icon(AppIcons.trophy, color: c.textSecondary),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: Text(
+                                  '$earnedCount / ${_allCodes.length} badges earned',
+                                  style: AppTypography.body(c)
+                                      .copyWith(fontWeight: FontWeight.w600),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                       const SizedBox(height: AppSpacing.md),
                       if (earned.isNotEmpty) ...[
-                        Text('Earned', style: theme.textTheme.titleSmall),
+                        const AppSectionLabel('Earned'),
                         const SizedBox(height: AppSpacing.sm),
                         Wrap(
                           spacing: AppSpacing.sm,
@@ -91,13 +88,12 @@ class BadgesScreen extends ConsumerWidget {
                                     description: a.description,
                                     iconName: a.iconName,
                                     earned: true,
-                                    theme: theme,
                                   ))
                               .toList(),
                         ),
                         const SizedBox(height: AppSpacing.lg),
                       ],
-                      Text('In progress', style: theme.textTheme.titleSmall),
+                      const AppSectionLabel('In progress'),
                       const SizedBox(height: AppSpacing.sm),
                     ],
                   ),
@@ -129,7 +125,6 @@ class BadgesScreen extends ConsumerWidget {
                       return _UnearnedBadgeTile(
                         name: info?['name'] ?? code,
                         description: info?['description'] ?? '',
-                        theme: theme,
                       );
                     },
                     childCount: _allCodes.length,
@@ -176,45 +171,35 @@ class _BadgeChip extends StatelessWidget {
     required this.description,
     required this.iconName,
     required this.earned,
-    required this.theme,
   });
   final String name;
   final String description;
   final String iconName;
   final bool earned;
-  final ThemeData theme;
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Tooltip(
       message: description,
       child: Container(
         padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md, vertical: AppSpacing.sm),
         decoration: BoxDecoration(
-          color: earned
-              ? AppColors.emerald.withValues(alpha: 0.12)
-              : theme.colorScheme.surfaceContainerHighest,
+          color: c.surface,
           borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(
-            color: earned
-                ? AppColors.emerald.withValues(alpha: 0.4)
-                : theme.dividerColor,
-          ),
+          border: Border.all(color: earned ? c.brand : c.border),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.emoji_events,
-                size: 16,
-                color: earned ? AppColors.emerald : theme.colorScheme.outline),
+            Icon(AppIcons.trophy,
+                size: 16, color: earned ? c.brandText : c.textTertiary),
             const SizedBox(width: 4),
             Text(
               name,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: earned
-                    ? AppColors.emerald
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+              style: AppTypography.caption(c).copyWith(
+                color: earned ? c.textPrimary : c.textTertiary,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -229,32 +214,24 @@ class _UnearnedBadgeTile extends StatelessWidget {
   const _UnearnedBadgeTile({
     required this.name,
     required this.description,
-    required this.theme,
   });
   final String name;
   final String description;
-  final ThemeData theme;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final c = context.colors;
+    return AppCard(
       padding: const EdgeInsets.all(AppSpacing.sm),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: theme.dividerColor),
-      ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.lock_outline,
-              size: 24,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.25)),
+          Icon(AppIcons.lock, size: 24, color: c.textTertiary),
           const SizedBox(height: 4),
           Text(
             name,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+            style: AppTypography.caption(c).copyWith(
+              color: c.textSecondary,
               fontWeight: FontWeight.w600,
             ),
             textAlign: TextAlign.center,
@@ -263,10 +240,7 @@ class _UnearnedBadgeTile extends StatelessWidget {
           ),
           Text(
             description,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
-              fontSize: 10,
-            ),
+            style: AppTypography.caption(c).copyWith(fontSize: 10.5),
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,

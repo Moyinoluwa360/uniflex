@@ -3,8 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/models/profile.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
+import '../../shared/widgets/cards/app_card.dart';
+import '../../shared/widgets/format/money.dart';
+import '../../shared/widgets/lists/app_list_group.dart';
+import '../../shared/widgets/text/app_section_label.dart';
+import '../../shared/widgets/tier/tier_header.dart';
 import '../services/student_providers.dart';
 
 /// Membership card — shows current tier, progress to next, perks list,
@@ -16,7 +23,7 @@ class MembershipCardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
+    final c = context.colors;
     final statsAsync = ref.watch(studentStatsProvider);
 
     final tier = statsAsync.valueOrNull?['membership_tier'] as String? ??
@@ -29,10 +36,10 @@ class MembershipCardScreen extends ConsumerWidget {
     final totalOrders =
         statsAsync.valueOrNull?['total_orders'] as int? ?? profile.totalOrders;
 
-    final tierColor = _tierColor(tier);
     final progress = _tierProgress(spending);
     final nextTier = _nextTier(tier);
     final spendToNext = _spendToNext(spending);
+    final name = profile.nickname ?? profile.fullName ?? '—';
 
     return Scaffold(
       appBar: const UniflexAppBar(title: 'Membership'),
@@ -42,58 +49,19 @@ class MembershipCardScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── Membership card ─────────────────────────────────────────
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [tierColor, tierColor.withValues(alpha: 0.7)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(AppRadius.card * 1.5),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            TierHeader(
+              tier: tier,
+              name: name,
+              initial: name.isEmpty ? '?' : name,
+            ),
+            const SizedBox(height: AppSpacing.cardGap),
+            AppCard(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      Text(
-                        tier,
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          color: AppColors.pureWhite,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const Spacer(),
-                      Icon(_tierIcon(tier),
-                          color: AppColors.pureWhite.withValues(alpha: 0.8),
-                          size: 36),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    profile.nickname ?? profile.fullName ?? '—',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: AppColors.pureWhite.withValues(alpha: 0.9),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _CardStat(
-                          label: 'Reward Points',
-                          value: '$points',
-                          theme: theme),
-                      _CardStat(
-                          label: 'Orders', value: '$totalOrders', theme: theme),
-                      _CardStat(
-                          label: 'Spent',
-                          value: '₦${spending.toStringAsFixed(0)}',
-                          theme: theme),
-                    ],
-                  ),
+                  _CardStat(label: 'Reward Points', value: '$points'),
+                  _CardStat(label: 'Orders', value: '$totalOrders'),
+                  _CardStat(label: 'Spent', value: Money.format(spending)),
                 ],
               ),
             ),
@@ -102,40 +70,37 @@ class MembershipCardScreen extends ConsumerWidget {
 
             // ── Progress to next tier ───────────────────────────────────
             if (nextTier != null) ...[
-              Text('Progress to $nextTier', style: theme.textTheme.titleSmall),
+              AppSectionLabel('Progress to $nextTier'),
               const SizedBox(height: AppSpacing.sm),
               ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadius.pill),
+                borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
                   value: progress,
                   minHeight: 8,
-                  backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                  valueColor: AlwaysStoppedAnimation<Color>(tierColor),
+                  backgroundColor: c.surfaceRaised,
+                  valueColor: AlwaysStoppedAnimation<Color>(c.brand),
                 ),
               ),
               const SizedBox(height: 4),
               Text(
-                '₦${spendToNext.toStringAsFixed(0)} more to $nextTier',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                ),
+                '${Money.format(spendToNext)} more to $nextTier',
+                style: AppTypography.caption(c),
               ),
               const SizedBox(height: AppSpacing.lg),
             ],
 
             // ── Tier perks ──────────────────────────────────────────────
-            Text('Your $tier perks', style: theme.textTheme.titleSmall),
+            AppSectionLabel('Your $tier perks'),
             const SizedBox(height: AppSpacing.sm),
             ..._perks(tier).map(
               (perk) => Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                 child: Row(
                   children: [
-                    Icon(Icons.check_circle_outline,
-                        size: 18, color: tierColor),
+                    Icon(AppIcons.check, size: 18, color: c.brandText),
                     const SizedBox(width: AppSpacing.sm),
                     Expanded(
-                      child: Text(perk, style: theme.textTheme.bodyMedium),
+                      child: Text(perk, style: AppTypography.body(c)),
                     ),
                   ],
                 ),
@@ -145,32 +110,16 @@ class MembershipCardScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.lg),
 
             // ── All tiers overview ──────────────────────────────────────
-            Text('All Tiers', style: theme.textTheme.titleSmall),
+            const AppSectionLabel('All Tiers'),
             const SizedBox(height: AppSpacing.sm),
-            _TierRow(
-                tier: 'Bronze',
-                spend: '₦0+',
-                theme: theme,
-                color: AppColors.emerald,
-                current: tier == 'Bronze'),
-            _TierRow(
-                tier: 'Silver',
-                spend: '₦5,000+',
-                theme: theme,
-                color: AppColors.tierSilver,
-                current: tier == 'Silver'),
-            _TierRow(
-                tier: 'Gold',
-                spend: '₦20,000+',
-                theme: theme,
-                color: AppColors.tierGold,
-                current: tier == 'Gold'),
-            _TierRow(
-                tier: 'Platinum',
-                spend: '₦50,000+',
-                theme: theme,
-                color: AppColors.tierPlatinum,
-                current: tier == 'Platinum'),
+            AppListGroup(
+              children: [
+                _tierRow('Bronze', '₦0+', tier),
+                _tierRow('Silver', '₦5,000+', tier),
+                _tierRow('Gold', '₦20,000+', tier),
+                _tierRow('Platinum', '₦50,000+', tier),
+              ],
+            ),
 
             const SizedBox(height: AppSpacing.xl),
           ],
@@ -179,19 +128,17 @@ class MembershipCardScreen extends ConsumerWidget {
     );
   }
 
-  Color _tierColor(String t) => switch (t) {
-        'Silver' => AppColors.tierSilver,
-        'Gold' => AppColors.tierGold,
-        'Platinum' => AppColors.tierPlatinum,
-        _ => AppColors.emerald,
-      };
-
-  IconData _tierIcon(String t) => switch (t) {
-        'Silver' => Icons.workspace_premium,
-        'Gold' => Icons.military_tech,
-        'Platinum' => Icons.diamond,
-        _ => Icons.star,
-      };
+  Widget _tierRow(String name, String spend, String current) => AppListRow(
+        title: name,
+        subtitle: current == name ? 'current' : null,
+        showChevron: false,
+        trailing: Builder(
+          builder: (context) => Text(
+            spend,
+            style: AppTypography.tabular(AppTypography.meta(context.colors)),
+          ),
+        ),
+      );
 
   String? _nextTier(String t) => switch (t) {
         'Bronze' => 'Silver',
@@ -241,79 +188,18 @@ class MembershipCardScreen extends ConsumerWidget {
 }
 
 class _CardStat extends StatelessWidget {
-  const _CardStat(
-      {required this.label, required this.value, required this.theme});
+  const _CardStat({required this.label, required this.value});
   final String label;
   final String value;
-  final ThemeData theme;
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Column(
       children: [
-        Text(value,
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: AppColors.pureWhite,
-              fontWeight: FontWeight.w700,
-            )),
-        Text(label,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: AppColors.pureWhite.withValues(alpha: 0.7),
-            )),
+        Text(value, style: AppTypography.tabular(AppTypography.title(c))),
+        Text(label, style: AppTypography.caption(c)),
       ],
-    );
-  }
-}
-
-class _TierRow extends StatelessWidget {
-  const _TierRow({
-    required this.tier,
-    required this.spend,
-    required this.theme,
-    required this.color,
-    required this.current,
-  });
-  final String tier;
-  final String spend;
-  final ThemeData theme;
-  final Color color;
-  final bool current;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Row(
-        children: [
-          Container(
-            width: 12,
-            height: 12,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Text(tier,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: current ? FontWeight.w700 : FontWeight.w400,
-              )),
-          if (current) ...[
-            const SizedBox(width: AppSpacing.xs),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(AppRadius.pill),
-              ),
-              child: Text('current',
-                  style: theme.textTheme.labelSmall?.copyWith(color: color)),
-            ),
-          ],
-          const Spacer(),
-          Text(spend,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-              )),
-        ],
-      ),
     );
   }
 }

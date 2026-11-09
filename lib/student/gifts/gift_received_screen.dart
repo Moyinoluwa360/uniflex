@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/order_breakdown/order_breakdown_widget.dart';
@@ -13,16 +12,12 @@ import '../../shared/widgets/async/retry_section.dart';
 import '../../shared/widgets/cards/app_card.dart';
 import '../../shared/widgets/status/app_status_label.dart';
 import '../../shared/widgets/status/status_presentation.dart';
+import '../../shared/widgets/tracking/pin_digit_boxes.dart';
+import '../../shared/widgets/tracking/tracking_stepper.dart';
+import '../../shared/widgets/lists/app_list_group.dart';
+import '../../shared/widgets/text/app_section_label.dart';
 import 'gift_models.dart';
 import 'gift_repository.dart';
-
-Color giftStatusColor(String status) => switch (status) {
-      'preparing' => AppColors.warning,
-      'on_the_way' => AppColors.orange,
-      'delivered' => AppColors.emerald,
-      'cancelled' => AppColors.error,
-      _ => AppColors.info,
-    };
 
 /// A gift the signed-in student RECEIVES: live status, the sender's message,
 /// what is in it (no prices) and the delivery PIN. Read-only — there is
@@ -61,8 +56,8 @@ class GiftReceivedView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = giftStatusColor(gift.status);
+    final c = context.colors;
+    final status = StatusPresenter.gift(gift.status);
     final pin = gift.deliveryPin;
     final showPin = !gift.isEnded && pin != null && pin.isNotEmpty;
 
@@ -71,38 +66,25 @@ class GiftReceivedView extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Text('🎁', style: TextStyle(fontSize: 28)),
+            Icon(AppIcons.gift, size: 28, color: c.textSecondary),
             const SizedBox(width: AppSpacing.sm),
             Expanded(
               child: Text(
                 'Gift from ${gift.senderNickname}',
                 key: const ValueKey('gift-title'),
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700),
+                style: AppTypography.title(c),
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.sm, vertical: 3),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(AppRadius.pill),
-              ),
-              child: Text(
-                gift.statusLabel,
-                key: const ValueKey('gift-status'),
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(color: color, fontWeight: FontWeight.w600),
-              ),
+            KeyedSubtree(
+              key: const ValueKey('gift-status'),
+              child: AppStatusLabel(tone: status.tone, text: gift.statusLabel),
             ),
           ],
         ),
         const SizedBox(height: 2),
         Text(
           '${gift.shortId} · ${formatLocalDateTime(gift.createdAt)}',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-          ),
+          style: AppTypography.caption(c),
         ),
         const SizedBox(height: AppSpacing.lg),
         if (gift.status != 'cancelled') _StatusSteps(status: gift.status),
@@ -110,21 +92,18 @@ class GiftReceivedView extends StatelessWidget {
           Text(
             'This gift was cancelled.',
             key: const ValueKey('gift-cancelled'),
-            style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.error),
+            style: AppTypography.body(c).copyWith(color: c.dangerText),
           ),
         if (gift.message != null && gift.message!.trim().isNotEmpty) ...[
           const SizedBox(height: AppSpacing.lg),
-          Container(
+          SizedBox(
             key: const ValueKey('gift-message'),
             width: double.infinity,
-            padding: const EdgeInsets.all(AppSpacing.md),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(AppRadius.card),
+            child: AppCard(
+              child: Text('“${gift.message!.trim()}”',
+                  style: AppTypography.body(c)
+                      .copyWith(fontStyle: FontStyle.italic)),
             ),
-            child: Text('“${gift.message!.trim()}”',
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(fontStyle: FontStyle.italic)),
           ),
         ],
         if (showPin) ...[
@@ -133,27 +112,23 @@ class GiftReceivedView extends StatelessWidget {
         ],
         if (gift.deliveryLocation != null) ...[
           const SizedBox(height: AppSpacing.lg),
-          Text('Delivery to', style: theme.textTheme.titleSmall),
+          const AppSectionLabel('Delivery to'),
           const SizedBox(height: AppSpacing.sm),
-          Row(
+          AppListGroup(
             children: [
-              Icon(Icons.location_on_outlined,
-                  size: 18, color: theme.colorScheme.primary),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(
-                  [gift.deliveryLocation, gift.locationDetails]
-                      .whereType<String>()
-                      .where((e) => e.trim().isNotEmpty)
-                      .join(' · '),
-                  style: theme.textTheme.bodyMedium,
-                ),
+              AppListRow(
+                leadingIcon: AppIcons.location,
+                title: [gift.deliveryLocation, gift.locationDetails]
+                    .whereType<String>()
+                    .where((e) => e.trim().isNotEmpty)
+                    .join(' · '),
+                showChevron: false,
               ),
             ],
           ),
         ],
         const SizedBox(height: AppSpacing.lg),
-        Text("What's in it", style: theme.textTheme.titleSmall),
+        const AppSectionLabel("What's in it"),
         const SizedBox(height: AppSpacing.md),
         // "No prices" mode: nothing about money is ever drawn here.
         OrderBreakdownView(data: gift.items, showPrices: false),
@@ -169,35 +144,19 @@ class _StatusSteps extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final at = GiftReceivedView._steps.indexOf(status).clamp(0, 3);
-    return Column(
-      children: [
+    final last = GiftReceivedView._steps.length - 1;
+    return TrackingStepper(
+      labels: [
+        for (final s in GiftReceivedView._steps) giftStatusLabel(s),
+      ],
+      states: [
         for (var i = 0; i < GiftReceivedView._steps.length; i++)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 3),
-            child: Row(
-              children: [
-                Icon(
-                  i <= at ? Icons.check_circle : Icons.radio_button_unchecked,
-                  size: 18,
-                  color: i <= at
-                      ? AppColors.emerald
-                      : theme.colorScheme.onSurface.withValues(alpha: 0.3),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Text(
-                  giftStatusLabel(GiftReceivedView._steps[i]),
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: i == at ? FontWeight.w700 : FontWeight.w400,
-                    color: i <= at
-                        ? null
-                        : theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          i > at
+              ? TrackingStepState.upcoming
+              : (i == at && at != last)
+                  ? TrackingStepState.current
+                  : TrackingStepState.done,
       ],
     );
   }
@@ -209,61 +168,22 @@ class _PinCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
+    final c = context.colors;
+    return SizedBox(
       key: const ValueKey('gift-pin-card'),
       width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.emerald.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.emerald.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        children: [
-          Text(
-            'Give this PIN to the rider when your food arrives',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: AppColors.emerald.withValues(alpha: 0.9),
+      child: AppCard(
+        child: Column(
+          children: [
+            Text(
+              'Give this PIN to the rider when your food arrives',
+              style: AppTypography.meta(c),
+              textAlign: TextAlign.center,
             ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          GestureDetector(
-            onTap: () {
-              Clipboard.setData(ClipboardData(text: pin));
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('PIN copied'),
-                behavior: SnackBarBehavior.floating,
-              ));
-            },
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                for (final digit in pin.split(''))
-                  Container(
-                    width: 44,
-                    height: 52,
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.emerald.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                          color: AppColors.emerald.withValues(alpha: 0.4)),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      digit,
-                      style: theme.textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.emerald,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
+            const SizedBox(height: AppSpacing.md),
+            PinDigitBoxes(pin: pin),
+          ],
+        ),
       ),
     );
   }

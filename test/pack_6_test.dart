@@ -733,7 +733,7 @@ void main() {
           .readAsStringSync();
       expect(profile.contains('Send a Gift'), isFalse);
       expect(profile.contains('GiftScreen('), isFalse);
-      expect(profile.contains("label: 'Gifts'"), isTrue);
+      expect(profile.contains("title: 'Gifts'"), isTrue);
       final service =
           File('lib/student/services/student_service.dart').readAsStringSync();
       expect(service.contains('send_gift'), isFalse);

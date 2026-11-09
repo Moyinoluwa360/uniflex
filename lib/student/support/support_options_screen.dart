@@ -5,10 +5,11 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../shared/models/profile.dart';
 import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/settings/support_whatsapp_provider.dart';
-import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/utils/phone_format.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
+import '../../shared/widgets/lists/app_list_group.dart';
 import 'support_chat_screen.dart';
 
 /// "Help & Support" — the choice between live chat and WhatsApp.
@@ -143,84 +144,27 @@ class _Choice extends ConsumerWidget {
             style: theme.textTheme.titleMedium,
           ),
           const SizedBox(height: AppSpacing.md),
-          _OptionCard(
-            key: const ValueKey('option-live-chat'),
-            icon: Icons.chat_bubble_outline,
-            color: theme.colorScheme.primary,
-            title: 'Live chat',
-            subtitle: 'Chat with us here in the app. Replies show up here.',
-            onTap: openLiveChat,
-          ),
-          const SizedBox(height: AppSpacing.cardGap),
-          _OptionCard(
-            key: const ValueKey('option-whatsapp'),
-            icon: Icons.message_outlined,
-            color: AppColors.emerald,
-            title: 'WhatsApp',
-            subtitle: 'Message us on WhatsApp.',
-            onTap: () => _openWhatsapp(context, ref),
+          AppListGroup(
+            children: [
+              AppListRow(
+                key: const ValueKey('option-live-chat'),
+                leadingIcon: AppIcons.chat,
+                title: 'Live chat',
+                subtitle: 'Chat with us here in the app. Replies show up here.',
+                showChevron: true,
+                onTap: openLiveChat,
+              ),
+              AppListRow(
+                key: const ValueKey('option-whatsapp'),
+                leadingIcon: AppIcons.phone,
+                title: 'WhatsApp',
+                subtitle: 'Message us on WhatsApp.',
+                showChevron: true,
+                onTap: () => _openWhatsapp(context, ref),
+              ),
+            ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _OptionCard extends StatelessWidget {
-  const _OptionCard({
-    super.key,
-    required this.icon,
-    required this.color,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.card),
-      child: Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: theme.cardTheme.color,
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: theme.dividerColor),
-        ),
-        child: Row(
-          children: [
-            CircleAvatar(
-              backgroundColor: color.withValues(alpha: 0.12),
-              child: Icon(icon, color: color),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: theme.textTheme.titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 2),
-                  Text(subtitle,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color:
-                            theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                      )),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right),
-          ],
-        ),
       ),
     );
   }

@@ -21,25 +21,25 @@ Navigation is `Navigator.push(MaterialPageRoute)`; no named routes. Shell tabs a
 | Screen | File | Seen | Migrated |
 |---|---|---|---|
 | Home | `home/student_home_screen.dart` (1134 lines) | SEEN | A ✅ |
-| Search / All vendors / Ad popup / Ad carousel | `home/search_screen.dart`, `all_vendors_screen.dart`, `ad_popup.dart`, `ad_carousel.dart` | | A (ad carousel + popup ✅; search / all vendors pending C) |
+| Search / All vendors / Ad popup / Ad carousel | `home/search_screen.dart`, `all_vendors_screen.dart`, `ad_popup.dart`, `ad_carousel.dart` | | A (ad carousel + popup ✅); C ✅ search (all vendors had no legacy colours) |
 | Orders tabs (Cart / Preparing=Active / Completed) | `orders/orders_screen.dart` | SEEN | B ✅ |
-| Uniflex vendor page (catalog) | `ordering/catalog_screen.dart` | SEEN |  |
-| Food Packs | `ordering/pack_builder_screen.dart` | SEEN |  |
+| Uniflex vendor page (catalog) | `ordering/catalog_screen.dart` | SEEN | C ✅ |
+| Food Packs | `ordering/pack_builder_screen.dart` | SEEN | C ✅ |
 | Your Cart (vendor-grouped) | `ordering/cart_screen.dart` | SEEN | B ✅ |
 | Checkout | `ordering/checkout_screen.dart` | | B ✅ |
 | Pay delivery fee (+ PIN sheet) | `ordering/commitment_fee_screen.dart`, `shared/widgets/pin/pin_entry_sheet.dart` | SEEN | B ✅ (PIN boxes not added: kept the existing field) |
-| Order confirmation | `ordering/order_confirmation_screen.dart` | |  |
-| Track Order / Errand tracking | `tracking/order_tracking_screen.dart` (1467 lines), `errand_tracking_screen.dart` | SEEN (Track Order) | B: Track Order ✅; errand tracking → C4 |
-| Wallet | `wallet/wallet_screen.dart` | SEEN |  |
-| Saving Plan | `wallet/saving_plan_screen.dart` | SEEN |  |
-| Paystack checkout (WebView) | `wallet/paystack_checkout_*.dart` | |  |
-| Profile | `profile/student_profile_screen.dart` | SEEN |  |
-| Membership card / Badges / Preferences / Refer / Scheduled orders | `profile/*.dart` | |  |
+| Order confirmation | `ordering/order_confirmation_screen.dart` | | C ✅ |
+| Track Order / Errand tracking | `tracking/order_tracking_screen.dart` (1467 lines), `errand_tracking_screen.dart` | SEEN (Track Order) | B: Track Order ✅; errand tracking C ✅ |
+| Wallet | `wallet/wallet_screen.dart` | SEEN | C ✅ |
+| Saving Plan | `wallet/saving_plan_screen.dart` | SEEN | C ✅ |
+| Paystack checkout (WebView) | `wallet/paystack_checkout_*.dart` | | C ✅ web screen; native keeps a white WebView background (Paystack's page is white) |
+| Profile | `profile/student_profile_screen.dart` | SEEN | C ✅ |
+| Membership card / Badges / Preferences / Refer / Scheduled orders | `profile/*.dart` | | C ✅ (preferences had nothing to change) |
 | Notifications | `notifications/notifications_screen.dart` | SEEN | B ✅ (+ received-gift card on Orders) |
-| Gifts (send / list / received) | `gifts/*.dart` | |  |
-| Group checkout | `group_checkout/*.dart` | |  |
-| Errand create / confirmation | `errand/*.dart` | |  |
-| Support options / chat | `support/*.dart` | |  |
+| Gifts (send / list / received) | `gifts/*.dart` | | C ✅ |
+| Group checkout | `group_checkout/*.dart` | | C ✅ |
+| Errand create / confirmation | `errand/*.dart` | | C ✅ |
+| Support options / chat | `support/*.dart` | | C ✅ |
 
 ### Rider (`lib/rider/`)
 Dashboard `dashboard/rider_dashboard_screen.dart` · Job pool `pool/job_pool_screen.dart` · Active jobs `jobs/active_jobs_screen.dart` · Food job `jobs/food_job_screen.dart` (1184) · Errand job `jobs/errand_job_screen.dart` (741) · Delivery complete `jobs/delivery_complete_screen.dart` · History `history/delivery_history_screen.dart`, `rider_history_detail_screen.dart` · Profile `profile/rider_profile_screen.dart`. None seen.

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import '../../theme/app_icons.dart';
 import '../../theme/app_spacing.dart';
 
 /// "Order #AB12CD34" chip shown on a support-chat bubble (and reused for
@@ -13,12 +14,15 @@ class SupportOrderChip extends StatelessWidget {
     super.key,
     required this.refId,
     this.onTap,
-    this.foreground = AppColors.pureWhite,
+    this.foreground,
   });
 
   final String refId;
   final VoidCallback? onTap;
-  final Color foreground;
+
+  /// Text/outline colour. Defaults to `textPrimary` (the bubble the chip sits
+  /// on decides; pass `onBrand` on a brand-filled bubble).
+  final Color? foreground;
 
   /// Same format as `Order.shortId` / `DeliveryGroup.shortId`.
   static String labelFor(String refId) =>
@@ -27,6 +31,7 @@ class SupportOrderChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final foreground = this.foreground ?? context.colors.textPrimary;
     final chip = Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.sm,
@@ -40,7 +45,7 @@ class SupportOrderChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.receipt_long_outlined, size: 12, color: foreground),
+          Icon(AppIcons.receipt, size: 12, color: foreground),
           const SizedBox(width: 4),
           Text(
             labelFor(refId),
@@ -49,7 +54,7 @@ class SupportOrderChip extends StatelessWidget {
           ),
           if (onTap != null) ...[
             const SizedBox(width: 2),
-            Icon(Icons.chevron_right, size: 12, color: foreground),
+            Icon(AppIcons.chevronRight, size: 12, color: foreground),
           ],
         ],
       ),

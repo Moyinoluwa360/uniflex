@@ -4,8 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/models/vendor.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
+import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/cards/app_card.dart';
 import '../services/student_providers.dart';
 import 'group_checkout_screen.dart';
 
@@ -57,35 +61,31 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
   }
 
   Widget _buildCreateView(ThemeData theme) {
+    final c = context.colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
+        SizedBox(
           width: double.infinity,
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          decoration: BoxDecoration(
-            color: AppColors.emerald.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(AppRadius.card),
-            border: Border.all(color: AppColors.emerald.withValues(alpha: 0.3)),
-          ),
-          child: Column(
-            children: [
-              const Icon(Icons.group_add, color: AppColors.emerald, size: 40),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'Start a group order',
-                style: theme.textTheme.titleMedium,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Everyone orders from ${widget.vendor.name} and pays their own share.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          child: AppCard(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
+              children: [
+                Icon(AppIcons.group, color: c.brandText, size: 40),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'Start a group order',
+                  style: theme.textTheme.titleMedium,
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.center,
-              ),
-            ],
+                const SizedBox(height: 4),
+                Text(
+                  'Everyone orders from ${widget.vendor.name} and pays their own share.',
+                  style: AppTypography.meta(c),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: AppSpacing.xl),
@@ -99,17 +99,18 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
                 Container(
                   width: 24,
                   height: 24,
-                  decoration: const BoxDecoration(
-                    color: AppColors.emerald,
+                  decoration: BoxDecoration(
                     shape: BoxShape.circle,
+                    border: Border.all(color: c.borderStrong),
                   ),
                   child: Center(
                     child: Text(
                       '${_steps.indexOf(step) + 1}',
-                      style: const TextStyle(
-                        color: AppColors.pureWhite,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
+                      style: AppTypography.tabular(
+                        AppTypography.caption(c).copyWith(
+                          color: c.textSecondary,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ),
@@ -123,76 +124,31 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
           ),
         ),
         const Spacer(),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton(
-            onPressed: _isCreating ? null : _create,
-            child: _isCreating
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: AppColors.pureWhite),
-                  )
-                : const Text('Create Group'),
-          ),
+        AppButton(
+          label: 'Create Group',
+          isLoading: _isCreating,
+          onPressed: _isCreating ? null : _create,
         ),
       ],
     );
   }
 
   Widget _buildShareView(ThemeData theme) {
+    final c = context.colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Center(
           child: Column(
             children: [
-              const Icon(Icons.check_circle,
-                  color: AppColors.emerald, size: 56),
+              Icon(AppIcons.success, color: c.brandText, size: 56),
               const SizedBox(height: AppSpacing.md),
               Text('Group created!', style: theme.textTheme.titleLarge),
               const SizedBox(height: AppSpacing.sm),
               Text(
                 'Share this code so friends can join.',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
+                style: AppTypography.meta(c),
                 textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.xl),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(AppRadius.card),
-            border: Border.all(color: theme.dividerColor),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _groupId!,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontFamily: 'monospace',
-                    letterSpacing: 1,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.copy_outlined),
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: _groupId!));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Group ID copied to clipboard')),
-                  );
-                },
               ),
             ],
           ),
@@ -200,15 +156,43 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
         const SizedBox(height: AppSpacing.xl),
         SizedBox(
           width: double.infinity,
-          child: FilledButton.icon(
-            icon: const Icon(Icons.shopping_cart_outlined),
-            label: const Text('Start Adding Items'),
-            onPressed: () => Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (_) => GroupCheckoutScreen(
-                  vendor: widget.vendor,
-                  groupId: _groupId!,
+          child: AppCard(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _groupId!,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontFamily: 'monospace',
+                      letterSpacing: 1,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
+                IconButton(
+                  icon: Icon(AppIcons.copy, color: c.textSecondary),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: _groupId!));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('Group ID copied to clipboard')),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xl),
+        AppButton(
+          label: 'Start Adding Items',
+          icon: AppIcons.cart,
+          onPressed: () => Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => GroupCheckoutScreen(
+                vendor: widget.vendor,
+                groupId: _groupId!,
               ),
             ),
           ),

@@ -4,9 +4,19 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../shared/models/order.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
+import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/cards/app_card.dart';
+import '../../shared/widgets/format/money.dart';
+import '../../shared/widgets/status/app_status_label.dart';
+import '../../shared/widgets/status/status_presentation.dart';
+import '../../shared/widgets/text/app_section_label.dart';
+import '../../shared/widgets/tracking/pin_digit_boxes.dart';
+import '../../shared/widgets/tracking/tracking_stepper.dart';
 import '../ordering/order_repository.dart';
 
 /// Simplified tracking screen for errand orders.
@@ -21,7 +31,7 @@ class ErrandTrackingScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
+    final c = context.colors;
     final liveAsync = ref.watch(orderByIdProvider(order.id));
 
     return Scaffold(
@@ -29,7 +39,7 @@ class ErrandTrackingScreen extends ConsumerWidget {
         title: 'Track Errand ${order.shortId}',
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(AppIcons.refresh),
             onPressed: () => ref.invalidate(orderByIdProvider(order.id)),
             tooltip: 'Refresh',
           ),
@@ -43,7 +53,7 @@ class ErrandTrackingScreen extends ConsumerWidget {
         ),
         data: (liveOrder) {
           final o = liveOrder ?? order;
-          final statusColor = _statusColor(o.status);
+          final status = StatusPresenter.order(o.status, isErrand: true);
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(AppSpacing.screenGutter),
@@ -51,55 +61,27 @@ class ErrandTrackingScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // ── Header card ─────────────────────────────────────────
-                Container(
+                SizedBox(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(AppRadius.card),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        o.shortId,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Errand request',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: 0.6),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.sm, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: statusColor.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(AppRadius.pill),
-                        ),
-                        child: Text(
-                          _errandLabel(o.status),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: statusColor,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(o.shortId, style: AppTypography.title(c)),
+                        const SizedBox(height: 2),
+                        Text('Errand request', style: AppTypography.meta(c)),
+                        const SizedBox(height: AppSpacing.sm),
+                        AppStatusLabel(
+                            tone: status.tone, text: _errandLabel(o.status)),
+                      ],
+                    ),
                   ),
                 ),
 
                 const SizedBox(height: AppSpacing.lg),
 
                 // ── Timeline ────────────────────────────────────────────
-                Text('Progress', style: theme.textTheme.titleSmall),
+                const AppSectionLabel('Progress'),
                 const SizedBox(height: AppSpacing.md),
                 _ErrandTimeline(status: o.status),
 
@@ -107,7 +89,7 @@ class ErrandTrackingScreen extends ConsumerWidget {
 
                 // ── Rider contact (once assigned) ────────────────────────
                 if (o.riderId != null) ...[
-                  Text('Your rider', style: theme.textTheme.titleSmall),
+                  const AppSectionLabel('Your rider'),
                   const SizedBox(height: AppSpacing.sm),
                   Consumer(
                     builder: (ctx, cref, _) {
@@ -119,70 +101,69 @@ class ErrandTrackingScreen extends ConsumerWidget {
                       final name = info['full_name'] as String?;
                       final phone = info['phone'] as String?;
 
-                      return Container(
+                      return SizedBox(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(AppRadius.card),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.two_wheeler_outlined,
-                                    size: 20),
-                                const SizedBox(width: AppSpacing.sm),
-                                Text(
-                                  name ?? 'Assigned',
-                                  style: theme.textTheme.bodyMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
-                                ),
-                              ],
-                            ),
-                            if (phone != null) ...[
-                              const SizedBox(height: AppSpacing.sm),
+                        child: AppCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Row(
                                 children: [
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                      icon: const Icon(Icons.phone_outlined,
-                                          size: 16),
-                                      label: const Text('Call'),
-                                      onPressed: () async {
-                                        final uri = Uri.parse('tel:$phone');
-                                        if (await canLaunchUrl(uri)) {
-                                          await launchUrl(uri);
-                                        }
-                                      },
-                                    ),
-                                  ),
+                                  Icon(AppIcons.rider,
+                                      size: 20, color: c.textSecondary),
                                   const SizedBox(width: AppSpacing.sm),
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                      icon: const Icon(Icons.chat_outlined,
-                                          size: 16),
-                                      label: const Text('WhatsApp'),
-                                      onPressed: () async {
-                                        final normalized = phone.replaceAll(
-                                            RegExp(r'[^\d]'), '');
-                                        final uri = Uri.parse(
-                                            'https://wa.me/$normalized');
-                                        if (await canLaunchUrl(uri)) {
-                                          await launchUrl(
-                                            uri,
-                                            mode:
-                                                LaunchMode.externalApplication,
-                                          );
-                                        }
-                                      },
-                                    ),
+                                  Text(
+                                    name ?? 'Assigned',
+                                    style: AppTypography.body(c)
+                                        .copyWith(fontWeight: FontWeight.w600),
                                   ),
                                 ],
                               ),
+                              if (phone != null) ...[
+                                const SizedBox(height: AppSpacing.sm),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: AppButton(
+                                        icon: AppIcons.phone,
+                                        label: 'Call',
+                                        variant: AppButtonVariant.secondary,
+                                        size: AppButtonSize.small,
+                                        onPressed: () async {
+                                          final uri = Uri.parse('tel:$phone');
+                                          if (await canLaunchUrl(uri)) {
+                                            await launchUrl(uri);
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: AppSpacing.sm),
+                                    Expanded(
+                                      child: AppButton(
+                                        icon: AppIcons.chat,
+                                        label: 'WhatsApp',
+                                        variant: AppButtonVariant.secondary,
+                                        size: AppButtonSize.small,
+                                        onPressed: () async {
+                                          final normalized = phone.replaceAll(
+                                              RegExp(r'[^\d]'), '');
+                                          final uri = Uri.parse(
+                                              'https://wa.me/$normalized');
+                                          if (await canLaunchUrl(uri)) {
+                                            await launchUrl(
+                                              uri,
+                                              mode: LaunchMode
+                                                  .externalApplication,
+                                            );
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                       );
                     },
@@ -192,50 +173,33 @@ class ErrandTrackingScreen extends ConsumerWidget {
 
                 // ── Delivery PIN ─────────────────────────────────────────
                 if (o.deliveryPin != null && !o.status.isTerminal) ...[
-                  Text('Delivery PIN', style: theme.textTheme.titleSmall),
+                  const AppSectionLabel('Delivery PIN'),
                   const SizedBox(height: AppSpacing.sm),
-                  Container(
+                  SizedBox(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    decoration: BoxDecoration(
-                      color: AppColors.emerald.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(AppRadius.card),
-                      border: Border.all(
-                          color: AppColors.emerald.withValues(alpha: 0.3)),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          o.deliveryPin!,
-                          style: theme.textTheme.displaySmall?.copyWith(
-                            color: AppColors.emerald,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 8,
+                    child: AppCard(
+                      child: Column(
+                        children: [
+                          PinDigitBoxes(pin: o.deliveryPin!),
+                          const SizedBox(height: AppSpacing.sm),
+                          Text(
+                            'Show this to your rider to confirm delivery.',
+                            style: AppTypography.meta(c),
+                            textAlign: TextAlign.center,
                           ),
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
-                        Text(
-                          'Show this to your rider to confirm delivery.',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.6),
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.xl),
                 ],
 
                 // ── Fee ─────────────────────────────────────────────────
-                Text('Fee', style: theme.textTheme.titleSmall),
+                const AppSectionLabel('Fee'),
                 const SizedBox(height: 4),
                 Text(
-                  '₦${o.totalAmount.toStringAsFixed(0)}',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: theme.colorScheme.primary,
-                  ),
+                  Money.format(o.totalAmount),
+                  style: AppTypography.tabular(AppTypography.title(c)),
                 ),
               ],
             ),
@@ -244,15 +208,6 @@ class ErrandTrackingScreen extends ConsumerWidget {
       ),
     );
   }
-
-  Color _statusColor(OrderStatus s) => switch (s) {
-        OrderStatus.placed => AppColors.info,
-        OrderStatus.beingSourced => AppColors.warning,
-        OrderStatus.outForDelivery => AppColors.orange,
-        OrderStatus.completed => AppColors.emerald,
-        OrderStatus.cancelled => AppColors.error,
-        _ => AppColors.info,
-      };
 
   /// Errand-specific status labels.
   String _errandLabel(OrderStatus s) => switch (s) {
@@ -289,67 +244,17 @@ class _ErrandTimeline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final currentIdx = _currentIndex();
-
-    return Column(
-      children: List.generate(_steps.length, (i) {
-        final step = _steps[i];
-        final done = i <= currentIdx;
-        final isCurrent = i == currentIdx;
-        final isLast = i == _steps.length - 1;
-
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 36,
-              child: Column(
-                children: [
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: done
-                          ? AppColors.emerald
-                          : theme.colorScheme.surfaceContainerHighest,
-                      border: isCurrent
-                          ? Border.all(color: AppColors.emerald, width: 2)
-                          : null,
-                    ),
-                    child: done
-                        ? const Icon(Icons.check,
-                            color: AppColors.pureWhite, size: 16)
-                        : null,
-                  ),
-                  if (!isLast)
-                    Container(
-                      width: 2,
-                      height: 36,
-                      color: done
-                          ? AppColors.emerald.withValues(alpha: 0.4)
-                          : theme.colorScheme.outline,
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                step.label,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w400,
-                  color: done
-                      ? theme.colorScheme.onSurface
-                      : theme.colorScheme.onSurface.withValues(alpha: 0.4),
-                ),
-              ),
-            ),
-          ],
-        );
-      }),
+    return TrackingStepper(
+      labels: [for (final s in _steps) s.label],
+      states: [
+        for (var i = 0; i < _steps.length; i++)
+          i > currentIdx
+              ? TrackingStepState.upcoming
+              : (i == currentIdx && status != OrderStatus.completed)
+                  ? TrackingStepState.current
+                  : TrackingStepState.done,
+      ],
     );
   }
 }

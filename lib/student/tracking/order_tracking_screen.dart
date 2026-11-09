@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -27,6 +26,7 @@ import '../../shared/widgets/pin/pin_entry_sheet.dart';
 import '../../shared/widgets/status/app_status_label.dart';
 import '../../shared/widgets/status/status_presentation.dart';
 import '../../shared/widgets/text/app_section_label.dart';
+import '../../shared/widgets/tracking/pin_digit_boxes.dart';
 import '../../shared/widgets/tracking/tracking_stepper.dart';
 import '../ordering/order_repository.dart';
 import '../support/support_options_screen.dart';
@@ -911,58 +911,6 @@ class _GiftSenderBanner extends StatelessWidget {
   }
 }
 
-/// The delivery PIN as one box per digit, tap to copy. Neutral: surface
-/// raised, hairline border, textPrimary digits in tabular figures.
-class _PinBoxes extends StatelessWidget {
-  const _PinBoxes({required this.pin});
-  final String pin;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return GestureDetector(
-      onTap: () {
-        Clipboard.setData(ClipboardData(text: pin));
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('PIN copied'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      },
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          ...pin.split('').map(
-                (digit) => Container(
-                  width: 44,
-                  height: 52,
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  decoration: BoxDecoration(
-                    color: c.surfaceRaised,
-                    borderRadius: BorderRadius.circular(AppRadius.control),
-                    border: Border.all(color: c.borderStrong),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    digit,
-                    style: AppTypography.tabular(
-                      Theme.of(context)
-                          .textTheme
-                          .headlineMedium!
-                          .copyWith(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ),
-              ),
-          const SizedBox(width: AppSpacing.sm),
-          Icon(AppIcons.copy, size: 16, color: c.textSecondary),
-        ],
-      ),
-    );
-  }
-}
-
 /// Card shown when a group is outForDelivery — confirms payment and
 /// shows the delivery PIN in large individual digit boxes.
 class _GroupDeliveryConfirmedCard extends StatelessWidget {
@@ -999,7 +947,7 @@ class _GroupDeliveryConfirmedCard extends StatelessWidget {
               style: AppTypography.meta(c),
             ),
             const SizedBox(height: AppSpacing.md),
-            _PinBoxes(pin: pin),
+            PinDigitBoxes(pin: pin),
             const SizedBox(height: AppSpacing.sm),
             Text(
               'Tap to copy',
@@ -1041,7 +989,7 @@ class _TrackingPinCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: AppSpacing.sm),
-            _PinBoxes(pin: pin),
+            PinDigitBoxes(pin: pin),
             const SizedBox(height: AppSpacing.sm),
             Text(
               'Show this to your rider at the door.',

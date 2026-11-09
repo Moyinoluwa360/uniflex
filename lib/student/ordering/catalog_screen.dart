@@ -7,10 +7,15 @@ import '../../shared/models/cart_item.dart';
 import '../../shared/models/product.dart';
 import '../../shared/models/vendor.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/widgets/accordions/app_accordion_card.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
+import '../../shared/widgets/cart/cart_widgets.dart';
+import '../../shared/widgets/format/money.dart';
+import '../../shared/widgets/lists/app_list_group.dart';
 import '../../shared/widgets/media/app_image.dart';
 import 'cart_provider.dart';
 import 'cart_screen.dart';
@@ -38,6 +43,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = context.colors;
     final vendor = widget.vendor;
     final productsAsync = ref.watch(vendorProductsProvider(vendor.id));
     final cartState = ref.watch(cartProvider);
@@ -52,15 +58,13 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
               child: Chip(
                 label: Text(
                   vendor.badgeLabel!,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: vendor.isUniflex
-                        ? AppColors.pureWhite
-                        : theme.colorScheme.onSurface,
+                  style: AppTypography.caption(c).copyWith(
+                    color: c.textPrimary,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                backgroundColor: vendor.isUniflex
-                    ? AppColors.emerald
-                    : theme.colorScheme.surfaceContainerHighest,
+                backgroundColor: c.surfaceRaised,
+                side: BorderSide(color: vendor.isUniflex ? c.brand : c.border),
                 padding: EdgeInsets.zero,
               ),
             ),
@@ -80,16 +84,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.search_off_outlined,
-                          size: 32, color: theme.colorScheme.primary),
-                    ),
+                    Icon(AppIcons.search, size: 32, color: c.textTertiary),
                     const SizedBox(height: AppSpacing.md),
                     Text('No results on this menu',
                         style: theme.textTheme.titleSmall,
@@ -97,10 +92,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                     const SizedBox(height: AppSpacing.xs),
                     Text(
                       'Try another vendor or check back later.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color:
-                            theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                      ),
+                      style: AppTypography.meta(c),
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -137,7 +129,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
             padding: const EdgeInsets.only(top: AppSpacing.sm, bottom: 96),
             children: [
               // ── Food section (pack-first entry point) ──────────
-              const _SectionHeader(title: 'Food', icon: Icons.restaurant),
+              const _SectionHeader(title: 'Food', icon: AppIcons.food),
               if (foodProducts.isNotEmpty)
                 _FoodSectionCard(
                   vendor: vendor,
@@ -152,7 +144,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
               AppAccordionCard(
                 leading: buildAccordionLeadingIcon(
                   context: context,
-                  icon: Icons.local_cafe_outlined,
+                  icon: AppIcons.food,
                 ),
                 title: 'Drinks',
                 subtitle:
@@ -179,7 +171,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
               AppAccordionCard(
                 leading: buildAccordionLeadingIcon(
                   context: context,
-                  icon: Icons.category_outlined,
+                  icon: AppIcons.pack,
                 ),
                 title: 'Others',
                 subtitle:
@@ -213,14 +205,15 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                   builder: (_) => const CartScreen(),
                 ),
               ),
-              backgroundColor: AppColors.orange,
-              foregroundColor: AppColors.pureWhite,
+              // The cart button is one of the two places orange is allowed.
+              backgroundColor: c.promoOrangeButton,
+              foregroundColor: AppColors.onMedia,
               label: Text(
                 'View Cart (${cartState.itemCount})',
                 style: theme.textTheme.labelLarge
-                    ?.copyWith(color: AppColors.pureWhite),
+                    ?.copyWith(color: AppColors.onMedia),
               ),
-              icon: const Icon(Icons.shopping_cart_outlined),
+              icon: const Icon(AppIcons.cart),
             ),
     );
   }
@@ -243,7 +236,7 @@ class _SectionHeader extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: theme.colorScheme.primary),
+          Icon(icon, size: 18, color: context.colors.textSecondary),
           const SizedBox(width: AppSpacing.sm),
           Text(title, style: theme.textTheme.titleSmall),
         ],
@@ -258,7 +251,7 @@ class _EmptySectionMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final c = context.colors;
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.screenGutter,
@@ -266,10 +259,7 @@ class _EmptySectionMessage extends StatelessWidget {
       ),
       child: Text(
         message,
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-          fontStyle: FontStyle.italic,
-        ),
+        style: AppTypography.meta(c).copyWith(fontStyle: FontStyle.italic),
       ),
     );
   }
@@ -287,7 +277,6 @@ class _FoodSectionCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final mealCount = foodProducts.where((p) => p.isMeal).length;
     final proteinCount = foodProducts.where((p) => p.isProteinTopping).length;
 
@@ -296,61 +285,23 @@ class _FoodSectionCard extends ConsumerWidget {
         horizontal: AppSpacing.screenGutter,
         vertical: AppSpacing.sm,
       ),
-      child: InkWell(
-        onTap: () {
-          Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => PackBuilderScreen(
-              vendor: vendor,
-              foodProducts: foodProducts,
-            ),
-          ));
-        },
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        child: Container(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(AppRadius.card),
-            border: Border.all(
-              color: AppColors.emerald.withValues(alpha: 0.3),
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: AppColors.emerald.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(AppRadius.control),
+      child: AppListGroup(
+        children: [
+          AppListRow(
+            leadingIcon: AppIcons.pack,
+            title: 'Order Food (Packs)',
+            subtitle: '$mealCount meals, $proteinCount proteins/toppings'
+                ' · ${Money.format(vendor.packPrice)}/pack',
+            onTap: () {
+              Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => PackBuilderScreen(
+                  vendor: vendor,
+                  foodProducts: foodProducts,
                 ),
-                child: const Icon(Icons.inventory_2_outlined,
-                    color: AppColors.emerald),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Order Food (Packs)',
-                        style: theme.textTheme.labelLarge),
-                    const SizedBox(height: 2),
-                    Text(
-                      '$mealCount meals, $proteinCount proteins/toppings'
-                      ' · ₦${vendor.packPrice.toStringAsFixed(0)}/pack',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color:
-                            theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.chevron_right,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.4)),
-            ],
+              ));
+            },
           ),
-        ),
+        ],
       ),
     );
   }
@@ -365,7 +316,7 @@ class _ProductTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
+    final c = context.colors;
     final cart = ref.watch(cartProvider);
     // Look up this product's quantity within the vendor's group.
     final vendorGroup = cart.groups[vendor.id];
@@ -402,34 +353,32 @@ class _ProductTile extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(product.name, style: theme.textTheme.labelLarge),
+                Text(product.name,
+                    style: AppTypography.body(c)
+                        .copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
                 if (product.description.isNotEmpty)
                   Text(
                     product.description,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color:
-                          theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                    ),
+                    style: AppTypography.meta(c),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 const SizedBox(height: 6),
-                Text(
-                  '₦${product.basePrice.toStringAsFixed(0)}',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: theme.colorScheme.primary,
-                  ),
+                MoneyText(
+                  product.basePrice,
+                  style: AppTypography.body(c)
+                      .copyWith(fontWeight: FontWeight.w600),
                 ),
               ],
             ),
           ),
           const SizedBox(width: AppSpacing.md),
           quantity == 0
-              ? _AddButton(onTap: addFirst)
-              : _QuantityStepper(
+              ? AddItemButton(onTap: addFirst)
+              : QuantityStepper(
                   quantity: quantity,
-                  onDecrement: () {
+                  onMinus: () {
                     if (quantity <= 1) {
                       ref
                           .read(cartProvider.notifier)
@@ -450,7 +399,7 @@ class _ProductTile extends ConsumerWidget {
                           .updateQuantity(flat, quantity - 1);
                     }
                   },
-                  onIncrement: () {
+                  onPlus: () {
                     final cart = ref.read(cartProvider);
                     int flat = 0;
                     for (final e in cart.groups.entries) {
@@ -465,80 +414,6 @@ class _ProductTile extends ConsumerWidget {
                         .updateQuantity(flat, quantity + 1);
                   },
                 ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AddButton extends StatelessWidget {
-  const _AddButton({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: const BoxDecoration(
-          color: AppColors.orange,
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(Icons.add, color: AppColors.pureWhite, size: 20),
-      ),
-    );
-  }
-}
-
-class _QuantityStepper extends StatelessWidget {
-  const _QuantityStepper({
-    required this.quantity,
-    required this.onDecrement,
-    required this.onIncrement,
-  });
-
-  final int quantity;
-  final VoidCallback onDecrement;
-  final VoidCallback onIncrement;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(AppRadius.control),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            onPressed: onDecrement,
-            icon: const Icon(Icons.remove, size: 16),
-            color: theme.colorScheme.primary,
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-          SizedBox(
-            width: 20,
-            child: Text(
-              '$quantity',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.labelLarge,
-            ),
-          ),
-          IconButton(
-            onPressed: onIncrement,
-            icon: const Icon(Icons.add, size: 16),
-            color: theme.colorScheme.primary,
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
         ],
       ),
     );

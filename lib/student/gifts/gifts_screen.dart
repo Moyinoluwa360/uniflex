@@ -3,9 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/models/delivery_group.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/utils/local_time.dart';
 import '../../shared/widgets/async/retry_section.dart';
+import '../../shared/widgets/cards/app_card.dart';
+import '../../shared/widgets/status/app_status_label.dart';
+import '../../shared/widgets/status/status_presentation.dart';
+import '../../shared/widgets/tabs/app_segmented_tabs.dart';
 import '../ordering/order_repository.dart';
 import '../tracking/order_tracking_screen.dart';
 import 'gift_received_screen.dart';
@@ -22,14 +28,28 @@ class GiftsScreen extends ConsumerWidget {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Gifts'),
-          bottom: const TabBar(
-            indicatorColor: AppColors.emerald,
-            tabs: [Tab(text: 'Sent'), Tab(text: 'Received')],
-          ),
+        appBar: AppBar(title: const Text('Gifts')),
+        body: Column(
+          children: [
+            Builder(
+              builder: (context) => Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.screenGutter,
+                  AppSpacing.sm,
+                  AppSpacing.screenGutter,
+                  AppSpacing.sm,
+                ),
+                child: AppSegmentedTabs(
+                  labels: const ['Sent', 'Received'],
+                  controller: DefaultTabController.of(context),
+                ),
+              ),
+            ),
+            const Expanded(
+              child: TabBarView(children: [_SentTab(), _ReceivedTab()]),
+            ),
+          ],
         ),
-        body: const TabBarView(children: [_SentTab(), _ReceivedTab()]),
       ),
     );
   }
@@ -109,45 +129,34 @@ class SentGiftCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final status = group.status.label;
-    return InkWell(
-      borderRadius: BorderRadius.circular(AppRadius.card),
+    final c = context.colors;
+    final status = StatusPresenter.group(group.status);
+    return AppCard(
       onTap: onTap ??
           () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => OrderTrackingScreen.forGroup(group: group))),
-      child: Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: theme.cardTheme.color,
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: theme.dividerColor),
-        ),
-        child: Row(
-          children: [
-            const Text('🎁', style: TextStyle(fontSize: 24)),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('To ${group.giftRecipientNickname ?? 'a student'}',
-                      style: theme.textTheme.titleSmall),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${group.shortId} · ${formatLocalRelative(group.createdAt)}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                    ),
-                  ),
-                ],
-              ),
+      child: Row(
+        children: [
+          Icon(AppIcons.gift, size: 22, color: c.textSecondary),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('To ${group.giftRecipientNickname ?? 'a student'}',
+                    style: theme.textTheme.titleSmall),
+                const SizedBox(height: 2),
+                Text(
+                  '${group.shortId} · ${formatLocalRelative(group.createdAt)}',
+                  style: AppTypography.caption(c),
+                ),
+              ],
             ),
-            Text(status,
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(fontWeight: FontWeight.w600)),
-            const Icon(Icons.chevron_right, size: 20),
-          ],
-        ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          AppStatusLabel(tone: status.tone, text: status.label),
+          Icon(AppIcons.chevronRight, size: 20, color: c.textTertiary),
+        ],
       ),
     );
   }
@@ -161,22 +170,21 @@ class _Empty extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = context.colors;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('🎁', style: TextStyle(fontSize: 40)),
+            Icon(AppIcons.gift, size: 40, color: c.textTertiary),
             const SizedBox(height: AppSpacing.md),
             Text(title, style: theme.textTheme.titleMedium),
             const SizedBox(height: AppSpacing.sm),
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-              ),
+              style: AppTypography.meta(c),
             ),
           ],
         ),

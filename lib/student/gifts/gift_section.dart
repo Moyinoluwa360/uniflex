@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/utils/app_error_mapper.dart';
+import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/cards/app_card.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import 'gift_models.dart';
 import 'gift_repository.dart';
@@ -81,6 +84,7 @@ class _GiftSectionState extends ConsumerState<GiftSection> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = context.colors;
     final r = widget.recipient;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -88,8 +92,7 @@ class _GiftSectionState extends ConsumerState<GiftSection> {
         SwitchListTile(
           key: const ValueKey('gift-switch'),
           contentPadding: EdgeInsets.zero,
-          secondary:
-              const Icon(Icons.card_giftcard_outlined, color: AppColors.orange),
+          secondary: Icon(AppIcons.gift, color: c.textSecondary),
           title: Text('Send as a gift', style: theme.textTheme.titleSmall),
           subtitle: const Text(
               'Another student gets this food. You pay and can cancel.'),
@@ -119,34 +122,24 @@ class _GiftSectionState extends ConsumerState<GiftSection> {
                 const SizedBox(width: AppSpacing.sm),
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
-                  child: FilledButton(
+                  child: AppButton(
                     key: const ValueKey('gift-find'),
+                    label: 'Find',
+                    size: AppButtonSize.small,
+                    expand: false,
+                    isLoading: _finding,
                     onPressed: _finding ? null : _find,
-                    child: _finding
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Find'),
                   ),
                 ),
               ],
             ),
           ] else
-            Container(
+            AppCard(
               key: const ValueKey('gift-recipient'),
               padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: BoxDecoration(
-                color: AppColors.emerald.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(AppRadius.card),
-                border:
-                    Border.all(color: AppColors.emerald.withValues(alpha: 0.4)),
-              ),
               child: Row(
                 children: [
-                  const Icon(Icons.check_circle_outline,
-                      color: AppColors.emerald, size: 20),
+                  Icon(AppIcons.success, color: c.brandText, size: 20),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text.rich(
@@ -163,10 +156,13 @@ class _GiftSectionState extends ConsumerState<GiftSection> {
                       style: theme.textTheme.bodyMedium,
                     ),
                   ),
-                  TextButton(
+                  AppButton(
                     key: const ValueKey('gift-change'),
+                    label: 'Change',
+                    variant: AppButtonVariant.text,
+                    size: AppButtonSize.small,
+                    expand: false,
                     onPressed: _change,
-                    child: const Text('Change'),
                   ),
                 ],
               ),

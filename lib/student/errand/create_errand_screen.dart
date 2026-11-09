@@ -4,14 +4,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/delivery_location.dart';
 import '../../shared/models/errand_category.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/models/order.dart';
 import '../../shared/services/settings/service_charge_provider.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/utils/uuid_v4.dart';
 import '../../shared/widgets/payment/run_payment_flow.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
-import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/cart/summary_row.dart';
+import '../../shared/widgets/format/money.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../ordering/order_payment_repository.dart';
 import '../ordering/order_repository.dart';
@@ -81,8 +85,7 @@ class _CreateErrandScreenState extends ConsumerState<CreateErrandScreen> {
         acknowledgeMessage: "You're paying the errand fee and service charge. "
             'Your rider will call you to sort out the details.',
         pinTitle: 'Confirm errand payment',
-        pinSubtitle:
-            'Enter your 4-digit PIN to pay ₦${total.toStringAsFixed(0)}.',
+        pinSubtitle: 'Enter your 4-digit PIN to pay ${Money.format(total)}.',
         setSubmitting: (v) {
           if (mounted) setState(() => _isSubmitting = v);
         },
@@ -135,6 +138,7 @@ class _CreateErrandScreenState extends ConsumerState<CreateErrandScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = context.colors;
     final categoriesAsync = ref.watch(activeErrandCategoriesProvider);
     final serviceAsync = ref.watch(serviceChargeProvider);
     final fee = _selectedCategory?.flatFee;
@@ -162,25 +166,18 @@ class _CreateErrandScreenState extends ConsumerState<CreateErrandScreen> {
                 ),
                 error: (_, __) => Text(
                   'Could not load categories. Pull down to retry.',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: AppColors.error),
+                  style: AppTypography.meta(colors)
+                      .copyWith(color: colors.dangerText),
                 ),
                 data: (categories) => DropdownButtonFormField<String>(
                   initialValue: _selectedCategory?.id,
                   hint: const Text('Select a category'),
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md,
-                      vertical: AppSpacing.md,
-                    ),
-                  ),
                   items: [
                     for (final c in categories)
                       DropdownMenuItem(
                         value: c.id,
-                        child: Text(
-                            '${c.title}  ·  ₦${c.flatFee.toStringAsFixed(0)}'),
+                        child:
+                            Text('${c.title}  ·  ${Money.format(c.flatFee)}'),
                       ),
                   ],
                   validator: (v) =>
@@ -234,13 +231,6 @@ class _CreateErrandScreenState extends ConsumerState<CreateErrandScreen> {
                     data: (locations) => DropdownButtonFormField<String>(
                       initialValue: _selectedLocation?.id,
                       hint: const Text('Select area (optional)'),
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: AppSpacing.md,
-                          vertical: AppSpacing.md,
-                        ),
-                      ),
                       items: [
                         const DropdownMenuItem(
                           value: '__none__',
@@ -281,42 +271,20 @@ class _CreateErrandScreenState extends ConsumerState<CreateErrandScreen> {
                   padding: const EdgeInsets.only(bottom: AppSpacing.md),
                   child: Column(
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Errand fee', style: theme.textTheme.bodyMedium),
-                          Text('₦${fee.toStringAsFixed(0)}',
-                              style: theme.textTheme.bodyMedium),
-                        ],
+                      SummaryRow(label: 'Errand fee', value: Money.format(fee)),
+                      SummaryRow(
+                        label: 'Service charge',
+                        value: serviceCharge == null
+                            ? '—'
+                            : Money.format(serviceCharge),
                       ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Service charge',
-                              style: theme.textTheme.bodyMedium),
-                          Text(
-                            serviceCharge == null
-                                ? '—'
-                                : '₦${serviceCharge.toStringAsFixed(0)}',
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                        ],
-                      ),
-                      const Divider(height: AppSpacing.lg),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Total', style: theme.textTheme.titleSmall),
-                          Text(
-                            serviceCharge == null
-                                ? '—'
-                                : '₦${(fee + serviceCharge).toStringAsFixed(0)}',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              color: theme.colorScheme.primary,
-                            ),
-                          ),
-                        ],
+                      Divider(height: AppSpacing.lg, color: colors.border),
+                      SummaryRow(
+                        label: 'Total',
+                        bold: true,
+                        value: serviceCharge == null
+                            ? '—'
+                            : Money.format(fee + serviceCharge),
                       ),
                     ],
                   ),
@@ -327,17 +295,17 @@ class _CreateErrandScreenState extends ConsumerState<CreateErrandScreen> {
                   padding: const EdgeInsets.only(bottom: AppSpacing.md),
                   child: Text(
                     _error!,
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: AppColors.error),
+                    style: AppTypography.meta(colors)
+                        .copyWith(color: colors.dangerText),
                   ),
                 ),
 
               // ── Pay button ───────────────────────────────────────────────
-              PrimaryButton(
+              AppButton(
                 label: (fee != null && serviceCharge != null)
-                    ? 'Pay  ₦${(fee + serviceCharge).toStringAsFixed(0)}'
+                    ? 'Pay  ${Money.format(fee + serviceCharge)}'
                     : 'Pay',
-                icon: Icons.lock_outline,
+                icon: AppIcons.lock,
                 isLoading: _isSubmitting,
                 onPressed: (_canSubmit && !_isSubmitting) ? _submit : null,
               ),

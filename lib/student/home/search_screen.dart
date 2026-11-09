@@ -5,8 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/services/supabase/supabase_providers.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
+import '../../shared/widgets/format/money.dart';
 import '../../shared/widgets/media/app_image.dart';
 import '../ordering/catalog_screen.dart';
 import '../ordering/product_repository.dart';
@@ -90,7 +93,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final hasQuery = _controller.text.trim().isNotEmpty;
 
     return Scaffold(
@@ -105,10 +107,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               onChanged: _onChanged,
               decoration: InputDecoration(
                 hintText: 'Search meals, vendors...',
-                prefixIcon: const Icon(Icons.search),
+                prefixIcon: const Icon(AppIcons.search),
                 suffixIcon: hasQuery
                     ? IconButton(
-                        icon: const Icon(Icons.clear),
+                        icon: const Icon(AppIcons.close),
                         onPressed: () {
                           _controller.clear();
                           _onChanged('');
@@ -127,17 +129,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             Padding(
               padding: const EdgeInsets.all(AppSpacing.lg),
               child: Text(_error!,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: AppColors.error)),
+                  style: AppTypography.meta(context.colors)
+                      .copyWith(color: context.colors.dangerText)),
             )
           else if (hasQuery && _results.isEmpty)
             Padding(
               padding: const EdgeInsets.all(AppSpacing.lg),
               child: Text(
                 'No results found.',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                ),
+                style: AppTypography.meta(context.colors),
               ),
             )
           else
@@ -159,7 +159,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     ),
                     title: Text(r.productName),
                     subtitle: Text(
-                      '₦${r.basePrice.toStringAsFixed(0)}  ·  ${r.vendorName}',
+                      '${Money.format(r.basePrice)}  ·  ${r.vendorName}',
                     ),
                     onTap: () => _navigateToVendor(r.vendorId),
                   );

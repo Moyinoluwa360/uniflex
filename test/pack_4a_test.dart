@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:uniflex/shared/theme/app_icons.dart';
 import 'package:uniflex/admin/service_charge/service_charge_screen.dart';
 import 'package:uniflex/admin/support/admin_support_chat_screen.dart';
 import 'package:uniflex/shared/models/cart_item.dart';
@@ -604,7 +605,7 @@ void main() {
         currentProfileProvider.overrideWith((ref) async => null),
       ]);
       await tester.enterText(find.byType(TextField), 'I need help');
-      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.tap(find.byIcon(AppIcons.send));
       await tester.pumpAndSettle();
 
       expect(svc.sent.length, 1);
@@ -632,7 +633,7 @@ void main() {
       expect(find.text('#AAAAAAAA · Placed'), findsOneWidget); // chip above the box
 
       await tester.enterText(find.byType(TextField), 'About my errand');
-      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.tap(find.byIcon(AppIcons.send));
       await tester.pumpAndSettle();
 
       expect(svc.sent.single.orderId, 'aaaaaaaa-0000-0000-0000-000000000000');
@@ -655,7 +656,7 @@ void main() {
         ],
       );
       await tester.enterText(find.byType(TextField), 'Where is my food?');
-      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.tap(find.byIcon(AppIcons.send));
       await tester.pumpAndSettle();
       expect(svc.sent.single.groupId, 'bbbbbbbb-0000-0000-0000-000000000000');
       expect(svc.sent.single.orderId, isNull);

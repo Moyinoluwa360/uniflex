@@ -5,8 +5,14 @@ import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/support/support_chat_service.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/format/money.dart';
+import '../../shared/widgets/lists/app_list_group.dart';
 import '../../shared/widgets/pin/pin_entry_sheet.dart';
+import '../../shared/widgets/text/app_section_label.dart';
+import '../../shared/widgets/tier/tier_header.dart';
 import '../services/student_providers.dart';
 import '../support/support_options_screen.dart';
 import 'badges_screen.dart';
@@ -23,7 +29,7 @@ class StudentProfileScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
+    final c = context.colors;
     final profileAsync = ref.watch(currentProfileProvider);
     final balanceAsync = ref.watch(walletBalanceProvider);
     final statsAsync = ref.watch(studentStatsProvider);
@@ -40,11 +46,10 @@ class StudentProfileScreen extends ConsumerWidget {
           final initials = _initials(profile.nickname ?? profile.fullName);
           final tier = statsAsync.valueOrNull?['membership_tier'] as String? ??
               profile.membershipTier;
-          final tierColor = _tierColor(tier);
 
           return CustomScrollView(
             slivers: [
-              // ── Hero card ─────────────────────────────────────────────
+              // ── Header ────────────────────────────────────────────────
               SliverToBoxAdapter(
                 child: SafeArea(
                   bottom: false,
@@ -55,258 +60,124 @@ class StudentProfileScreen extends ConsumerWidget {
                       AppSpacing.screenGutter,
                       AppSpacing.sm,
                     ),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            tierColor,
-                            tierColor.withValues(alpha: 0.75),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(AppRadius.card),
-                        boxShadow: [
-                          BoxShadow(
-                            color: tierColor.withValues(alpha: 0.35),
-                            blurRadius: 16,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.lg,
-                        vertical: AppSpacing.xl,
-                      ),
-                      child: Column(
-                        children: [
-                          // Avatar
-                          Container(
-                            width: 72,
-                            height: 72,
-                            decoration: BoxDecoration(
-                              color: AppColors.pureWhite.withValues(alpha: 0.2),
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color:
-                                    AppColors.pureWhite.withValues(alpha: 0.5),
-                                width: 2.5,
-                              ),
-                            ),
-                            child: Center(
-                              child: Text(
-                                initials,
-                                style: theme.textTheme.headlineSmall?.copyWith(
-                                  color: AppColors.pureWhite,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: AppSpacing.sm),
-                          Text(
-                            profile.nickname ?? profile.fullName ?? '—',
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              color: AppColors.pureWhite,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          if (profile.fullName != null &&
-                              profile.nickname != null)
-                            Text(
-                              profile.fullName!,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color:
-                                    AppColors.pureWhite.withValues(alpha: 0.8),
-                              ),
-                            ),
-                          const SizedBox(height: AppSpacing.md),
-                          // Tier badge + wallet balance
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: AppSpacing.md, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: AppColors.pureWhite
-                                      .withValues(alpha: 0.2),
-                                  borderRadius:
-                                      BorderRadius.circular(AppRadius.pill),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.workspace_premium_outlined,
-                                      size: 14,
-                                      color: AppColors.pureWhite,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      tier,
-                                      style:
-                                          theme.textTheme.labelMedium?.copyWith(
-                                        color: AppColors.pureWhite,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: AppSpacing.sm),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: AppSpacing.md, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: AppColors.pureWhite
-                                      .withValues(alpha: 0.2),
-                                  borderRadius:
-                                      BorderRadius.circular(AppRadius.pill),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.account_balance_wallet_outlined,
-                                      size: 14,
-                                      color: AppColors.pureWhite,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      balanceAsync.when(
-                                        data: (b) =>
-                                            '₦${(b ?? 0).toStringAsFixed(0)}',
-                                        loading: () => '…',
-                                        error: (_, __) => '—',
-                                      ),
-                                      style:
-                                          theme.textTheme.labelMedium?.copyWith(
-                                        color: AppColors.pureWhite,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                    child: TierHeader(
+                      tier: tier,
+                      name: profile.fullName ?? profile.nickname ?? '—',
+                      nickname:
+                          profile.fullName != null ? profile.nickname : null,
+                      initial: initials,
                     ),
                   ),
                 ),
               ),
 
               SliverPadding(
-                padding: const EdgeInsets.all(AppSpacing.screenGutter),
+                padding: EdgeInsets.fromLTRB(
+                  AppSpacing.screenGutter,
+                  AppSpacing.screenGutter,
+                  AppSpacing.screenGutter,
+                  AppSpacing.navClearanceOf(context) + AppSpacing.md,
+                ),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
                     // ── Wallet balance ──────────────────────────────────
-                    _SectionCard(
+                    AppListGroup(
                       children: [
-                        _InfoRow(
-                          icon: Icons.account_balance_wallet_outlined,
-                          label: 'Wallet balance',
-                          value: balanceAsync.when(
-                            data: (b) => '₦${(b ?? 0).toStringAsFixed(2)}',
+                        AppListRow(
+                          leadingIcon: AppIcons.wallet,
+                          title: balanceAsync.when(
+                            data: (b) => Money.hero(b ?? 0),
                             loading: () => '…',
                             error: (_, __) => '—',
                           ),
-                          theme: theme,
-                          valueColor: theme.colorScheme.primary,
+                          subtitle: 'Wallet balance',
+                          showChevron: false,
                         ),
                       ],
                     ),
 
-                    const SizedBox(height: AppSpacing.cardGap),
+                    const SizedBox(height: AppSpacing.md),
 
                     // ── Services menu ───────────────────────────────────
-                    _SectionLabel(label: 'Services', theme: theme),
+                    const AppSectionLabel('Services'),
                     const SizedBox(height: AppSpacing.sm),
-                    _SectionCard(
+                    AppListGroup(
                       children: [
-                        _MenuRow(
-                          icon: Icons.workspace_premium_outlined,
-                          label: 'Membership & Rewards',
+                        AppListRow(
+                          leadingIcon: AppIcons.award,
+                          title: 'Membership & Rewards',
                           onTap: () => _push(
                               context, MembershipCardScreen(profile: profile)),
-                          theme: theme,
                         ),
-                        _MenuRow(
-                          icon: Icons.people_outline,
-                          label: 'Refer a student',
+                        AppListRow(
+                          leadingIcon: AppIcons.group,
+                          title: 'Refer a student',
                           onTap: () =>
                               _push(context, const ReferAStudentScreen()),
-                          theme: theme,
                         ),
-                        _MenuRow(
-                          icon: Icons.card_giftcard_outlined,
-                          label: 'Gifts',
+                        AppListRow(
+                          leadingIcon: AppIcons.gift,
+                          title: 'Gifts',
                           onTap: () => _push(context, const GiftsScreen()),
-                          theme: theme,
                         ),
-                        _MenuRow(
-                          icon: Icons.emoji_events_outlined,
-                          label: 'My Badges',
+                        AppListRow(
+                          leadingIcon: AppIcons.trophy,
+                          title: 'My Badges',
                           onTap: () => _push(context, const BadgesScreen()),
-                          theme: theme,
                         ),
-                        _MenuRow(
-                          icon: Icons.schedule_outlined,
-                          label: 'Scheduled Orders',
-                          showDivider: false,
+                        AppListRow(
+                          leadingIcon: AppIcons.clock,
+                          title: 'Scheduled Orders',
                           onTap: () => _push(
                               context, const ScheduledOrdersStudentScreen()),
-                          theme: theme,
                         ),
                       ],
                     ),
 
-                    const SizedBox(height: AppSpacing.cardGap),
+                    const SizedBox(height: AppSpacing.md),
 
                     // ── Account info ────────────────────────────────────
-                    _SectionLabel(label: 'Account', theme: theme),
+                    const AppSectionLabel('Account'),
                     const SizedBox(height: AppSpacing.sm),
-                    _SectionCard(
+                    AppListGroup(
                       children: [
                         if (profile.matricNumber != null)
-                          _InfoRow(
-                            icon: Icons.badge_outlined,
-                            label: 'Matric number',
-                            value: profile.matricNumber!,
-                            theme: theme,
+                          AppListRow(
+                            leadingIcon: AppIcons.receipt,
+                            title: profile.matricNumber!,
+                            subtitle: 'Matric number',
+                            showChevron: false,
                           ),
                         if (profile.school != null)
-                          _InfoRow(
-                            icon: Icons.school_outlined,
-                            label: 'School',
-                            value: profile.school!,
-                            theme: theme,
+                          AppListRow(
+                            leadingIcon: AppIcons.award,
+                            title: profile.school!,
+                            subtitle: 'School',
+                            showChevron: false,
                           ),
                         if (profile.email != null)
-                          _InfoRow(
-                            icon: Icons.email_outlined,
-                            label: 'Email',
-                            value: profile.email!,
-                            theme: theme,
+                          AppListRow(
+                            leadingIcon: AppIcons.mail,
+                            title: profile.email!,
+                            subtitle: 'Email',
+                            showChevron: false,
                           ),
                         if (profile.phone != null)
-                          _InfoRow(
-                            icon: Icons.phone_outlined,
-                            label: 'Phone',
-                            value: profile.phone!,
-                            theme: theme,
+                          AppListRow(
+                            leadingIcon: AppIcons.phone,
+                            title: profile.phone!,
+                            subtitle: 'Phone',
+                            showChevron: false,
                           ),
                       ],
                     ),
 
-                    const SizedBox(height: AppSpacing.cardGap),
+                    const SizedBox(height: AppSpacing.md),
 
                     // ── More menu ───────────────────────────────────────
-                    _SectionLabel(label: 'More', theme: theme),
+                    const AppSectionLabel('More'),
                     const SizedBox(height: AppSpacing.sm),
-                    _SectionCard(
+                    AppListGroup(
                       children: [
                         // Help & Support — badge shows when admin replies.
                         Consumer(
@@ -316,43 +187,65 @@ class StudentProfileScreen extends ConsumerWidget {
                                     .valueOrNull
                                     ?.studentUnreadCount ??
                                 0;
-                            return _MenuRowBadged(
-                              icon: Icons.support_agent_outlined,
-                              label: 'Help & Support',
-                              badgeCount: unread,
+                            return AppListRow(
+                              leadingIcon: AppIcons.chat,
+                              title: 'Help & Support',
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (unread > 0) ...[
+                                    Badge(
+                                      label: Text('$unread'),
+                                      backgroundColor: c.brand,
+                                      textColor: c.onBrand,
+                                    ),
+                                    const SizedBox(width: AppSpacing.sm),
+                                  ],
+                                  Icon(AppIcons.chevronRight,
+                                      size: AppIconSize.small,
+                                      color: c.textTertiary),
+                                ],
+                              ),
                               onTap: () =>
                                   _push(context, const SupportOptionsScreen()),
-                              theme: theme,
                             );
                           },
                         ),
-                        _MenuRow(
-                          icon: Icons.settings_outlined,
-                          label: 'Preferences',
+                        AppListRow(
+                          leadingIcon: AppIcons.manage,
+                          title: 'Preferences',
                           onTap: () =>
                               _push(context, const PreferencesScreen()),
-                          theme: theme,
                         ),
-                        _MenuRow(
-                          icon: Icons.pin_outlined,
-                          label: 'Change Transaction PIN',
+                        AppListRow(
+                          leadingIcon: AppIcons.lock,
+                          title: 'Change Transaction PIN',
                           onTap: () => showSetPinSheet(context, ref),
-                          theme: theme,
-                        ),
-                        _MenuRow(
-                          icon: Icons.logout,
-                          label: 'Log out',
-                          iconColor: AppColors.error,
-                          labelColor: AppColors.error,
-                          showDivider: false,
-                          showChevron: false,
-                          onTap: () => ref.read(authServiceProvider).signOut(),
-                          theme: theme,
                         ),
                       ],
                     ),
 
-                    const SizedBox(height: AppSpacing.xl),
+                    const SizedBox(height: AppSpacing.lg),
+
+                    AppButton(
+                      label: 'Log out',
+                      icon: AppIcons.logout,
+                      variant: AppButtonVariant.quietDanger,
+                      onPressed: () async {
+                        final ok = await AppDialog.show(
+                          context,
+                          title: 'Log out?',
+                          body:
+                              'You will need to sign in again to use Uniflex.',
+                          secondaryLabel: 'Stay signed in',
+                          confirmLabel: 'Log out',
+                          destructive: true,
+                        );
+                        if (ok == true) {
+                          ref.read(authServiceProvider).signOut();
+                        }
+                      },
+                    ),
                   ]),
                 ),
               ),
@@ -367,211 +260,10 @@ class StudentProfileScreen extends ConsumerWidget {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
 
-  Color _tierColor(String tier) => switch (tier) {
-        'Bronze' => AppColors.tierBronze,
-        'Silver' => AppColors.tierSilver,
-        'Gold' => AppColors.tierGold,
-        'Platinum' => AppColors.tierPlatinum,
-        _ => AppColors.tierBronze,
-      };
-
   String _initials(String? name) {
     if (name == null || name.isEmpty) return '?';
     final parts = name.trim().split(' ');
     if (parts.length == 1) return parts[0][0].toUpperCase();
     return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-  }
-}
-
-// ── Shared helpers ────────────────────────────────────────────────────
-
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel({required this.label, required this.theme});
-  final String label;
-  final ThemeData theme;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: theme.textTheme.labelSmall?.copyWith(
-        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.8,
-      ),
-    );
-  }
-}
-
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.children});
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: theme.dividerColor),
-      ),
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start, children: children),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.theme,
-    this.valueColor,
-  });
-  final IconData icon;
-  final String label;
-  final String value;
-  final ThemeData theme;
-  final Color? valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Row(
-        children: [
-          Icon(icon,
-              size: 18,
-              color: theme.colorScheme.primary.withValues(alpha: 0.7)),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                    )),
-                Text(value,
-                    style: theme.textTheme.bodyMedium
-                        ?.copyWith(color: valueColor)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MenuRow extends StatelessWidget {
-  const _MenuRow({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    required this.theme,
-    this.iconColor,
-    this.labelColor,
-    this.showDivider = true,
-    this.showChevron = true,
-  });
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final ThemeData theme;
-  final Color? iconColor;
-  final Color? labelColor;
-  final bool showDivider;
-  final bool showChevron;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-            child: Row(
-              children: [
-                Icon(icon,
-                    size: 20,
-                    color: iconColor ??
-                        theme.colorScheme.onSurface.withValues(alpha: 0.6)),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Text(label,
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(color: labelColor)),
-                ),
-                if (showChevron)
-                  Icon(Icons.chevron_right,
-                      size: 18,
-                      color:
-                          theme.colorScheme.onSurface.withValues(alpha: 0.3)),
-              ],
-            ),
-          ),
-        ),
-        if (showDivider) Divider(height: 1, color: theme.dividerColor),
-      ],
-    );
-  }
-}
-
-/// Like [_MenuRow] but shows a numeric badge on the icon when [badgeCount] > 0.
-class _MenuRowBadged extends StatelessWidget {
-  const _MenuRowBadged({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    required this.theme,
-    this.badgeCount = 0,
-  });
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final ThemeData theme;
-  final int badgeCount;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-            child: Row(
-              children: [
-                Badge(
-                  isLabelVisible: badgeCount > 0,
-                  label: Text('$badgeCount'),
-                  child: Icon(
-                    icon,
-                    size: 20,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Text(label, style: theme.textTheme.bodyMedium),
-                ),
-                Icon(Icons.chevron_right,
-                    size: 18,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
-              ],
-            ),
-          ),
-        ),
-        Divider(height: 1, color: theme.dividerColor),
-      ],
-    );
   }
 }

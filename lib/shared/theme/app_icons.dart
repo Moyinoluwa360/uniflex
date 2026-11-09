@@ -41,6 +41,8 @@ abstract final class AppIcons {
   static const IconData check = Icons.check;
   static const IconData back = Icons.arrow_back;
   static const IconData forward = Icons.arrow_forward;
+  static const IconData arrowDown = Icons.arrow_downward;
+  static const IconData arrowUp = Icons.arrow_upward;
   static const IconData chevronRight = Icons.chevron_right;
   static const IconData chevronDown = Icons.expand_more;
   static const IconData chevronUp = Icons.expand_less;
@@ -56,6 +58,7 @@ abstract final class AppIcons {
   static const IconData cart = Icons.shopping_cart_outlined;
   static const IconData bell = Icons.notifications_none_outlined;
   static const IconData gift = Icons.card_giftcard_outlined;
+  static const IconData send = Icons.send_outlined;
   static const IconData award = Icons.workspace_premium_outlined;
   static const IconData trophy = Icons.emoji_events_outlined;
   static const IconData star = Icons.star_outline;
@@ -68,6 +71,9 @@ abstract final class AppIcons {
   static const IconData group = Icons.people_outline;
   static const IconData receipt = Icons.receipt_outlined;
   static const IconData savings = Icons.savings_outlined;
+  static const IconData bank = Icons.account_balance_outlined;
+  static const IconData eye = Icons.visibility_outlined;
+  static const IconData eyeOff = Icons.visibility_off_outlined;
   static const IconData errand = Icons.directions_run_outlined;
   static const IconData delivery = Icons.delivery_dining_outlined;
   static const IconData moon = Icons.dark_mode_outlined;

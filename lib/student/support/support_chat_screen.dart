@@ -5,8 +5,11 @@ import '../../shared/models/support_message.dart';
 import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/support/support_chat_service.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/widgets/async/retry_section.dart';
+import '../../shared/widgets/notice/app_inline_notice.dart';
 import '../../shared/widgets/chat/support_order_chip.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 
@@ -129,17 +132,16 @@ class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = context.colors;
     final convAsync = ref.watch(myConversationProvider);
     final userId = ref.watch(currentProfileProvider).valueOrNull?.id ?? '';
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Help & Support'),
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: AppColors.pureWhite,
         actions: const [
           IconButton(
-            icon: Icon(Icons.headset_mic_outlined),
+            icon: Icon(AppIcons.chat),
             tooltip: 'Support',
             onPressed: null,
           ),
@@ -153,7 +155,7 @@ class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
                     (conv) => conv != null && conv.isResolved
                         ? Container(
                             width: double.infinity,
-                            color: AppColors.mediumGrey.withValues(alpha: 0.1),
+                            color: c.surfaceRaised,
                             padding: const EdgeInsets.symmetric(
                               horizontal: AppSpacing.md,
                               vertical: AppSpacing.sm,
@@ -161,10 +163,8 @@ class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
                             child: Text(
                               'This conversation was marked resolved. '
                               'Send a message to reopen it.',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: theme.colorScheme.onSurface
-                                    .withValues(alpha: 0.6),
-                              ),
+                              style: AppTypography.caption(c)
+                                  .copyWith(color: c.textSecondary),
                               textAlign: TextAlign.center,
                             ),
                           )
@@ -204,30 +204,29 @@ class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
 
           // ── Error banner ─────────────────────────────────────────────
           if (_error != null)
-            Container(
-              width: double.infinity,
-              color: AppColors.error.withValues(alpha: 0.1),
+            Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.md,
                 vertical: AppSpacing.sm,
               ),
-              child: Row(
-                children: [
-                  const Icon(Icons.error_outline,
-                      color: AppColors.error, size: 16),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      _error!,
-                      style: theme.textTheme.labelSmall
-                          ?.copyWith(color: AppColors.error),
+              child: AppInlineNotice.custom(
+                isError: true,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _error!,
+                        style: AppTypography.caption(c)
+                            .copyWith(color: c.dangerText),
+                      ),
                     ),
-                  ),
-                  GestureDetector(
-                    onTap: () => setState(() => _error = null),
-                    child: const Icon(Icons.close, size: 16),
-                  ),
-                ],
+                    GestureDetector(
+                      onTap: () => setState(() => _error = null),
+                      child: Icon(AppIcons.close,
+                          size: 16, color: c.textSecondary),
+                    ),
+                  ],
+                ),
               ),
             ),
 
@@ -266,11 +265,7 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.support_agent_outlined,
-              size: 56,
-              color: theme.colorScheme.primary.withValues(alpha: 0.4),
-            ),
+            Icon(AppIcons.chat, size: 48, color: context.colors.textTertiary),
             const SizedBox(height: AppSpacing.md),
             Text(
               'Hi! How can we help?',
@@ -281,9 +276,7 @@ class _EmptyState extends StatelessWidget {
             const SizedBox(height: AppSpacing.sm),
             Text(
               'Send us a message and we\'ll get back to you as soon as possible.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-              ),
+              style: AppTypography.meta(context.colors),
               textAlign: TextAlign.center,
             ),
           ],
@@ -393,22 +386,17 @@ class _DateSeparator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final c = context.colors;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
       child: Row(
         children: [
-          Expanded(child: Divider(color: theme.dividerColor)),
+          Expanded(child: Divider(color: c.border)),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-            child: Text(
-              _label(),
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
-            ),
+            child: Text(_label(), style: AppTypography.caption(c)),
           ),
-          Expanded(child: Divider(color: theme.dividerColor)),
+          Expanded(child: Divider(color: c.border)),
         ],
       ),
     );
@@ -426,13 +414,10 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final bubbleColor = isMe
-        ? theme.colorScheme.primary
-        : theme.colorScheme.surfaceContainerHighest;
-    final textColor = isMe ? AppColors.pureWhite : theme.colorScheme.onSurface;
-    final labelColor = isMe
-        ? AppColors.pureWhite.withValues(alpha: 0.7)
-        : theme.colorScheme.onSurface.withValues(alpha: 0.5);
+    final c = context.colors;
+    final bubbleColor = isMe ? c.brand : c.surfaceRaised;
+    final textColor = isMe ? c.onBrand : c.textPrimary;
+    final labelColor = isMe ? c.onBrand.withValues(alpha: 0.7) : c.textTertiary;
 
     final senderLabel = message.isFromAdmin
         ? 'Uniflex Support · ${message.senderName.split(' ').first}'
@@ -528,13 +513,14 @@ class _InputBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = context.colors;
 
     return SafeArea(
       top: false,
       child: Container(
         decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
-          border: Border(top: BorderSide(color: theme.dividerColor)),
+          color: c.surface,
+          border: Border(top: BorderSide(color: c.border)),
         ),
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.md,
@@ -555,7 +541,10 @@ class _InputBar extends StatelessWidget {
                     attachedOrderLabel!,
                     style: theme.textTheme.labelSmall,
                   ),
-                  avatar: const Icon(Icons.receipt_long_outlined, size: 14),
+                  avatar:
+                      Icon(AppIcons.receipt, size: 14, color: c.textSecondary),
+                  backgroundColor: Colors.transparent,
+                  side: BorderSide(color: c.border),
                   onDeleted: onDetachOrder,
                   visualDensity: VisualDensity.compact,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -570,20 +559,7 @@ class _InputBar extends StatelessWidget {
                     minLines: 1,
                     maxLines: 5,
                     textCapitalization: TextCapitalization.sentences,
-                    decoration: InputDecoration(
-                      hintText: 'Write a message…',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.control),
-                        borderSide: BorderSide.none,
-                      ),
-                      filled: true,
-                      fillColor: theme.colorScheme.surfaceContainerHighest,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
-                        vertical: AppSpacing.sm,
-                      ),
-                      isDense: true,
-                    ),
+                    hint: 'Write a message…',
                     onSubmitted: (_) => onSend(),
                   ),
                 ),
@@ -605,23 +581,32 @@ class _SendButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 44,
-      height: 44,
-      child: FilledButton(
-        style: FilledButton.styleFrom(
-          padding: EdgeInsets.zero,
-          shape: const CircleBorder(),
+    final c = context.colors;
+    return Semantics(
+      button: true,
+      enabled: !isSending,
+      label: 'Send',
+      child: Material(
+        color: isSending ? c.surfaceRaised : c.brand,
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: isSending ? null : onPressed,
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: Center(
+              child: isSending
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: c.textSecondary),
+                    )
+                  : Icon(AppIcons.send, size: 18, color: c.onBrand),
+            ),
+          ),
         ),
-        onPressed: isSending ? null : onPressed,
-        child: isSending
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: AppColors.pureWhite),
-              )
-            : const Icon(Icons.send_rounded, size: 18),
       ),
     );
   }

@@ -2,8 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
+import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/cards/app_card.dart';
+import '../../shared/widgets/format/money.dart';
+import '../../shared/widgets/status/app_status_label.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
 import '../../shared/models/order.dart';
 import '../tracking/order_tracking_screen.dart';
@@ -31,6 +37,7 @@ class ScheduledOrdersStudentScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final c = context.colors;
     final ordersAsync = ref.watch(_scheduledOrdersProvider);
 
     return Scaffold(
@@ -44,20 +51,14 @@ class ScheduledOrdersStudentScreen extends ConsumerWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.schedule_outlined,
-                    size: 56,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
-                  ),
+                  Icon(AppIcons.clock, size: 48, color: c.textTertiary),
                   const SizedBox(height: AppSpacing.md),
                   Text('No scheduled orders',
                       style: theme.textTheme.titleMedium),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
                     'Schedule an order from checkout to see it here.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                    ),
+                    style: AppTypography.meta(c),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -68,9 +69,9 @@ class ScheduledOrdersStudentScreen extends ConsumerWidget {
           return ListView.builder(
             padding: const EdgeInsets.all(AppSpacing.screenGutter),
             itemCount: orders.length,
-            itemBuilder: (ctx, i) => _ScheduledOrderCard(
-              order: orders[i],
-              theme: theme,
+            itemBuilder: (ctx, i) => Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.cardGap),
+              child: _ScheduledOrderCard(order: orders[i], theme: theme),
             ),
           );
         },
@@ -97,78 +98,62 @@ class _ScheduledOrderCard extends StatelessWidget {
             ? '${diff.inHours}h ${diff.inMinutes % 60}m away'
             : '${diff.inMinutes}m away';
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: AppSpacing.cardGap),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  order.shortId,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
+    final c = context.colors;
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                order.shortId,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              AppStatusLabel(
+                tone: isPast ? StatusTone.cancelled : StatusTone.waiting,
+                text: countdown,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          if (order.vendorName != null)
+            Text('from ${order.vendorName}', style: AppTypography.meta(c)),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Icon(AppIcons.clock, size: 14, color: c.textTertiary),
+              const SizedBox(width: 4),
+              Text(
+                _formatDateTime(scheduledFor),
+                style: AppTypography.meta(c),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(Money.format(order.totalAmount),
+                  style: AppTypography.tabular(theme.textTheme.titleSmall!
+                      .copyWith(fontWeight: FontWeight.w700))),
+              AppButton(
+                label: 'Track',
+                variant: AppButtonVariant.text,
+                size: AppButtonSize.small,
+                expand: false,
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => OrderTrackingScreen(order: order),
                   ),
                 ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.sm, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: (isPast ? AppColors.error : AppColors.info)
-                        .withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                  ),
-                  child: Text(
-                    countdown,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: isPast ? AppColors.error : AppColors.info,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            if (order.vendorName != null)
-              Text('from ${order.vendorName}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                  )),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                const Icon(Icons.schedule_outlined, size: 14),
-                const SizedBox(width: 4),
-                Text(
-                  _formatDateTime(scheduledFor),
-                  style: theme.textTheme.bodySmall,
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('₦${order.totalAmount.toStringAsFixed(0)}',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      color: AppColors.emerald,
-                      fontWeight: FontWeight.w700,
-                    )),
-                TextButton(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => OrderTrackingScreen(order: order),
-                    ),
-                  ),
-                  child: const Text('Track'),
-                ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
