@@ -13,6 +13,7 @@ import '../../shared/widgets/inputs/app_text_field.dart';
 import '../services/admin_providers.dart';
 import 'menu_section.dart';
 import 'product_form_screen.dart';
+import '../../shared/theme/app_icons.dart';
 
 /// THE menu-management screen (Pack 4C). Uniflex's own menu and every
 /// partner vendor's menu are this one widget — they only differ by
@@ -326,11 +327,14 @@ class _SectionHeader extends StatelessWidget {
                   ?.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
-          TextButton.icon(
+          AppButton(
             key: ValueKey('add-${section.name}'),
+            label: 'Add',
+            variant: AppButtonVariant.text,
+            size: AppButtonSize.small,
+            expand: false,
+            icon: AppIcons.add,
             onPressed: () => onAdd(section),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Add'),
           ),
         ],
       ),

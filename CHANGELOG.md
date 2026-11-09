@@ -2,6 +2,40 @@
 
 All notable changes to this project are documented here, phase by phase.
 
+## UI Polish 2 — every screen on the new look (2026-11-09)
+
+**Presentation only.** Branch `ui-polish`, one commit per batch (A glass nav +
+Home, B orders/cart/checkout/tracking/notifications, C wallet/profile/remaining
+student screens, D auth/onboarding, E rider + admin). No service, repository,
+model, route, SQL, Edge Function, payment/PIN/fee/referral logic changed.
+
+**Changed**
+- All screens read `context.colors` tokens and shared components. The legacy
+  static palette (`AppColors.emerald/orange/info/...`) is **deleted**; the UI
+  guard allowlist is **empty** and the contrast test passes.
+- Tinted cards/pills/icon boxes replaced by plain `AppCard` / `AppListGroup` /
+  `AppStatusLabel` (dot + words). Spending is neutral; money in is green.
+- Admin deletes and rider price confirmation use `AppDialog` (solid red only on
+  the final destructive confirm). Every Cancel is `quietDanger`.
+- Money shows thousands separators everywhere (`₦3,000`).
+- The only text changes: "In Rider Pool" reads "Finding a rider"; the Orders
+  tab "Preparing" is labelled "Active".
+- Log out now asks "Log out?" first (new, from the spec).
+
+**Added**
+- `OrderSummaryCard`, `QuantityStepper`, `CartItemRow`, `CartTotalRow`,
+  `AddItemButton`, `SummaryRow`, `NotificationRow`, `TrackingStepper`,
+  `PinDigitBoxes`, `WalletCard`, `TransactionRow`; tokens `chartFees`,
+  `chartFood`, `chartPalette`, splash and `whatsapp` colours.
+- Tests: `test/ui_polish/batch_a..e_test.dart` (both themes × text scale 1.0
+  and 1.3 for each extracted widget).
+
+**Not done / left as is**
+- Rider and admin shells keep the classic bottom bar (their lists are not padded
+  for the glass bar).
+- Admin chat header, ad popup CTA, a few admin `SegmentedButton`/`FilterChip`s
+  and the admin chat "Resolve" action keep the themed Material widgets.
+
 ## UI Polish 1 — design-system foundation (2026-11-09)
 
 The layouts are fine; what felt "vibe coded" was the finish. This pack builds

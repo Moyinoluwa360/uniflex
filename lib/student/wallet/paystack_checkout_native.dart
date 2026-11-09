@@ -6,6 +6,7 @@ import '../../shared/theme/app_colors.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 
 /// Full-screen page that renders the Paystack Popup JS checkout inside a
 /// native WebView. The caller pushes this as a modal route and awaits the
@@ -201,9 +202,12 @@ class _PaystackCheckoutPageState extends State<PaystackCheckoutPage> {
                       style: theme.textTheme.bodyMedium,
                     ),
                     const SizedBox(height: 24),
-                    TextButton(
+                    AppButton(
+                      label: 'Go back',
+                      variant: AppButtonVariant.text,
+                      size: AppButtonSize.small,
+                      expand: false,
                       onPressed: () => Navigator.of(context).pop(null),
-                      child: const Text('Go back'),
                     ),
                   ],
                 ),

@@ -17,12 +17,9 @@ import 'package:flutter/material.dart';
 ///    inside a dialog. Purple and blue are retired.
 ///  * Status is a dot + words (`AppStatusLabel`), never a coloured pill.
 ///
-/// ── Legacy palette ─────────────────────────────────────────────────────
-/// The old static constants (`AppColors.emerald`, `.orange`, `.info`, ...) are
-/// kept at the bottom of this class ONLY so the screens that have not been
-/// moved onto the tokens yet keep compiling. UI Polish 2 migrates every
-/// screen and deletes them; `test/ui_guard_test.dart` counts the remaining
-/// uses per file and fails if that count ever goes up.
+/// The old static palette (`emerald`, `orange`, `info`, ...) was deleted in
+/// UI Polish 2; `test/ui_polish/ui_guard_test.dart` fails if a raw or legacy
+/// colour appears outside `lib/shared/theme/`.
 @immutable
 class AppColors extends ThemeExtension<AppColors> {
   const AppColors({
@@ -452,37 +449,6 @@ class AppColors extends ThemeExtension<AppColors> {
       adCircle: l(adCircle, other.adCircle),
     );
   }
-
-  // ════════════════════════════════════════════════════════════════════
-  // LEGACY PALETTE — do not use in new code. Removed by UI Polish 2.
-  // Kept (unchanged) so screens not yet migrated still compile and look
-  // the way they did. `test/ui_guard_test.dart` ratchets the use count down.
-  // ════════════════════════════════════════════════════════════════════
-  static const Color emerald = Color(0xFF10B981);
-  static const Color orange = Color(0xFFF97316);
-  static const Color matteBlack = Color(0xFF101312);
-  static const Color pureWhite = Color(0xFFFFFFFF);
-  static const Color softGrey = Color(0xFFF5F6F5);
-  static const Color mediumGrey = Color(0xFF9CA3AF);
-  static const Color borderGrey = Color(0xFFE5E7EB);
-  static const Color darkCanvas = Color(0xFF0C0F0E);
-  static const Color darkCard = Color(0xFF141917);
-  static const Color darkSurface = Color(0xFF161A18);
-  static const Color darkHairline = Color.fromRGBO(255, 255, 255, 0.07);
-  static const Color darkInkPrimary = Color(0xFFF2F4F3);
-  static const Color darkInkSecondary = Color(0xFF8B938F);
-  static const Color darkEmerald = Color(0xFF0A4433);
-  static const Color splashGradientTop = Color(0xFF12C48C);
-  static const Color splashGradientMid = Color(0xFF0E9E74);
-  static const Color tierBronze = Color(0xFFCD7F32);
-  static const Color tierSilver = Color(0xFF6B7280);
-  static const Color tierGold = Color(0xFFB45309);
-  static const Color tierPlatinum = Color(0xFF6D28D9);
-  static const Color accentViolet = Color(0xFF7C3AED);
-  static const Color success = emerald;
-  static const Color error = Color(0xFFDC2626);
-  static const Color warning = Color(0xFFF59E0B);
-  static const Color info = Color(0xFF3B82F6);
 }
 
 /// `context.colors` — the active token set. Falls back to the set matching

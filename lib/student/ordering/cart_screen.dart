@@ -76,13 +76,15 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       appBar: UniflexAppBar(
         title: 'Your Cart',
         actions: [
-          TextButton(
+          AppButton(
+            label: 'Clear',
+            variant: AppButtonVariant.quietDanger,
+            size: AppButtonSize.small,
+            expand: false,
             onPressed: () {
               ref.read(cartProvider.notifier).clear();
               Navigator.of(context).pop();
             },
-            child:
-                Text('Clear', style: AppTypography.buttonSmall(c.dangerText)),
           ),
         ],
       ),

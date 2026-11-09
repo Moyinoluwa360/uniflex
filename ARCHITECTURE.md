@@ -413,7 +413,8 @@ Two more gaps fixed in the same pass:
 
 ## Design system
 
-Rebuilt in **UI Polish 1** (2026-11-09). Rules in one page:
+Rebuilt in **UI Polish 1** (2026-11-09); every screen moved onto it in
+**UI Polish 2** (2026-11-09). Rules in one page:
 [.claude/rules/ui.md](.claude/rules/ui.md). Audit of the screens it has to
 reach: [docs/ui-audit.md](docs/ui-audit.md).
 
@@ -421,11 +422,13 @@ reach: [docs/ui-audit.md](docs/ui-audit.md).
 
 - `app_colors.dart` — `AppColors`, a `ThemeExtension` with a light and a dark
   value for every token, read as `context.colors.surface` etc. (falls back to
-  the ambient brightness if a test has no `AppTheme`). It also still holds the
-  *legacy* static palette (`AppColors.emerald`, `.orange`, `.info`, ...) so
-  screens not yet migrated keep compiling; `test/ui_polish/ui_guard_test.dart`
-  counts those uses per file and only lets the number go down. UI Polish 2
-  removes them.
+  the ambient brightness if a test has no `AppTheme`). The old static palette
+  (`emerald`, `orange`, `info`, ...) was **deleted in UI Polish 2**; every
+  screen now reads tokens, and `test/ui_polish/ui_guard_test.dart` runs with an
+  **empty allowlist** (no raw or legacy colour outside `lib/shared/theme/`).
+  Extra tokens added in UI Polish 2: `chartFees` / `chartFood` /
+  `chartPalette` (admin charts), splash gradient + highlight + shadow,
+  `whatsapp`, `adDark`, `onMedia`, `barrier`, `notifyDot`.
 - `tier_tokens.dart` — membership tier washes (Bronze, Silver, Gold, Platinum;
   unknown tier = plain surface).
 - `app_typography.dart` — **Plus Jakarta Sans** (static 400/500/600/700,
@@ -444,6 +447,15 @@ reach: [docs/ui-audit.md](docs/ui-audit.md).
   (colour scheme, text theme, buttons, inputs, dialog, sheet, snackbar, tabs,
   switch, checkbox, progress, selection). `themeModeProvider` defaults to
   `ThemeMode.system`.
+
+**UI Polish 2 additions (shared components)** — `cards/order_summary_card.dart`
+(Orders list card; Cancel is `quietDanger`), `cart/cart_widgets.dart`
+(`QuantityStepper`, `CartItemRow`, `CartTotalRow`, `AddItemButton`),
+`cart/summary_row.dart`, `lists/notification_row.dart`,
+`tracking/tracking_stepper.dart`, `tracking/pin_digit_boxes.dart`,
+`wallet/wallet_card.dart` (hide/show balance), `wallet/transaction_row.dart`.
+Rider/admin shells keep the classic bottom bar: their scrollables are not
+padded for the floating glass bar.
 
 **Components — `lib/shared/widgets/`**
 

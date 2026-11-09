@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_spacing.dart';
+import '../buttons/app_button.dart';
+import '../../theme/app_icons.dart';
 
 /// Reusable "something didn't load" state with a Retry control.
 ///
@@ -51,15 +53,13 @@ class RetrySection extends StatelessWidget {
                   style:
                       theme.textTheme.bodySmall?.copyWith(color: mutedColor)),
             ),
-            TextButton.icon(
+            AppButton(
+              label: 'Retry',
+              variant: AppButtonVariant.text,
+              size: AppButtonSize.small,
+              expand: false,
+              icon: AppIcons.refresh,
               onPressed: onRetry,
-              icon: const Icon(Icons.refresh, size: 16),
-              label: const Text('Retry'),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
             ),
           ],
         ),
@@ -80,10 +80,13 @@ class RetrySection extends StatelessWidget {
               style: theme.textTheme.bodyMedium?.copyWith(color: mutedColor),
             ),
             const SizedBox(height: AppSpacing.md),
-            OutlinedButton.icon(
+            AppButton(
+              label: 'Retry',
+              variant: AppButtonVariant.secondary,
+              size: AppButtonSize.small,
+              expand: false,
+              icon: AppIcons.refresh,
               onPressed: onRetry,
-              icon: const Icon(Icons.refresh, size: 16),
-              label: const Text('Retry'),
             ),
           ],
         ),

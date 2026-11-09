@@ -6,9 +6,11 @@ logic, models, SQL, Edge Functions, payment/PIN or fee logic, or status values.
 ## Colour
 - Read colours from `context.colors.<token>` (`AppColors`, a ThemeExtension).
   **No** `Color(0x..)`, `Color.fromRGBO`, `Colors.<x>` (except `transparent`)
-  and **no legacy `AppColors.emerald/orange/info/...`** outside `lib/shared/theme/`.
-  `test/ui_polish/ui_guard_test.dart` enforces it; its allowlist
-  (`ui_guard_allowlist.txt`) may only shrink. Never add a file to it.
+  and **no legacy `AppColors.emerald/orange/info/...`** (deleted) outside
+  `lib/shared/theme/`. `test/ui_polish/ui_guard_test.dart` enforces it with an
+  **empty** allowlist. Never add a file to it; add a token in
+  `lib/shared/theme/` instead.
+- Chart colours: `context.colors.chartFees / chartFood / chartPalette`.
 - Cards: plain `surface` + `border`. No tinted fills, no coloured glow.
 - Green (`brand`/`brandText`) = main action, money in, live status.
 - Orange (`promoOrange*`) = ads/promos and the cart button ONLY. Never for
@@ -17,7 +19,8 @@ logic, models, SQL, Edge Functions, payment/PIN or fee logic, or status values.
   confirm inside `AppDialog` (`destructive: true`).
 - Purple and blue are retired. Status = dot + words, never a coloured pill.
 - Do not branch on `Brightness`/`isDark` in feature code; the tokens already
-  have both themes.
+  have both themes. Do NOT run `dart format lib` (it reformats unrelated files);
+  format only the files you touched.
 
 ## Components (`lib/shared/widgets/`) — use these, don't hand-roll
 - Buttons: `AppButton` (primary / secondary / text / quietDanger / disabled).
