@@ -31,6 +31,7 @@ abstract final class AppIcons {
   static const IconData kitchen = Icons.restaurant_menu_outlined;
   static const IconData vendor = Icons.storefront_outlined;
   static const IconData food = Icons.restaurant_outlined;
+  static const IconData pack = Icons.inventory_2_outlined;
 
   // ── Actions ─────────────────────────────────────────────────────────
   static const IconData search = Icons.search;

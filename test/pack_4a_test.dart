@@ -32,7 +32,6 @@ import 'package:uniflex/shared/theme/app_theme.dart';
 import 'package:uniflex/shared/utils/app_error_mapper.dart';
 import 'package:uniflex/shared/utils/uuid_v4.dart';
 import 'package:uniflex/shared/widgets/buttons/app_button.dart';
-import 'package:uniflex/shared/widgets/buttons/primary_button.dart';
 import 'package:uniflex/shared/widgets/chat/support_order_chip.dart';
 import 'package:uniflex/student/ordering/cart_notice_listener.dart';
 import 'package:uniflex/student/ordering/cart_provider.dart';
@@ -401,7 +400,7 @@ void main() {
       expect(find.text('Service charge'), findsNothing);
       expect(find.textContaining('Delivery fee'), findsNothing);
       expect(find.text('Food + packs'), findsOneWidget);
-      expect(find.textContaining('Pay ₦3000'), findsOneWidget);
+      expect(find.textContaining('Pay ₦3,000'), findsOneWidget);
     });
 
     testWidgets('paying clears the cart only AFTER the server answers',
@@ -463,7 +462,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       // Button is now busy; hammer it.
       for (var i = 0; i < 3; i++) {
-        await tester.tap(find.byType(PrimaryButton).first, warnIfMissed: false);
+        await tester.tap(find.byType(AppButton).first, warnIfMissed: false);
         await tester.pump(const Duration(milliseconds: 20));
       }
       expect(repo.deliveryCalls, 1);

@@ -5,8 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/auth/auth_providers.dart';
 import '../../services/profile/profile_service.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_icons.dart';
 import '../../theme/app_spacing.dart';
+import '../../theme/app_typography.dart';
+import '../buttons/app_button.dart';
 import '../inputs/app_text_field.dart';
+import '../sheets/app_sheet.dart';
 
 /// Shows a bottom sheet asking the student to enter their 4-digit
 /// transaction PIN. Returns the entered PIN, or `null` if dismissed.
@@ -21,30 +25,21 @@ Future<String?> showEnterPinSheet(
   final controller = TextEditingController();
   String? error;
 
-  return showModalBottomSheet<String>(
-    context: context,
-    isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius:
-          BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
-    ),
+  return AppSheet.show<String>(
+    context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setState) {
         final theme = Theme.of(ctx);
+        final c = ctx.colors;
         return Padding(
-          padding: EdgeInsets.only(
-            left: AppSpacing.screenGutter,
-            right: AppSpacing.screenGutter,
-            top: AppSpacing.lg,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.lg,
-          ),
+          padding: const EdgeInsets.only(top: AppSpacing.sm),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  const Icon(Icons.lock_outline, color: AppColors.emerald),
+                  Icon(AppIcons.lock, color: c.textSecondary),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                       child: Text(title, style: theme.textTheme.titleMedium)),
@@ -53,9 +48,7 @@ Future<String?> showEnterPinSheet(
               const SizedBox(height: AppSpacing.sm),
               Text(
                 subtitle,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
+                style: AppTypography.meta(c),
               ),
               const SizedBox(height: AppSpacing.lg),
               AppTextField(
@@ -74,9 +67,6 @@ Future<String?> showEnterPinSheet(
                   hintText: '• • • •',
                   counterText: '',
                   errorText: error,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.control),
-                  ),
                 ),
                 onChanged: (_) {
                   if (error != null) setState(() => error = null);
@@ -85,7 +75,8 @@ Future<String?> showEnterPinSheet(
               const SizedBox(height: AppSpacing.lg),
               SizedBox(
                 width: double.infinity,
-                child: FilledButton(
+                child: AppButton(
+                  label: 'Confirm',
                   onPressed: () {
                     if (controller.text.trim().length != 4) {
                       setState(() => error = 'Enter all 4 digits');
@@ -93,13 +84,13 @@ Future<String?> showEnterPinSheet(
                     }
                     Navigator.of(ctx).pop(controller.text.trim());
                   },
-                  child: const Text('Confirm'),
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
-              TextButton(
+              AppButton(
+                label: 'Cancel',
+                variant: AppButtonVariant.quietDanger,
                 onPressed: () => Navigator.of(ctx).pop(null),
-                child: const Text('Cancel'),
               ),
             ],
           ),
@@ -136,18 +127,14 @@ Future<bool> showSetPinSheet(BuildContext context, WidgetRef ref) async {
   String? error;
   bool isSaving = false;
 
-  final result = await showModalBottomSheet<bool>(
-    context: context,
-    isScrollControlled: true,
+  final result = await AppSheet.show<bool>(
+    context,
     isDismissible: false,
     enableDrag: false,
-    shape: const RoundedRectangleBorder(
-      borderRadius:
-          BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
-    ),
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setState) {
         final theme = Theme.of(ctx);
+        final c = ctx.colors;
 
         Future<void> submit() async {
           final pin = pinController.text.trim();
@@ -191,12 +178,7 @@ Future<bool> showSetPinSheet(BuildContext context, WidgetRef ref) async {
         }
 
         return Padding(
-          padding: EdgeInsets.only(
-            left: AppSpacing.screenGutter,
-            right: AppSpacing.screenGutter,
-            top: AppSpacing.lg,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.lg,
-          ),
+          padding: const EdgeInsets.only(top: AppSpacing.sm),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -213,9 +195,7 @@ Future<bool> showSetPinSheet(BuildContext context, WidgetRef ref) async {
                     ? 'Enter your current PIN, then choose a new one.'
                     : 'This 4-digit PIN protects your wallet — you\'ll be asked '
                         'for it every time you confirm an order.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
+                style: AppTypography.meta(c),
               ),
               const SizedBox(height: AppSpacing.lg),
               if (hasExisting) ...[
@@ -229,12 +209,9 @@ Future<bool> showSetPinSheet(BuildContext context, WidgetRef ref) async {
                   textAlign: TextAlign.center,
                   style: theme.textTheme.headlineSmall
                       ?.copyWith(letterSpacing: 12),
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     labelText: 'Current PIN',
                     counterText: '',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.control),
-                    ),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -249,12 +226,9 @@ Future<bool> showSetPinSheet(BuildContext context, WidgetRef ref) async {
                 textAlign: TextAlign.center,
                 style:
                     theme.textTheme.headlineSmall?.copyWith(letterSpacing: 12),
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'New PIN',
                   counterText: '',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.control),
-                  ),
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
@@ -271,32 +245,22 @@ Future<bool> showSetPinSheet(BuildContext context, WidgetRef ref) async {
                   labelText: 'Confirm PIN',
                   counterText: '',
                   errorText: error,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.control),
-                  ),
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),
               SizedBox(
                 width: double.infinity,
-                child: FilledButton(
+                child: AppButton(
+                  label: 'Save PIN',
+                  isLoading: isSaving,
                   onPressed: isSaving ? null : submit,
-                  child: isSaving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.pureWhite,
-                          ),
-                        )
-                      : const Text('Save PIN'),
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
-              TextButton(
+              AppButton(
+                label: 'Not now',
+                variant: AppButtonVariant.text,
                 onPressed: isSaving ? null : () => Navigator.of(ctx).pop(false),
-                child: const Text('Not now'),
               ),
             ],
           ),

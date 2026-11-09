@@ -131,6 +131,11 @@ class CartItemRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final hasStepper = quantity != null && onMinus != null && onPlus != null;
+    final totalText = MoneyText(
+      lineTotal,
+      textAlign: TextAlign.right,
+      style: AppTypography.body(c).copyWith(fontWeight: FontWeight.w600),
+    );
     return Padding(
       padding: padding,
       child: Row(
@@ -154,23 +159,37 @@ class CartItemRow extends StatelessWidget {
                     style: AppTypography.tabular(AppTypography.meta(c)),
                   ),
                 ],
+                // With a stepper the stepper and the line total share a row
+                // under the text, so large text never squeezes the title.
+                if (hasStepper) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Row(
+                    children: [
+                      QuantityStepper(
+                        quantity: quantity!,
+                        onMinus: onMinus!,
+                        onPlus: onPlus!,
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: totalText,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
-          if (hasStepper) ...[
+          if (!hasStepper) ...[
             const SizedBox(width: AppSpacing.sm),
-            QuantityStepper(
-              quantity: quantity!,
-              onMinus: onMinus!,
-              onPlus: onPlus!,
-            ),
+            totalText,
           ],
-          const SizedBox(width: AppSpacing.sm),
-          MoneyText(
-            lineTotal,
-            textAlign: TextAlign.right,
-            style: AppTypography.body(c).copyWith(fontWeight: FontWeight.w600),
-          ),
           if (onRemove != null) ...[
             const SizedBox(width: AppSpacing.xs),
             InkResponse(
@@ -191,7 +210,11 @@ class CartItemRow extends StatelessWidget {
 
 /// `Subtotal ........ ₦12,300` row used under cart groups.
 class CartTotalRow extends StatelessWidget {
-  const CartTotalRow({super.key, required this.label, required this.amount, this.strong = false});
+  const CartTotalRow(
+      {super.key,
+      required this.label,
+      required this.amount,
+      this.strong = false});
 
   final String label;
   final num amount;

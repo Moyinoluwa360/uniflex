@@ -45,14 +45,17 @@ abstract final class StatusPresenter {
       }
     }
     return switch (s) {
-      OrderStatus.placed => const StatusPresentation('Order Placed', StatusTone.waiting),
-      OrderStatus.preparing => const StatusPresentation('Preparing', StatusTone.live),
+      OrderStatus.placed =>
+        const StatusPresentation('Order Placed', StatusTone.waiting),
+      OrderStatus.preparing =>
+        const StatusPresentation('Preparing', StatusTone.live),
       OrderStatus.ready => const StatusPresentation('Ready', StatusTone.live),
       OrderStatus.outForDelivery =>
         const StatusPresentation('Out for Delivery', StatusTone.live),
       OrderStatus.readyForPickup =>
         const StatusPresentation('Ready for Pickup', StatusTone.live),
-      OrderStatus.completed => const StatusPresentation('Completed', StatusTone.done),
+      OrderStatus.completed =>
+        const StatusPresentation('Completed', StatusTone.done),
       OrderStatus.cancelled =>
         const StatusPresentation('Cancelled', StatusTone.cancelled),
       OrderStatus.beingSourced =>
@@ -82,10 +85,12 @@ abstract final class StatusPresenter {
 
   /// A gift's status string (`gift_deliveries.status`).
   static StatusPresentation gift(String status) => switch (status) {
-        'preparing' => const StatusPresentation('Being prepared', StatusTone.live),
+        'preparing' =>
+          const StatusPresentation('Being prepared', StatusTone.live),
         'on_the_way' => const StatusPresentation('On its way', StatusTone.live),
         'delivered' => const StatusPresentation('Delivered', StatusTone.done),
-        'cancelled' => const StatusPresentation('Cancelled', StatusTone.cancelled),
+        'cancelled' =>
+          const StatusPresentation('Cancelled', StatusTone.cancelled),
         _ => const StatusPresentation('Order placed', StatusTone.waiting),
       };
 

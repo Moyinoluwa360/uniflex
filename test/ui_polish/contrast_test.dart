@@ -47,7 +47,8 @@ void main() {
         expect(r, greaterThanOrEqualTo(min), reason: '$name: $what = $r');
       }
 
-      test('primary + secondary text on background / surface / surfaceRaised', () {
+      test('primary + secondary text on background / surface / surfaceRaised',
+          () {
         for (final bg in {
           'background': c.background,
           'surface': c.surface,
@@ -64,7 +65,10 @@ void main() {
 
       test('textTertiary on background / surfaceRaised (informational)', () {
         // The pack only requires surface; report the others without failing.
-        for (final bg in {'background': c.background, 'surfaceRaised': c.surfaceRaised}.entries) {
+        for (final bg in {
+          'background': c.background,
+          'surfaceRaised': c.surfaceRaised
+        }.entries) {
           final r = ratio(c.textTertiary, bg.value);
           // ignore: avoid_print
           print('  [$name] textTertiary on ${bg.key} (info)'.padRight(52) +
@@ -86,7 +90,8 @@ void main() {
 
       test('nav text on the glass bar over the page background', () {
         final glass = _over(c.glassFill, c.background);
-        check('inactive nav text (textSecondary) on glass', c.textSecondary, glass);
+        check('inactive nav text (textSecondary) on glass', c.textSecondary,
+            glass);
         final capsule = _over(c.navCapsule, glass);
         check('active nav text on capsule', c.onNavCapsule, capsule);
       });
@@ -96,12 +101,16 @@ void main() {
         // Informational: the pack does not list the cart-button label pair.
         for (final e in {
           'white on promoOrangeButton': (c.onDangerSolid, c.promoOrangeButton),
-          'white on promoOrange gradient end': (c.onDangerSolid, c.promoOrangeEnd),
+          'white on promoOrange gradient end': (
+            c.onDangerSolid,
+            c.promoOrangeEnd
+          ),
           'onBrand on promoOrangeButton': (c.onBrand, c.promoOrangeButton),
         }.entries) {
           final r = ratio(e.value.$1, e.value.$2);
           // ignore: avoid_print
-          print('  [$name] ${e.key} (info)'.padRight(52) + r.toStringAsFixed(2));
+          print(
+              '  [$name] ${e.key} (info)'.padRight(52) + r.toStringAsFixed(2));
         }
       });
 

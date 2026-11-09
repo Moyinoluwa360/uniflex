@@ -91,7 +91,8 @@ class TierHeader extends StatelessWidget {
                           DecoratedBox(
                             key: const ValueKey('tier-chip'),
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(AppRadius.pill),
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.pill),
                               border: Border.all(
                                 color: style?.border ?? c.borderStrong,
                               ),
@@ -104,15 +105,17 @@ class TierHeader extends StatelessWidget {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(AppIcons.award, size: 14, color: chipColor),
+                                  Icon(AppIcons.award,
+                                      size: 14, color: chipColor),
                                   const SizedBox(width: 5),
                                   Flexible(
                                     child: Text(
                                       tierName,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: AppTypography.buttonSmall(chipColor)
-                                          .copyWith(fontSize: 12.5),
+                                      style:
+                                          AppTypography.buttonSmall(chipColor)
+                                              .copyWith(fontSize: 12.5),
                                     ),
                                   ),
                                 ],

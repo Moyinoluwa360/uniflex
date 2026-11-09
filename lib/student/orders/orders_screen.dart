@@ -4,9 +4,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/delivery_group.dart';
 import '../../shared/models/order.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/widgets/async/retry_section.dart';
-import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/cards/app_card.dart';
+import '../../shared/widgets/cards/order_summary_card.dart';
+import '../../shared/widgets/cart/cart_widgets.dart';
+import '../../shared/widgets/format/money.dart';
+import '../../shared/widgets/status/status_presentation.dart';
+import '../../shared/widgets/tabs/app_segmented_tabs.dart';
 import '../gifts/gift_models.dart';
 import '../gifts/gift_received_screen.dart';
 import '../gifts/gift_repository.dart';
@@ -18,7 +26,7 @@ import '../tracking/order_tracking_screen.dart';
 
 /// Orders screen — three tabs:
 ///   Cart      — items in the current in-memory cart (not yet placed).
-///   Preparing — orders with an active status (placed → ready/out-for-delivery).
+///   Active    — orders with an active status (placed → ready/out-for-delivery).
 ///   Completed — completed and cancelled orders.
 ///
 /// Delivery orders appear as a single entry per delivery group (not per
@@ -28,27 +36,129 @@ class OrdersScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.colors;
+    final activeCount = _activeCount(
+      ref.watch(studentOrdersProvider),
+      ref.watch(studentDeliveryGroupsProvider),
+      ref.watch(receivedGiftsProvider),
+    );
     return DefaultTabController(
       length: 3,
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Orders'),
-          bottom: TabBar(
-            indicatorColor: AppColors.emerald,
-            labelStyle: Theme.of(context).textTheme.labelMedium,
-            unselectedLabelStyle: Theme.of(context).textTheme.labelMedium,
-            tabs: const [
-              Tab(text: 'Cart'),
-              Tab(text: 'Preparing'),
-              Tab(text: 'Completed'),
+        backgroundColor: c.background,
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.screenGutter,
+                  AppSpacing.md,
+                  AppSpacing.screenGutter,
+                  0,
+                ),
+                child: Text('Orders', style: AppTypography.heading(c)),
+              ),
+              const SizedBox(height: 18),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.screenGutter),
+                child: Builder(
+                  builder: (context) => AppSegmentedTabs(
+                    controller: DefaultTabController.of(context),
+                    labels: const ['Cart', 'Active', 'Completed'],
+                    counts: [null, activeCount, null],
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              const Expanded(
+                child: TabBarView(
+                  children: [
+                    _CartTab(),
+                    _ActiveOrdersTab(),
+                    _CompletedOrdersTab(),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
-        body: const TabBarView(
+      ),
+    );
+  }
+}
+
+/// Every entry the Orders tabs can show (standalone orders, delivery groups,
+/// received gifts) — one place so the list and the Active count always agree.
+List<StudentOrderEntry> _allEntries(
+  List<Order> orders,
+  List<DeliveryGroup> groups,
+  List<GiftDelivery> gifts,
+) {
+  // Build unified entries:
+  // - Standalone orders: orders with no delivery_group_id (pickup, errand)
+  // - Delivery groups: one entry per group (replaces per-vendor legs)
+  final standaloneOrders = orders
+      // A vendor part (it has a delivery_group_id) is NEVER listed on its
+      // own — only its checkout is.
+      .where((o) => o.deliveryGroupId == null)
+      .map((o) => StudentOrderEntry.fromOrder(o));
+  final groupEntries = groups.map((g) => StudentOrderEntry.fromGroup(g));
+  final giftEntries = gifts.map((g) => StudentOrderEntry.fromGift(g));
+  return [...standaloneOrders, ...groupEntries, ...giftEntries];
+}
+
+/// Count shown on the Active tab; `null` (hidden) while loading or when 0.
+int? _activeCount(
+  AsyncValue<List<Order>> ordersAsync,
+  AsyncValue<List<DeliveryGroup>> groupsAsync,
+  AsyncValue<List<GiftDelivery>> giftsAsync,
+) {
+  if (ordersAsync.isLoading || groupsAsync.isLoading) return null;
+  if (ordersAsync.hasError) return null;
+  final n = _allEntries(
+    ordersAsync.valueOrNull ?? [],
+    groupsAsync.valueOrNull ?? [],
+    giftsAsync.valueOrNull ?? const <GiftDelivery>[],
+  ).where((e) => e.isActive).length;
+  return n == 0 ? null : n;
+}
+
+// ── Cart tab ─────────────────────────────────────────────────────────────────
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.xl,
+          AppSpacing.xl,
+          AppSpacing.xl,
+          AppSpacing.xl + AppSpacing.navClearanceOf(context),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _CartTab(),
-            _ActiveOrdersTab(),
-            _CompletedOrdersTab(),
+            Icon(icon, size: 36, color: c.textTertiary),
+            const SizedBox(height: AppSpacing.md),
+            Text(title,
+                style: AppTypography.title(c), textAlign: TextAlign.center),
+            const SizedBox(height: AppSpacing.sm),
+            Text(subtitle,
+                style: AppTypography.meta(c), textAlign: TextAlign.center),
           ],
         ),
       ),
@@ -56,135 +166,82 @@ class OrdersScreen extends ConsumerWidget {
   }
 }
 
-// ── Cart tab ─────────────────────────────────────────────────────────────────
-
 class _CartTab extends ConsumerWidget {
   const _CartTab();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
+    final c = context.colors;
     final cart = ref.watch(cartProvider);
 
     if (cart.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.xl),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.shopping_cart_outlined,
-                  size: 36,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              Text('Your cart is empty', style: theme.textTheme.titleMedium),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'Add items from a vendor on the Home tab.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
+      return const _EmptyState(
+        icon: AppIcons.cart,
+        title: 'Your cart is empty',
+        subtitle: 'Add items from a vendor on the Home tab.',
       );
     }
 
     return Column(
       children: [
         Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.all(AppSpacing.screenGutter),
-            itemCount: cart.items.length,
-            separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
-            itemBuilder: (context, i) {
-              final item = cart.items[i];
-              return Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${item.quantity}× ${item.product.name}',
-                          style: theme.textTheme.labelLarge,
-                        ),
-                        if (item.optionsSummary.isNotEmpty)
-                          Text(
-                            item.optionsSummary,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurface
-                                  .withValues(alpha: 0.55),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  Text(
-                    '₦${item.lineTotal.toStringAsFixed(0)}',
-                    style: theme.textTheme.labelMedium,
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  GestureDetector(
-                    onTap: () => ref.read(cartProvider.notifier).removeAt(i),
-                    child: Icon(
-                      Icons.close,
-                      size: 18,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-        // Checkout strip
-        SafeArea(
-          child: Padding(
+          child: ListView(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.screenGutter,
-              AppSpacing.sm,
+              0,
               AppSpacing.screenGutter,
               AppSpacing.md,
             ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              AppCard(
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                child: Column(
                   children: [
-                    Text('Subtotal', style: theme.textTheme.bodyMedium),
-                    Text(
-                      '₦${cart.subtotal.toStringAsFixed(0)}',
-                      style: theme.textTheme.titleSmall,
-                    ),
+                    for (var i = 0; i < cart.items.length; i++) ...[
+                      if (i > 0)
+                        Divider(height: 1, thickness: 1, color: c.border),
+                      Builder(builder: (context) {
+                        final item = cart.items[i];
+                        return CartItemRow(
+                          title: '${item.quantity}× ${item.product.name}',
+                          options: item.optionsSummary,
+                          lineTotal: item.lineTotal,
+                          onRemove: () =>
+                              ref.read(cartProvider.notifier).removeAt(i),
+                        );
+                      }),
+                    ],
                   ],
                 ),
-                const SizedBox(height: AppSpacing.sm),
-                PrimaryButton(
-                  label: 'Proceed to Checkout',
-                  icon: Icons.arrow_forward,
-                  onPressed: cart.isEmpty
-                      ? null
-                      : () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const CheckoutScreen(),
-                            ),
+              ),
+            ],
+          ),
+        ),
+        // Checkout strip
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.screenGutter,
+            AppSpacing.sm,
+            AppSpacing.screenGutter,
+            AppSpacing.navClearanceOf(context),
+          ),
+          child: Column(
+            children: [
+              CartTotalRow(
+                  label: 'Subtotal', amount: cart.subtotal, strong: true),
+              const SizedBox(height: AppSpacing.sm),
+              AppButton(
+                label: 'Proceed to Checkout',
+                icon: AppIcons.forward,
+                onPressed: cart.isEmpty
+                    ? null
+                    : () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const CheckoutScreen(),
                           ),
-                ),
-              ],
-            ),
+                        ),
+              ),
+            ],
           ),
         ),
       ],
@@ -272,8 +329,6 @@ class _UnifiedOrderList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-
     // Wait for both to load.
     if (ordersAsync.isLoading || groupsAsync.isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -292,64 +347,30 @@ class _UnifiedOrderList extends ConsumerWidget {
     final orders = ordersAsync.valueOrNull ?? [];
     final groups = groupsAsync.valueOrNull ?? [];
 
-    // Build unified entries:
-    // - Standalone orders: orders with no delivery_group_id (pickup, errand)
-    // - Delivery groups: one entry per group (replaces per-vendor legs)
-    final standaloneOrders = orders
-        // A vendor part (it has a delivery_group_id) is NEVER listed on its
-        // own — only its checkout is.
-        .where((o) => o.deliveryGroupId == null)
-        .map((o) => StudentOrderEntry.fromOrder(o));
-    final groupEntries = groups.map((g) => StudentOrderEntry.fromGroup(g));
-
-    final giftEntries = (giftsAsync.valueOrNull ?? const <GiftDelivery>[])
-        .map((g) => StudentOrderEntry.fromGift(g));
-
-    final all = [...standaloneOrders, ...groupEntries, ...giftEntries]
-        .where(filter)
-        .toList()
+    final all = _allEntries(
+      orders,
+      groups,
+      giftsAsync.valueOrNull ?? const <GiftDelivery>[],
+    ).where(filter).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
     if (all.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.xl),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.receipt_long_outlined,
-                  size: 36,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              Text(emptyMessage, style: theme.textTheme.titleMedium),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                emptySubtitle,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
+      return _EmptyState(
+        icon: AppIcons.orders,
+        title: emptyMessage,
+        subtitle: emptySubtitle,
       );
     }
 
     return RefreshIndicator(
       onRefresh: onRefresh,
       child: ListView.separated(
-        padding: const EdgeInsets.all(AppSpacing.screenGutter),
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.screenGutter,
+          0,
+          AppSpacing.screenGutter,
+          AppSpacing.navClearanceOf(context) + AppSpacing.md,
+        ),
         itemCount: all.length,
         separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.cardGap),
         itemBuilder: (context, i) {
@@ -380,38 +401,15 @@ class _OrderCard extends ConsumerStatefulWidget {
 class _OrderCardState extends ConsumerState<_OrderCard> {
   bool _isCancelling = false;
 
-  Color _statusColor(OrderStatus s) {
-    return switch (s) {
-      OrderStatus.placed => AppColors.info,
-      OrderStatus.preparing => AppColors.warning,
-      OrderStatus.ready || OrderStatus.readyForPickup => AppColors.emerald,
-      OrderStatus.outForDelivery => AppColors.orange,
-      OrderStatus.completed => AppColors.emerald,
-      OrderStatus.cancelled => AppColors.error,
-      OrderStatus.beingSourced => AppColors.orange,
-      OrderStatus.awaitingFinalPayment => AppColors.warning,
-    };
-  }
-
   Future<void> _cancel() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Cancel order?'),
-        content: const Text('Are you sure you want to cancel this order? '
-            'No fees will be automatically refunded.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Keep order'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Cancel order',
-                style: TextStyle(color: AppColors.error)),
-          ),
-        ],
-      ),
+    final confirmed = await AppDialog.show(
+      context,
+      title: 'Cancel order?',
+      body: 'Are you sure you want to cancel this order? '
+          'No fees will be automatically refunded.',
+      secondaryLabel: 'Keep order',
+      confirmLabel: 'Cancel order',
+      destructive: true,
     );
     if (confirmed != true || !mounted) return;
 
@@ -433,120 +431,28 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final order = widget.order;
-    final color = _statusColor(order.status);
+    final status = StatusPresenter.order(order.status);
     final canCancel = !order.status.isTerminal && order.riderId == null;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: theme.dividerColor),
-      ),
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                order.shortId,
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: theme.colorScheme.primary,
+    return OrderSummaryCard(
+      statusText: status.label,
+      statusTone: status.tone,
+      shortId: order.shortId,
+      title: order.isErrand ? 'ERRAND' : 'Food Delivery',
+      metaLines: [if (order.vendorName != null) order.vendorName!],
+      amountText: Money.format(order.totalAmount),
+      onCancel: canCancel ? _cancel : null,
+      isCancelling: _isCancelling,
+      onTrack: order.status.isTerminal
+          ? null
+          : () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => order.isErrand
+                      ? ErrandTrackingScreen(order: order)
+                      : OrderTrackingScreen(order: order),
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
-              if (order.vendorName != null)
-                Text(
-                  '• ${order.vendorName}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                  ),
-                ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.sm,
-                  vertical: 3,
-                ),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                ),
-                child: Text(
-                  order.status.label,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    order.isErrand ? 'ERRAND' : 'Food Delivery',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                    ),
-                  ),
-                  Text(
-                    '₦${order.totalAmount.toStringAsFixed(0)}',
-                    style: theme.textTheme.titleSmall,
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  if (canCancel)
-                    TextButton(
-                      onPressed: _isCancelling ? null : _cancel,
-                      style: TextButton.styleFrom(
-                          foregroundColor: AppColors.error),
-                      child: _isCancelling
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Cancel'),
-                    ),
-                  if (!order.status.isTerminal) ...[
-                    if (canCancel) const SizedBox(width: 4),
-                    FilledButton.icon(
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => order.isErrand
-                              ? ErrandTrackingScreen(order: order)
-                              : OrderTrackingScreen(order: order),
-                        ),
-                      ),
-                      icon: const Icon(Icons.location_on_outlined, size: 18),
-                      label: const Text('Track'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.emerald,
-                        foregroundColor: AppColors.pureWhite,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.md,
-                          vertical: AppSpacing.sm + 2,
-                        ),
-                        minimumSize: const Size(80, 44),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }
@@ -564,38 +470,15 @@ class _GroupCard extends ConsumerStatefulWidget {
 class _GroupCardState extends ConsumerState<_GroupCard> {
   bool _isCancelling = false;
 
-  Color _statusColor(DeliveryGroupStatus s) {
-    return switch (s) {
-      DeliveryGroupStatus.placed => AppColors.info,
-      DeliveryGroupStatus.commitmentPaid => AppColors.warning,
-      DeliveryGroupStatus.riderAccepted => AppColors.orange,
-      DeliveryGroupStatus.awaitingFinalPayment => AppColors.warning,
-      DeliveryGroupStatus.outForDelivery => AppColors.orange,
-      DeliveryGroupStatus.completed => AppColors.emerald,
-      DeliveryGroupStatus.cancelled => AppColors.error,
-    };
-  }
-
   Future<void> _cancel() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Cancel order?'),
-        content:
-            const Text('Are you sure you want to cancel this delivery order? '
-                'No fees will be automatically refunded.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Keep order'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Cancel order',
-                style: TextStyle(color: AppColors.error)),
-          ),
-        ],
-      ),
+    final confirmed = await AppDialog.show(
+      context,
+      title: 'Cancel order?',
+      body: 'Are you sure you want to cancel this delivery order? '
+          'No fees will be automatically refunded.',
+      secondaryLabel: 'Keep order',
+      confirmLabel: 'Cancel order',
+      destructive: true,
     );
     if (confirmed != true || !mounted) return;
 
@@ -617,128 +500,30 @@ class _GroupCardState extends ConsumerState<_GroupCard> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final group = widget.group;
-    final color = _statusColor(group.status);
+    final status = StatusPresenter.group(group.status);
     final canCancel = !group.isTerminal && group.riderId == null;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: theme.dividerColor),
-      ),
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                group.shortId,
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: theme.colorScheme.primary,
+    return OrderSummaryCard(
+      statusText: status.label,
+      statusTone: status.tone,
+      shortId: group.shortId,
+      title: 'Food Delivery',
+      metaLines: [
+        if (group.isGift)
+          '🎁 Gift to ${group.giftRecipientNickname ?? 'a student'}',
+        if (group.deliveryLocation != null) group.deliveryLocation!,
+      ],
+      amountText: '${Money.format(group.commitmentFeeTotal)} fee',
+      onCancel: canCancel ? _cancel : null,
+      isCancelling: _isCancelling,
+      onTrack: group.isTerminal
+          ? null
+          : () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => OrderTrackingScreen.forGroup(group: group),
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
-              Text(
-                group.isGift
-                    ? '• 🎁 Gift to ${group.giftRecipientNickname ?? 'a student'}'
-                    : '• Delivery',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.sm,
-                  vertical: 3,
-                ),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                ),
-                child: Text(
-                  group.status.label,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Food Delivery',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                    ),
-                  ),
-                  if (group.deliveryLocation != null)
-                    Text(
-                      group.deliveryLocation!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color:
-                            theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                      ),
-                    ),
-                  Text(
-                    '₦${group.commitmentFeeTotal.toStringAsFixed(0)} fee',
-                    style: theme.textTheme.titleSmall,
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  if (canCancel)
-                    TextButton(
-                      onPressed: _isCancelling ? null : _cancel,
-                      style: TextButton.styleFrom(
-                          foregroundColor: AppColors.error),
-                      child: _isCancelling
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Cancel'),
-                    ),
-                  if (!group.isTerminal) ...[
-                    if (canCancel) const SizedBox(width: 4),
-                    FilledButton.icon(
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              OrderTrackingScreen.forGroup(group: group),
-                        ),
-                      ),
-                      icon: const Icon(Icons.location_on_outlined, size: 18),
-                      label: const Text('Track'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.emerald,
-                        foregroundColor: AppColors.pureWhite,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.md,
-                          vertical: AppSpacing.sm + 2,
-                        ),
-                        minimumSize: const Size(80, 44),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }

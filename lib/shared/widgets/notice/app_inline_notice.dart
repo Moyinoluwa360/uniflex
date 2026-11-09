@@ -11,12 +11,21 @@ import '../../theme/app_typography.dart';
 class AppInlineNotice extends StatelessWidget {
   const AppInlineNotice({
     super.key,
-    required this.text,
+    required String this.text,
     this.icon,
     this.isError = false,
-  });
+  }) : child = null;
 
-  final String text;
+  /// Same box, but with your own content (e.g. text with a tappable link).
+  const AppInlineNotice.custom({
+    super.key,
+    required Widget this.child,
+    this.icon,
+    this.isError = false,
+  }) : text = null;
+
+  final String? text;
+  final Widget? child;
 
   /// Defaults to an info (or error) glyph.
   final IconData? icon;
@@ -45,7 +54,9 @@ class AppInlineNotice extends StatelessWidget {
             ),
             const SizedBox(width: AppSpacing.sm + 2),
             Expanded(
-              child: Text(text, style: AppTypography.meta(c).copyWith(height: 1.4)),
+              child: child ??
+                  Text(text!,
+                      style: AppTypography.meta(c).copyWith(height: 1.4)),
             ),
           ],
         ),

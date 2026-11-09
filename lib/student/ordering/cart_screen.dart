@@ -2,10 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/widgets/accordions/app_accordion_card.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
-import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/cards/app_card.dart';
+import '../../shared/widgets/cart/cart_widgets.dart';
+import '../../shared/widgets/format/money.dart';
 import '../../shared/widgets/media/app_image.dart';
 import 'cart_provider.dart';
 import 'checkout_screen.dart';
@@ -36,7 +41,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final c = context.colors;
     final cart = ref.watch(cartProvider);
 
     if (cart.isEmpty) {
@@ -48,25 +53,14 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Container(
-                  width: 88,
-                  height: 88,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(Icons.shopping_cart_outlined,
-                      size: 36, color: theme.colorScheme.primary),
-                ),
+                Icon(AppIcons.cart, size: 36, color: c.textTertiary),
                 const SizedBox(height: AppSpacing.md),
-                Text('Your cart is empty', style: theme.textTheme.titleMedium),
+                Text('Your cart is empty', style: AppTypography.title(c)),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   'Add items from the menu to get started.',
                   textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                  ),
+                  style: AppTypography.meta(c),
                 ),
               ],
             ),
@@ -87,9 +81,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               ref.read(cartProvider.notifier).clear();
               Navigator.of(context).pop();
             },
-            child: Text('Clear',
-                style: theme.textTheme.labelLarge
-                    ?.copyWith(color: AppColors.error)),
+            child:
+                Text('Clear', style: AppTypography.buttonSmall(c.dangerText)),
           ),
         ],
       ),
@@ -103,17 +96,25 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
           // Single vendor: flat list with no accordion.
           if (!isMultiVendor) {
-            return _VendorItemList(
-              group: group,
-              onItemUpdate: (localIdx, qty) {
-                if (qty <= 0) {
-                  ref
-                      .read(cartProvider.notifier)
-                      .removeItemFromVendor(group.vendor.id, localIdx);
-                } else {
-                  _updateVendorItemQty(ref, group.vendor.id, localIdx, qty);
-                }
-              },
+            return Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.screenGutter),
+              child: AppCard(
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                child: _VendorItemList(
+                  group: group,
+                  inCard: true,
+                  onItemUpdate: (localIdx, qty) {
+                    if (qty <= 0) {
+                      ref
+                          .read(cartProvider.notifier)
+                          .removeItemFromVendor(group.vendor.id, localIdx);
+                    } else {
+                      _updateVendorItemQty(ref, group.vendor.id, localIdx, qty);
+                    }
+                  },
+                ),
+              ),
             );
           }
 
@@ -135,7 +136,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             title: group.vendor.name,
             subtitle:
                 '${group.items.length} item${group.items.length == 1 ? '' : 's'}'
-                ' · ₦${vendorSubtotal.toStringAsFixed(0)}',
+                ' · ${Money.format(vendorSubtotal)}',
             isExpanded: isExpanded,
             onTap: () => setState(() {
               if (_expandedVendors.contains(group.vendor.id)) {
@@ -148,34 +149,20 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               }
             }),
             trailingAction: IconButton(
-              icon: const Icon(Icons.close_rounded, size: 18),
+              icon: Icon(AppIcons.close, size: 18, color: c.textTertiary),
               tooltip: 'Remove ${group.vendor.name} from cart',
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
               onPressed: () async {
-                final ok = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: Text('Remove ${group.vendor.name}?'),
-                    content: Text(
-                      'This removes all ${group.items.length} '
+                final ok = await AppDialog.show(
+                  context,
+                  title: 'Remove ${group.vendor.name}?',
+                  body: 'This removes all ${group.items.length} '
                       'item${group.items.length == 1 ? '' : 's'} '
                       'from ${group.vendor.name}.',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text(
-                          'Remove',
-                          style: TextStyle(color: AppColors.error),
-                        ),
-                      ),
-                    ],
-                  ),
+                  secondaryLabel: 'Cancel',
+                  confirmLabel: 'Remove',
+                  destructive: true,
                 );
                 if (ok == true) {
                   ref.read(cartProvider.notifier).removeVendor(group.vendor.id);
@@ -208,29 +195,16 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Subtotal', style: theme.textTheme.bodyMedium),
-                  Text('₦${cart.subtotal.toStringAsFixed(0)}',
-                      style: theme.textTheme.titleSmall),
-                ],
-              ),
+              CartTotalRow(
+                  label: 'Subtotal', amount: cart.subtotal, strong: true),
               if (cart.totalPackFee > 0) ...[
                 const SizedBox(height: 4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Pack fees', style: theme.textTheme.bodySmall),
-                    Text('₦${cart.totalPackFee.toStringAsFixed(0)}',
-                        style: theme.textTheme.bodySmall),
-                  ],
-                ),
+                CartTotalRow(label: 'Pack fees', amount: cart.totalPackFee),
               ],
               const SizedBox(height: AppSpacing.sm),
-              PrimaryButton(
+              AppButton(
                 label: 'Proceed to Checkout',
-                icon: Icons.arrow_forward,
+                icon: AppIcons.forward,
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => const CheckoutScreen(),
@@ -259,53 +233,43 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   }
 }
 
-/// Pack info banner + item list for a single vendor group.
+/// Pack info line + item list for a single vendor group.
 /// Used both as a direct list child (single-vendor) and as the accordion
 /// content (multi-vendor).
 class _VendorItemList extends ConsumerWidget {
   const _VendorItemList({
     required this.group,
     required this.onItemUpdate,
+    this.inCard = false,
   });
 
   final VendorCartGroup group;
   final void Function(int localIdx, int qty) onItemUpdate;
 
+  /// Inside an `AppCard` the rows use the card's own 16px side padding.
+  final bool inCard;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.colors;
+    final side = inCard ? AppSpacing.md : AppSpacing.screenGutter;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (group.packCount > 0)
           Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.screenGutter,
-              AppSpacing.sm,
-              AppSpacing.screenGutter,
-              0,
-            ),
-            child: Container(
-              padding: const EdgeInsets.all(AppSpacing.sm),
-              decoration: BoxDecoration(
-                color: AppColors.emerald.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(AppRadius.control),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.inventory_2_outlined,
-                      size: 16, color: AppColors.emerald),
-                  const SizedBox(width: AppSpacing.sm),
-                  Text(
-                    '${group.packCount} pack${group.packCount > 1 ? 's' : ''}'
-                    ' · ₦${group.packFee.toStringAsFixed(0)}',
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelMedium
-                        ?.copyWith(color: AppColors.emerald),
-                  ),
-                ],
-              ),
+            padding: EdgeInsets.fromLTRB(side, AppSpacing.sm, side, 0),
+            child: Row(
+              children: [
+                Icon(AppIcons.pack, size: 16, color: c.textSecondary),
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  '${group.packCount} pack${group.packCount > 1 ? 's' : ''}'
+                  ' · ${Money.format(group.packFee)}',
+                  style: AppTypography.tabular(AppTypography.meta(c)),
+                ),
+              ],
             ),
           ),
         ...group.items.asMap().entries.map((entry) {
@@ -313,8 +277,8 @@ class _VendorItemList extends ConsumerWidget {
           final item = entry.value;
           return _CartItemTile(
             item: item,
-            onDecrement: () => onItemUpdate(
-                localIdx, item.quantity <= 1 ? 0 : item.quantity - 1),
+            padding:
+                EdgeInsets.symmetric(horizontal: side, vertical: AppSpacing.sm),
             onRemoveOrUpdate: (qty) => onItemUpdate(localIdx, qty),
           );
         }),
@@ -326,108 +290,35 @@ class _VendorItemList extends ConsumerWidget {
 class _CartItemTile extends StatelessWidget {
   const _CartItemTile({
     required this.item,
-    required this.onDecrement,
     required this.onRemoveOrUpdate,
+    required this.padding,
   });
 
   final dynamic item; // CartItem
-  final VoidCallback onDecrement;
   final ValueChanged<int> onRemoveOrUpdate;
+  final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.screenGutter,
-        vertical: AppSpacing.sm,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 48,
-            height: 48,
-            child: AppImage(
-              url: item.product.imageUrl,
-              keywords: 'food,meal',
-              seed: item.product.id.hashCode,
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(item.product.name, style: theme.textTheme.labelLarge),
-                if (item.optionsSummary.isNotEmpty)
-                  Text(item.optionsSummary,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color:
-                            theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                      )),
-                const SizedBox(height: 4),
-                Text(
-                  '₦${item.unitTotal.toStringAsFixed(0)} each',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.primary),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Row(
-            children: [
-              _SmallButton(
-                icon: Icons.remove,
-                onTap: () => onRemoveOrUpdate(item.quantity - 1),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                child:
-                    Text('${item.quantity}', style: theme.textTheme.titleSmall),
-              ),
-              _SmallButton(
-                icon: Icons.add,
-                onTap: () => onRemoveOrUpdate(item.quantity + 1),
-              ),
-            ],
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          SizedBox(
-            width: 56,
-            child: Text(
-              '₦${item.lineTotal.toStringAsFixed(0)}',
-              style: theme.textTheme.labelMedium,
-              textAlign: TextAlign.right,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SmallButton extends StatelessWidget {
-  const _SmallButton({required this.icon, required this.onTap});
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 30,
-        height: 30,
-        decoration: BoxDecoration(
-          color: theme.colorScheme.primary.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(AppRadius.control),
+    return CartItemRow(
+      padding: padding,
+      leading: SizedBox(
+        width: 48,
+        height: 48,
+        child: AppImage(
+          url: item.product.imageUrl,
+          keywords: 'food,meal',
+          seed: item.product.id.hashCode,
+          borderRadius: BorderRadius.circular(8),
         ),
-        child: Icon(icon, size: 16, color: theme.colorScheme.primary),
       ),
+      title: item.product.name as String,
+      options: item.optionsSummary as String,
+      unitLine: '${Money.format(item.unitTotal as num)} each',
+      quantity: item.quantity as int,
+      onMinus: () => onRemoveOrUpdate(item.quantity - 1),
+      onPlus: () => onRemoveOrUpdate(item.quantity + 1),
+      lineTotal: item.lineTotal as num,
     );
   }
 }

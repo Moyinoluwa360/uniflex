@@ -41,7 +41,8 @@ class _PromoCartButtonState extends State<PromoCartButton> {
                 child: InkWell(
                   onTap: () => _guard.run(widget.onTap),
                   child: const Center(
-                    child: Icon(AppIcons.cart, size: 26, color: AppColors.onMedia),
+                    child:
+                        Icon(AppIcons.cart, size: 26, color: AppColors.onMedia),
                   ),
                 ),
               ),

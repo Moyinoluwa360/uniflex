@@ -4,10 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/order_breakdown/order_breakdown_widget.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/utils/local_time.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
+import '../../shared/widgets/cards/app_card.dart';
+import '../../shared/widgets/status/app_status_label.dart';
+import '../../shared/widgets/status/status_presentation.dart';
 import 'gift_models.dart';
 import 'gift_repository.dart';
 
@@ -273,55 +278,34 @@ class GiftReceivedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = giftStatusColor(gift.status);
-    return InkWell(
-      borderRadius: BorderRadius.circular(AppRadius.card),
+    final c = context.colors;
+    final status = StatusPresenter.gift(gift.status);
+    return AppCard(
       onTap: onTap ??
           () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => GiftReceivedScreen(groupId: gift.groupId))),
-      child: Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: theme.cardTheme.color,
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: theme.dividerColor),
-        ),
-        child: Row(
-          children: [
-            const Text('🎁', style: TextStyle(fontSize: 24)),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Gift from ${gift.senderNickname}',
-                      style: theme.textTheme.titleSmall),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${gift.shortId} · ${formatLocalRelative(gift.createdAt)}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                    ),
-                  ),
-                ],
-              ),
+      child: Row(
+        children: [
+          Icon(AppIcons.gift, size: 24, color: c.textSecondary),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Gift from ${gift.senderNickname}',
+                    style: AppTypography.body(c)
+                        .copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(
+                  '${gift.shortId} · ${formatLocalRelative(gift.createdAt)}',
+                  style: AppTypography.caption(c),
+                ),
+              ],
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.sm, vertical: 3),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(AppRadius.pill),
-              ),
-              child: Text(
-                gift.statusLabel,
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(color: color, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          AppStatusLabel(tone: status.tone, text: gift.statusLabel),
+        ],
       ),
     );
   }

@@ -46,7 +46,8 @@ void forEachVariant(
 ) {
   for (final dark in [false, true]) {
     for (final scale in [1.0, 1.3]) {
-      testWidgets('$name (${dark ? 'dark' : 'light'}, x$scale)', (tester) async {
+      testWidgets('$name (${dark ? 'dark' : 'light'}, x$scale)',
+          (tester) async {
         await body(tester, dark, scale);
       });
     }

@@ -6,11 +6,16 @@ import '../../shared/services/saving_plan/saving_plan_providers.dart';
 import '../../shared/services/settings/service_charge_provider.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/utils/uuid_v4.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
-import '../../shared/widgets/buttons/primary_button.dart';
-import '../../shared/widgets/buttons/secondary_button.dart';
+import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/cards/app_card.dart';
+import '../../shared/widgets/cart/summary_row.dart';
+import '../../shared/widgets/format/money.dart';
+import '../../shared/widgets/notice/app_inline_notice.dart';
 import '../../shared/widgets/navigation/app_bottom_nav_shell.dart';
 import '../../shared/widgets/payment/run_payment_flow.dart';
 import '../tracking/order_tracking_screen.dart';
@@ -95,7 +100,7 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
         pinTitle:
             _draft.isPickup ? 'Confirm payment' : 'Confirm delivery payment',
         pinSubtitle:
-            'Enter your 4-digit PIN to pay ₦${quote.total.toStringAsFixed(0)}.',
+            'Enter your 4-digit PIN to pay ${Money.format(quote.total)}.',
         setSubmitting: (v) {
           if (mounted) setState(() => _isSubmitting = v);
         },
@@ -210,6 +215,7 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = context.colors;
     final balanceAsync = ref.watch(walletBalanceProvider);
     final serviceAsync = ref.watch(serviceChargeProvider);
     final isPickup = _draft.isPickup;
@@ -232,7 +238,7 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _InfoBanner(
+              AppInlineNotice(
                 text: isPickup
                     ? 'You pay the full food amount now. There is no delivery '
                         'fee or service charge for pickup.'
@@ -242,7 +248,7 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
               ),
               if (_draft.isGift) ...[
                 const SizedBox(height: AppSpacing.md),
-                _InfoBanner(
+                AppInlineNotice(
                   key: const ValueKey('gift-pay-banner'),
                   text: '🎁 Gift for ${_draft.giftRecipient!.nickname} '
                       '(${_draft.giftRecipient!.maskedEmail}). You pay and '
@@ -252,106 +258,100 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
               const SizedBox(height: AppSpacing.lg),
               Text('Payment', style: theme.textTheme.titleSmall),
               const SizedBox(height: AppSpacing.sm),
-              Container(
+              SizedBox(
                 width: double.infinity,
-                padding: const EdgeInsets.all(AppSpacing.md),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(AppRadius.card),
-                ),
-                child: Column(
-                  children: [
-                    for (final line in quote.lines)
-                      _FeeRow(
-                        label: line.label,
-                        value: '₦${line.amount.toStringAsFixed(0)}',
-                        theme: theme,
-                      ),
-                    if (!isPickup)
-                      serviceAsync.when(
-                        data: (v) => _FeeRow(
-                          label: 'Service charge',
-                          value: '₦${v.toStringAsFixed(0)}',
-                          theme: theme,
+                child: AppCard(
+                  child: Column(
+                    children: [
+                      for (final line in quote.lines)
+                        SummaryRow(
+                          label: line.label,
+                          value: Money.format(line.amount),
                         ),
-                        loading: () => const SizedBox(
-                          height: 24,
-                          child: Center(
-                            child: SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                      if (!isPickup)
+                        serviceAsync.when(
+                          data: (v) => SummaryRow(
+                            label: 'Service charge',
+                            value: Money.format(v),
+                          ),
+                          loading: () => const SizedBox(
+                            height: 24,
+                            child: Center(
+                              child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ),
+                          ),
+                          error: (_, __) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Could not load the service charge.',
+                                    style: AppTypography.meta(c)
+                                        .copyWith(color: c.dangerText),
+                                  ),
+                                ),
+                                AppButton(
+                                  variant: AppButtonVariant.text,
+                                  size: AppButtonSize.small,
+                                  expand: false,
+                                  label: 'Retry',
+                                  onPressed: () =>
+                                      ref.invalidate(serviceChargeProvider),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                        error: (_, __) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  'Could not load the service charge.',
-                                  style: theme.textTheme.bodySmall
-                                      ?.copyWith(color: AppColors.error),
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: () =>
-                                    ref.invalidate(serviceChargeProvider),
-                                child: const Text('Retry'),
-                              ),
-                            ],
-                          ),
-                        ),
+                      const Divider(height: AppSpacing.lg),
+                      SummaryRow(
+                        label: 'Total',
+                        value: feesReady ? Money.format(quote.total) : '—',
+                        bold: true,
                       ),
-                    const Divider(height: AppSpacing.lg),
-                    _FeeRow(
-                      label: 'Total',
-                      value: feesReady
-                          ? '₦${quote.total.toStringAsFixed(0)}'
-                          : '—',
-                      theme: theme,
-                      bold: true,
-                    ),
-                    if (!isPickup) ...[
-                      const SizedBox(height: AppSpacing.xs),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'Food is paid after the rider confirms the price.',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.5),
+                      if (!isPickup) ...[
+                        const SizedBox(height: AppSpacing.xs),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Food is paid after the rider confirms the price.',
+                            style: AppTypography.caption(c),
                           ),
                         ),
+                      ],
+                      const Divider(height: AppSpacing.lg),
+                      balanceAsync.when(
+                        data: (b) => SummaryRow(
+                          label: 'Wallet balance',
+                          value: Money.format(b ?? 0),
+                          valueColor: insufficient ? c.dangerText : c.brandText,
+                        ),
+                        loading: () => const SizedBox(
+                          height: 20,
+                          child: Center(
+                              child: CircularProgressIndicator(strokeWidth: 2)),
+                        ),
+                        error: (_, __) => const SizedBox.shrink(),
                       ),
                     ],
-                    const Divider(height: AppSpacing.lg),
-                    balanceAsync.when(
-                      data: (b) => _FeeRow(
-                        label: 'Wallet balance',
-                        value: '₦${(b ?? 0).toStringAsFixed(0)}',
-                        theme: theme,
-                        valueColor:
-                            insufficient ? AppColors.error : AppColors.emerald,
-                      ),
-                      loading: () => const SizedBox(
-                        height: 20,
-                        child: Center(
-                            child: CircularProgressIndicator(strokeWidth: 2)),
-                      ),
-                      error: (_, __) => const SizedBox.shrink(),
-                    ),
-                  ],
+                  ),
                 ),
               ),
               if (insufficient || _errorIsBalance) ...[
                 const SizedBox(height: AppSpacing.sm),
                 _ErrorBox(
                   text: 'Your wallet balance is not enough to pay this.',
-                  action: TextButton(
+                  action: AppButton(
+                    variant: AppButtonVariant.text,
+                    size: AppButtonSize.small,
+                    expand: false,
+                    label: 'Top up your wallet →',
                     onPressed: _goToWallet,
-                    child: const Text('Top up your wallet →'),
                   ),
                 ),
               ],
@@ -363,9 +363,7 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
               Text(
                 'Nothing is ordered until you pay. If you go back, your cart '
                 'stays exactly as it is.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
-                ),
+                style: AppTypography.caption(c),
               ),
               const SizedBox(height: AppSpacing.xl),
             ],
@@ -382,18 +380,17 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                PrimaryButton(
-                  label: feesReady
-                      ? 'Pay ₦${quote.total.toStringAsFixed(0)}'
-                      : 'Pay',
-                  icon: Icons.lock_outline,
+                AppButton(
+                  label: feesReady ? 'Pay ${Money.format(quote.total)}' : 'Pay',
+                  icon: AppIcons.lock,
                   isLoading: _isSubmitting,
                   onPressed: (feesReady && !insufficient && !_isSubmitting)
                       ? () => _pay(quote)
                       : null,
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                SecondaryButton(
+                AppButton(
+                  variant: AppButtonVariant.secondary,
                   label: 'Go back (do not pay yet)',
                   onPressed:
                       _isSubmitting ? null : () => Navigator.of(context).pop(),
@@ -407,38 +404,6 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
   }
 }
 
-class _InfoBanner extends StatelessWidget {
-  const _InfoBanner({super.key, required this.text});
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.info.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.info.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.info_outline, color: AppColors.info, size: 20),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Text(
-              text,
-              style: theme.textTheme.bodySmall?.copyWith(color: AppColors.info),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _ErrorBox extends StatelessWidget {
   const _ErrorBox({required this.text, this.action});
   final String text;
@@ -446,77 +411,15 @@ class _ErrorBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.sm),
-      decoration: BoxDecoration(
-        color: AppColors.error.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
-      ),
+    final c = context.colors;
+    return AppInlineNotice.custom(
+      isError: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.error_outline, color: AppColors.error, size: 18),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(
-                  text,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: AppColors.error),
-                ),
-              ),
-            ],
-          ),
+          Text(text,
+              style: AppTypography.meta(c).copyWith(color: c.dangerText)),
           if (action != null) action!,
-        ],
-      ),
-    );
-  }
-}
-
-class _FeeRow extends StatelessWidget {
-  const _FeeRow({
-    required this.label,
-    required this.value,
-    required this.theme,
-    this.bold = false,
-    this.valueColor,
-  });
-
-  final String label;
-  final String value;
-  final ThemeData theme;
-  final bool bold;
-  final Color? valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: bold
-                  ? theme.textTheme.titleSmall
-                  : theme.textTheme.bodyMedium,
-            ),
-          ),
-          Text(
-            value,
-            style: (bold
-                    ? theme.textTheme.titleSmall
-                    : theme.textTheme.labelMedium)
-                ?.copyWith(
-              color: valueColor ?? (bold ? theme.colorScheme.primary : null),
-            ),
-          ),
         ],
       ),
     );

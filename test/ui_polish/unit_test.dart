@@ -63,13 +63,15 @@ void main() {
         ]),
       );
       final a = tester.widget<Text>(find.text('₦1,250'));
-      expect(a.style!.fontFeatures, contains(const FontFeature.tabularFigures()));
+      expect(
+          a.style!.fontFeatures, contains(const FontFeature.tabularFigures()));
       expect(find.text('+₦1,250'), findsOneWidget);
     });
 
     testWidgets('MoneyHero renders whole + smaller decimals', (tester) async {
       await pumpUi(tester, const MoneyHero(39210));
-      expect(find.textContaining('₦39,210', findRichText: true), findsOneWidget);
+      expect(
+          find.textContaining('₦39,210', findRichText: true), findsOneWidget);
     });
   });
 
@@ -170,7 +172,8 @@ void main() {
       }
     });
 
-    test('unknown / missing / blank tier falls back to null (plain surface)', () {
+    test('unknown / missing / blank tier falls back to null (plain surface)',
+        () {
       expect(TierTokens.of(null, Brightness.light), isNull);
       expect(TierTokens.of('', Brightness.dark), isNull);
       expect(TierTokens.of('Mythic', Brightness.dark), isNull);

@@ -71,13 +71,15 @@ void main() {
       final keys = actual.keys.toList()..sort();
       final b = StringBuffer()
         ..writeln('# Files that still use raw or legacy colours: "path count".')
-        ..writeln('# A ratchet: counts may only go DOWN. UI Polish 2 empties it.')
+        ..writeln(
+            '# A ratchet: counts may only go DOWN. UI Polish 2 empties it.')
         ..writeln('# Regenerate: UPDATE_UI_ALLOWLIST=1 flutter test '
             'test/ui_polish/ui_guard_test.dart');
       for (final k in keys) {
         b.writeln('$k ${actual[k]}');
       }
-      File('test/ui_polish/ui_guard_allowlist.txt').writeAsStringSync(b.toString());
+      File('test/ui_polish/ui_guard_allowlist.txt')
+          .writeAsStringSync(b.toString());
       return;
     }
 
@@ -88,7 +90,8 @@ void main() {
       if (a == null) {
         problems.add('$path: $n colour violation(s), file is not allowlisted');
       } else if (n > a) {
-        problems.add('$path: $n violations, allowlist says $a (may only go down)');
+        problems
+            .add('$path: $n violations, allowlist says $a (may only go down)');
       } else if (n < a) {
         problems.add('$path: down to $n (allowlist says $a) — update the list');
       }
@@ -121,7 +124,8 @@ void main() {
       'lib/shared/widgets/accordions/app_accordion_card.dart',
     ];
     for (final p in mustBeClean) {
-      expect(allowed.containsKey(p), isFalse, reason: '$p must not be allowlisted');
+      expect(allowed.containsKey(p), isFalse,
+          reason: '$p must not be allowlisted');
     }
   });
 

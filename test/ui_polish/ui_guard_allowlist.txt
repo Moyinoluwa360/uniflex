@@ -47,7 +47,6 @@ lib/shared/widgets/chat/support_order_chip.dart 1
 lib/shared/widgets/connectivity/connectivity_banner.dart 5
 lib/shared/widgets/image_upload/image_upload_field.dart 6
 lib/shared/widgets/notify/message_customer_sheet.dart 1
-lib/shared/widgets/pin/pin_entry_sheet.dart 2
 lib/student/errand/create_errand_screen.dart 2
 lib/student/errand/errand_confirmation_screen.dart 2
 lib/student/gifts/gift_received_screen.dart 13
@@ -56,14 +55,9 @@ lib/student/gifts/gifts_screen.dart 1
 lib/student/group_checkout/create_group_screen.dart 7
 lib/student/group_checkout/group_checkout_screen.dart 3
 lib/student/home/search_screen.dart 1
-lib/student/notifications/notifications_screen.dart 8
-lib/student/ordering/cart_screen.dart 5
 lib/student/ordering/catalog_screen.dart 10
-lib/student/ordering/checkout_screen.dart 10
-lib/student/ordering/commitment_fee_screen.dart 11
 lib/student/ordering/order_confirmation_screen.dart 10
 lib/student/ordering/pack_builder_screen.dart 8
-lib/student/orders/orders_screen.dart 24
 lib/student/profile/badges_screen.dart 8
 lib/student/profile/membership_card_screen.dart 13
 lib/student/profile/refer_a_student_screen.dart 2
@@ -72,7 +66,6 @@ lib/student/profile/student_profile_screen.dart 18
 lib/student/support/support_chat_screen.dart 8
 lib/student/support/support_options_screen.dart 1
 lib/student/tracking/errand_tracking_screen.dart 13
-lib/student/tracking/order_tracking_screen.dart 74
 lib/student/wallet/paystack_checkout_native.dart 1
 lib/student/wallet/paystack_checkout_web.dart 2
 lib/student/wallet/saving_plan_screen.dart 13

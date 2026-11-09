@@ -328,8 +328,8 @@ class _SectionHeader extends StatelessWidget {
               onTap: onAction,
               child: Text(
                 action!,
-                style: theme.textTheme.labelMedium
-                    ?.copyWith(color: c.brandText),
+                style:
+                    theme.textTheme.labelMedium?.copyWith(color: c.brandText),
               ),
             ),
         ],
@@ -463,8 +463,10 @@ class _VendorMetaRow extends StatelessWidget {
             size: 15, color: onDark ? c.headerText : c.statusAmber),
         const SizedBox(width: 3),
         Text('4.9  ·  15–20 min  ·  ${Money.format(300)}',
-            style: AppTypography.tabular(
-                Theme.of(context).textTheme.labelSmall!.copyWith(color: color))),
+            style: AppTypography.tabular(Theme.of(context)
+                .textTheme
+                .labelSmall!
+                .copyWith(color: color))),
       ],
     );
   }
@@ -538,8 +540,8 @@ class _UniflexVendorCard extends StatelessWidget {
                             const SizedBox(width: AppSpacing.sm),
                             _Badge(
                               label: 'OPEN',
-                              background: context.colors.brand
-                                  .withValues(alpha: 0.15),
+                              background:
+                                  context.colors.brand.withValues(alpha: 0.15),
                               foreground: context.colors.brandText,
                             ),
                           ],
@@ -805,7 +807,8 @@ class _ErrandOrderCardState extends ConsumerState<_ErrandOrderCard> {
         child: Row(
           children: [
             Icon(Icons.explore_outlined,
-                size: AppIconSize.regular, color: theme.colorScheme.onSurfaceVariant),
+                size: AppIconSize.regular,
+                color: theme.colorScheme.onSurfaceVariant),
             const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(

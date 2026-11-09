@@ -13,10 +13,21 @@ import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
+import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/cards/app_card.dart';
+import '../../shared/widgets/format/money.dart';
+import '../../shared/widgets/lists/app_list_group.dart';
+import '../../shared/widgets/notice/app_inline_notice.dart';
 import '../../shared/widgets/pin/pin_entry_sheet.dart';
+import '../../shared/widgets/status/app_status_label.dart';
+import '../../shared/widgets/status/status_presentation.dart';
+import '../../shared/widgets/text/app_section_label.dart';
+import '../../shared/widgets/tracking/tracking_stepper.dart';
 import '../ordering/order_repository.dart';
 import '../support/support_options_screen.dart';
 
@@ -61,7 +72,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
       context,
       title: 'Pay final amount',
       subtitle:
-          'Enter your 4-digit PIN to pay ₦${o.finalAmount?.toStringAsFixed(0) ?? '—'}.',
+          'Enter your 4-digit PIN to pay ${o.finalAmount != null ? Money.format(o.finalAmount!) : '—'}.',
     );
     if (pin == null || !mounted) return;
 
@@ -115,7 +126,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
       context,
       title: 'Pay for your order',
       subtitle:
-          'Enter your 4-digit PIN to pay ₦${g.finalAmount?.toStringAsFixed(0) ?? '—'}.',
+          'Enter your 4-digit PIN to pay ${g.finalAmount != null ? Money.format(g.finalAmount!) : '—'}.',
     );
     if (pin == null || !mounted) return;
 
@@ -156,27 +167,14 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   }
 
   Future<void> _declineGroupOrder(DeliveryGroup g) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Decline this order?'),
-        content: const Text(
+    final confirmed = await AppDialog.show(
+      context,
+      title: 'Decline this order?',
+      body:
           'The order will be cancelled. The delivery fee already paid is non-refundable.',
-        ),
-        actions: [
-          OutlinedButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Keep order'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.error,
-            ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Yes, decline'),
-          ),
-        ],
-      ),
+      secondaryLabel: 'Keep order',
+      confirmLabel: 'Yes, decline',
+      destructive: true,
     );
 
     if (confirmed != true || !mounted) return;
@@ -211,31 +209,6 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     } finally {
       if (mounted) setState(() => _isDeclining = false);
     }
-  }
-
-  Color _statusColor(OrderStatus s) {
-    return switch (s) {
-      OrderStatus.placed => AppColors.info,
-      OrderStatus.preparing => AppColors.warning,
-      OrderStatus.ready || OrderStatus.readyForPickup => AppColors.emerald,
-      OrderStatus.outForDelivery => AppColors.orange,
-      OrderStatus.completed => AppColors.emerald,
-      OrderStatus.cancelled => AppColors.error,
-      OrderStatus.beingSourced => AppColors.orange,
-      OrderStatus.awaitingFinalPayment => AppColors.warning,
-    };
-  }
-
-  Color _groupStatusColor(DeliveryGroupStatus s) {
-    return switch (s) {
-      DeliveryGroupStatus.placed => AppColors.info,
-      DeliveryGroupStatus.commitmentPaid => AppColors.warning,
-      DeliveryGroupStatus.riderAccepted => AppColors.orange,
-      DeliveryGroupStatus.awaitingFinalPayment => AppColors.warning,
-      DeliveryGroupStatus.outForDelivery => AppColors.orange,
-      DeliveryGroupStatus.completed => AppColors.emerald,
-      DeliveryGroupStatus.cancelled => AppColors.error,
-    };
   }
 
   List<_Step> _buildSteps(Order o) {
@@ -282,7 +255,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   // ── Group tracking ──────────────────────────────────────────────────
 
   Widget _buildGroupTracking(BuildContext context) {
-    final theme = Theme.of(context);
+    final c = context.colors;
     final seed = widget.group!;
     final liveAsync = ref.watch(groupByIdProvider(seed.id));
 
@@ -291,7 +264,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
         title: 'Track Order ${seed.shortId}',
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(AppIcons.refresh),
             onPressed: () {
               ref.invalidate(groupByIdProvider(seed.id));
               ref.invalidate(orderBreakdownProvider(seed.id));
@@ -308,7 +281,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
         ),
         data: (liveGroup) {
           final g = liveGroup ?? seed;
-          final color = _groupStatusColor(g.status);
+          final status = StatusPresenter.group(g.status);
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(AppSpacing.screenGutter),
@@ -316,50 +289,19 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Header card
-                Container(
+                SizedBox(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(AppRadius.card),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        g.shortId,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Delivery Order',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: 0.6),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.sm,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(AppRadius.pill),
-                        ),
-                        child: Text(
-                          g.status.label,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: color,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(g.shortId, style: AppTypography.title(c)),
+                        const SizedBox(height: 2),
+                        Text('Delivery Order', style: AppTypography.meta(c)),
+                        const SizedBox(height: AppSpacing.sm),
+                        AppStatusLabel(tone: status.tone, text: status.label),
+                      ],
+                    ),
                   ),
                 ),
 
@@ -369,7 +311,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                 ],
 
                 const SizedBox(height: AppSpacing.lg),
-                Text('Order progress', style: theme.textTheme.titleSmall),
+                const AppSectionLabel('Order progress'),
                 const SizedBox(height: AppSpacing.md),
 
                 // Group status timeline
@@ -410,21 +352,14 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
 
                 // Delivery location
                 if (g.deliveryLocation != null) ...[
-                  Text('Delivery to', style: theme.textTheme.titleSmall),
+                  const AppSectionLabel('Delivery to'),
                   const SizedBox(height: AppSpacing.sm),
-                  Row(
+                  AppListGroup(
                     children: [
-                      Icon(
-                        Icons.location_on_outlined,
-                        size: 18,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: Text(
-                          g.deliveryLocation!,
-                          style: theme.textTheme.bodyMedium,
-                        ),
+                      AppListRow(
+                        leadingIcon: AppIcons.location,
+                        title: g.deliveryLocation!,
+                        showChevron: false,
                       ),
                     ],
                   ),
@@ -432,19 +367,17 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                 ],
 
                 // Fee summary
-                Text('Fee', style: theme.textTheme.titleSmall),
+                const AppSectionLabel('Fee'),
                 const SizedBox(height: 4),
                 Text(
-                  '₦${g.commitmentFeeTotal.toStringAsFixed(0)} delivery fee',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: theme.colorScheme.primary,
-                  ),
+                  '${Money.format(g.commitmentFeeTotal)} delivery fee',
+                  style: AppTypography.tabular(AppTypography.title(c)),
                 ),
 
                 const SizedBox(height: AppSpacing.xl),
 
                 // Per-vendor breakdown
-                Text('Your order', style: theme.textTheme.titleSmall),
+                const AppSectionLabel('Your order'),
                 const SizedBox(height: AppSpacing.md),
                 OrderBreakdown(orderId: g.id),
 
@@ -452,9 +385,10 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
 
                 // ── Get help with this order ─────────────────────────────
                 if (!g.isTerminal)
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.support_agent_outlined, size: 18),
-                    label: const Text('Get help with this order'),
+                  AppButton(
+                    icon: AppIcons.chat,
+                    label: 'Get help with this order',
+                    variant: AppButtonVariant.secondary,
                     onPressed: () => Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => SupportOptionsScreen(
@@ -478,7 +412,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   // ── Standalone order tracking ──────────────────────────────────────
 
   Widget _buildOrderTracking(BuildContext context) {
-    final theme = Theme.of(context);
+    final c = context.colors;
     final liveAsync = ref.watch(orderByIdProvider(widget.order!.id));
 
     return Scaffold(
@@ -486,7 +420,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
         title: 'Track Order ${widget.order!.shortId}',
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(AppIcons.refresh),
             onPressed: () =>
                 ref.invalidate(orderByIdProvider(widget.order!.id)),
             tooltip: 'Refresh',
@@ -502,6 +436,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
         data: (liveOrder) {
           final o = liveOrder ?? widget.order!;
           final steps = _buildSteps(o);
+          final status = StatusPresenter.order(o.status);
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(AppSpacing.screenGutter),
@@ -509,78 +444,45 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Header card
-                Container(
+                SizedBox(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(AppRadius.card),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        o.shortId,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      if (o.vendorName != null) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          'from ${o.vendorName}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.6),
-                          ),
+                  child: AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(o.shortId, style: AppTypography.title(c)),
+                        if (o.vendorName != null) ...[
+                          const SizedBox(height: 2),
+                          Text('from ${o.vendorName}',
+                              style: AppTypography.meta(c)),
+                        ],
+                        const SizedBox(height: AppSpacing.sm),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: AppStatusLabel(
+                                  tone: status.tone, text: status.label),
+                            ),
+                            const Spacer(),
+                            if (o.estimatedTime != null)
+                              Row(
+                                children: [
+                                  Icon(AppIcons.clock,
+                                      size: 14, color: c.textTertiary),
+                                  const SizedBox(width: 4),
+                                  Text(o.estimatedTime!,
+                                      style: AppTypography.caption(c)),
+                                ],
+                              ),
+                          ],
                         ),
                       ],
-                      const SizedBox(height: AppSpacing.sm),
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: AppSpacing.sm,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _statusColor(o.status)
-                                  .withValues(alpha: 0.15),
-                              borderRadius:
-                                  BorderRadius.circular(AppRadius.pill),
-                            ),
-                            child: Text(
-                              o.status.label,
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: _statusColor(o.status),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          const Spacer(),
-                          if (o.estimatedTime != null)
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.schedule_outlined,
-                                  size: 14,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  o.estimatedTime!,
-                                  style: theme.textTheme.labelSmall,
-                                ),
-                              ],
-                            ),
-                        ],
-                      ),
-                    ],
+                    ),
                   ),
                 ),
 
                 const SizedBox(height: AppSpacing.lg),
-                Text('Order progress', style: theme.textTheme.titleSmall),
+                const AppSectionLabel('Order progress'),
                 const SizedBox(height: AppSpacing.md),
 
                 // Status timeline
@@ -590,43 +492,23 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
 
                 // ── Being sourced — rider info ───────────────────────────
                 if (o.status == OrderStatus.beingSourced) ...[
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    decoration: BoxDecoration(
-                      color: AppColors.orange.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(AppRadius.card),
-                      border: Border.all(
-                          color: AppColors.orange.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
+                  AppInlineNotice.custom(
+                    icon: AppIcons.cart,
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.shopping_bag_outlined,
-                            color: AppColors.orange, size: 20),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Your rider is sourcing items',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                  color: AppColors.orange,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'They may flag items as unavailable. '
-                                'Check back here for updates.',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color:
-                                      AppColors.orange.withValues(alpha: 0.8),
-                                ),
-                              ),
-                            ],
+                        Text(
+                          'Your rider is sourcing items',
+                          style: AppTypography.meta(c).copyWith(
+                            color: c.textPrimary,
+                            fontWeight: FontWeight.w600,
                           ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'They may flag items as unavailable. '
+                          'Check back here for updates.',
+                          style: AppTypography.meta(c),
                         ),
                       ],
                     ),
@@ -636,69 +518,40 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
 
                 // ── Awaiting final payment ───────────────────────────────
                 if (o.status == OrderStatus.awaitingFinalPayment) ...[
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    decoration: BoxDecoration(
-                      color: AppColors.warning.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(AppRadius.card),
-                      border: Border.all(
-                          color: AppColors.warning.withValues(alpha: 0.3)),
-                    ),
+                  AppInlineNotice.custom(
+                    icon: AppIcons.wallet,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.payment_outlined,
-                                color: AppColors.warning, size: 20),
-                            const SizedBox(width: AppSpacing.sm),
-                            Text(
-                              'Final payment required',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                color: AppColors.warning,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
+                        Text(
+                          'Final payment required',
+                          style: AppTypography.meta(c).copyWith(
+                            color: c.textPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         const SizedBox(height: AppSpacing.sm),
                         Text(
                           o.finalAmount != null
                               ? 'Your rider confirmed the available items. '
-                                  'Pay ₦${o.finalAmount!.toStringAsFixed(0)} to continue delivery.'
+                                  'Pay ${Money.format(o.finalAmount!)} to continue delivery.'
                               : 'Your rider confirmed the available items. '
                                   'Final amount is being set.',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: AppColors.warning.withValues(alpha: 0.9),
-                          ),
+                          style: AppTypography.meta(c),
                         ),
                       ],
                     ),
                   ),
                   if (o.finalAmount != null) ...[
                     const SizedBox(height: AppSpacing.md),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        icon: _isPayingFinal
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: AppColors.pureWhite),
-                              )
-                            : const Icon(Icons.lock_outline, size: 18),
-                        label: Text(
-                          _isPayingFinal
-                              ? 'Processing…'
-                              : 'Pay Final Amount  ₦${o.finalAmount!.toStringAsFixed(0)}',
-                        ),
-                        style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.warning),
-                        onPressed:
-                            _isPayingFinal ? null : () => _payFinalAmount(o),
-                      ),
+                    AppButton(
+                      icon: AppIcons.lock,
+                      label: _isPayingFinal
+                          ? 'Processing…'
+                          : 'Pay Final Amount  ${Money.format(o.finalAmount!)}',
+                      isLoading: _isPayingFinal,
+                      onPressed:
+                          _isPayingFinal ? null : () => _payFinalAmount(o),
                     ),
                   ],
                   const SizedBox(height: AppSpacing.xl),
@@ -706,21 +559,14 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
 
                 // Delivery info
                 if (o.deliveryLocation != null) ...[
-                  Text('Delivery to', style: theme.textTheme.titleSmall),
+                  const AppSectionLabel('Delivery to'),
                   const SizedBox(height: AppSpacing.sm),
-                  Row(
+                  AppListGroup(
                     children: [
-                      Icon(
-                        Icons.location_on_outlined,
-                        size: 18,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: Text(
-                          o.deliveryLocation!,
-                          style: theme.textTheme.bodyMedium,
-                        ),
+                      AppListRow(
+                        leadingIcon: AppIcons.location,
+                        title: o.deliveryLocation!,
+                        showChevron: false,
                       ),
                     ],
                   ),
@@ -737,54 +583,49 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                       final name = info['full_name'] as String?;
                       final phone = info['phone'] as String?;
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: AppSpacing.xl),
-                        child: Container(
+                        padding: const EdgeInsets.only(
+                            top: AppSpacing.md, bottom: AppSpacing.xl),
+                        child: SizedBox(
                           width: double.infinity,
-                          padding: const EdgeInsets.all(AppSpacing.md),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(AppRadius.card),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.two_wheeler_outlined),
-                              const SizedBox(width: AppSpacing.sm),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('Your rider',
-                                        style: theme.textTheme.labelSmall
-                                            ?.copyWith(
-                                          color: theme.colorScheme.onSurface
-                                              .withValues(alpha: 0.5),
-                                        )),
-                                    Text(name ?? 'Assigned',
-                                        style: theme.textTheme.bodyMedium),
-                                  ],
-                                ),
-                              ),
-                              if (phone != null)
-                                OutlinedButton.icon(
-                                  icon: const Icon(Icons.phone_outlined,
-                                      size: 16),
-                                  label: Text(phone),
-                                  onPressed: () async {
-                                    final uri = Uri.parse('tel:$phone');
-                                    if (await canLaunchUrl(uri)) {
-                                      await launchUrl(uri);
-                                    }
-                                  },
-                                )
-                              else
-                                Text(
-                                  'No number on file',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.onSurface
-                                        .withValues(alpha: 0.5),
+                          child: AppCard(
+                            child: Row(
+                              children: [
+                                Icon(AppIcons.rider,
+                                    color: c.textSecondary, size: 22),
+                                const SizedBox(width: AppSpacing.sm),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Your rider',
+                                          style: AppTypography.caption(c)),
+                                      Text(name ?? 'Assigned',
+                                          style: AppTypography.body(c)),
+                                    ],
                                   ),
                                 ),
-                            ],
+                                if (phone != null)
+                                  AppButton(
+                                    icon: AppIcons.phone,
+                                    label: phone,
+                                    variant: AppButtonVariant.secondary,
+                                    size: AppButtonSize.small,
+                                    expand: false,
+                                    onPressed: () async {
+                                      final uri = Uri.parse('tel:$phone');
+                                      if (await canLaunchUrl(uri)) {
+                                        await launchUrl(uri);
+                                      }
+                                    },
+                                  )
+                                else
+                                  Text(
+                                    'No number on file',
+                                    style: AppTypography.caption(c),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       );
@@ -802,22 +643,21 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                   const SizedBox(height: AppSpacing.xl),
                 ],
 
-                Text('Total', style: theme.textTheme.titleSmall),
+                const AppSectionLabel('Total'),
                 const SizedBox(height: 4),
                 Text(
-                  '₦${o.totalAmount.toStringAsFixed(0)}',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: theme.colorScheme.primary,
-                  ),
+                  Money.format(o.totalAmount),
+                  style: AppTypography.tabular(AppTypography.title(c)),
                 ),
 
                 const SizedBox(height: AppSpacing.xl),
 
                 // ── Get help with this order ─────────────────────────────
                 if (!o.status.isTerminal)
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.support_agent_outlined, size: 18),
-                    label: const Text('Get help with this order'),
+                  AppButton(
+                    icon: AppIcons.chat,
+                    label: 'Get help with this order',
+                    variant: AppButtonVariant.secondary,
                     onPressed: () => Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => SupportOptionsScreen(
@@ -854,84 +694,22 @@ class _StatusTimeline extends StatelessWidget {
   final List<_Step> steps;
   final OrderStatus currentStatus;
 
-  bool _isDone(OrderStatus step) {
-    // Find the index of the current status in the steps list
-    final stepValues = steps.map((s) => s.status).toList();
-    final currentIdx = stepValues.indexOf(currentStatus);
-    final stepIdx = stepValues.indexOf(step);
-    if (currentIdx < 0 || stepIdx < 0) return false;
-    return stepIdx <= currentIdx;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Column(
-      children: List.generate(steps.length, (i) {
-        final step = steps[i];
-        final done = _isDone(step.status);
-        final isCurrent = step.status == currentStatus;
-        final isLast = i == steps.length - 1;
-
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Timeline column
-            SizedBox(
-              width: 36,
-              child: Column(
-                children: [
-                  // Dot
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: done
-                          ? AppColors.emerald
-                          : theme.colorScheme.surfaceContainerHighest,
-                      border: isCurrent
-                          ? Border.all(color: AppColors.emerald, width: 2)
-                          : null,
-                    ),
-                    child: done
-                        ? const Icon(
-                            Icons.check,
-                            color: AppColors.pureWhite,
-                            size: 16,
-                          )
-                        : null,
-                  ),
-                  // Connector line
-                  if (!isLast)
-                    Container(
-                      width: 2,
-                      height: 36,
-                      color: done
-                          ? AppColors.emerald.withValues(alpha: 0.4)
-                          : theme.colorScheme.outline,
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            // Label
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                step.label,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w400,
-                  color: done
-                      ? theme.colorScheme.onSurface
-                      : theme.colorScheme.onSurface.withValues(alpha: 0.4),
-                ),
-              ),
-            ),
-          ],
-        );
-      }),
+    // Find the index of the current status in the steps list.
+    final stepValues = steps.map((s) => s.status).toList();
+    final currentIdx = stepValues.indexOf(currentStatus);
+    final states = List.generate(steps.length, (i) {
+      if (currentIdx < 0 || i > currentIdx) return TrackingStepState.upcoming;
+      // The last step (delivered / picked up) is finished, not "in progress".
+      if (i == currentIdx && currentStatus != OrderStatus.completed) {
+        return TrackingStepState.current;
+      }
+      return TrackingStepState.done;
+    });
+    return TrackingStepper(
+      labels: [for (final s in steps) s.label],
+      states: states,
     );
   }
 }
@@ -968,90 +746,26 @@ class _GroupStatusTimeline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final current = _currentIndex();
 
     if (status == DeliveryGroupStatus.cancelled) {
-      return Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: AppColors.error.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(AppRadius.card),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.cancel_outlined, color: AppColors.error, size: 20),
-            const SizedBox(width: AppSpacing.sm),
-            Text(
-              'Order Cancelled',
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: AppColors.error,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
+      return const AppInlineNotice(
+        isError: true,
+        icon: AppIcons.error,
+        text: 'Order Cancelled',
       );
     }
 
-    return Column(
-      children: List.generate(_steps.length, (i) {
-        final step = _steps[i];
-        final done = current >= 0 && i <= current;
-        final isCurrent = i == current;
-        final isLast = i == _steps.length - 1;
-
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 36,
-              child: Column(
-                children: [
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: done
-                          ? AppColors.emerald
-                          : theme.colorScheme.surfaceContainerHighest,
-                      border: isCurrent
-                          ? Border.all(color: AppColors.emerald, width: 2)
-                          : null,
-                    ),
-                    child: done
-                        ? const Icon(Icons.check,
-                            color: AppColors.pureWhite, size: 16)
-                        : null,
-                  ),
-                  if (!isLast)
-                    Container(
-                      width: 2,
-                      height: 36,
-                      color: done
-                          ? AppColors.emerald.withValues(alpha: 0.4)
-                          : theme.colorScheme.outline,
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                step.label,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w400,
-                  color: done
-                      ? theme.colorScheme.onSurface
-                      : theme.colorScheme.onSurface.withValues(alpha: 0.4),
-                ),
-              ),
-            ),
-          ],
-        );
-      }),
+    final states = List.generate(_steps.length, (i) {
+      if (current < 0 || i > current) return TrackingStepState.upcoming;
+      if (i == current && status != DeliveryGroupStatus.completed) {
+        return TrackingStepState.current;
+      }
+      return TrackingStepState.done;
+    });
+    return TrackingStepper(
+      labels: [for (final s in _steps) s.label],
+      states: states,
     );
   }
 }
@@ -1074,131 +788,84 @@ class _GroupFinalPaymentCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
+    final c = context.colors;
     final walletAsync = ref.watch(walletBalanceProvider);
     final balance = walletAsync.valueOrNull ?? 0.0;
     final finalAmt = group.finalAmount;
     final hasSufficientBalance = finalAmt != null && balance >= finalAmt;
 
-    return Container(
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Title row
-          Row(
-            children: [
-              const Icon(Icons.payment_outlined,
-                  color: AppColors.warning, size: 20),
-              const SizedBox(width: AppSpacing.sm),
-              Text(
-                'Pay for your order',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: AppColors.warning,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-
-          // Final amount
-          Text(
-            '₦${finalAmt?.toStringAsFixed(0) ?? '—'}',
-            style: theme.textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: theme.colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-
-          // Wallet balance row
-          Row(
-            children: [
-              Icon(
-                Icons.account_balance_wallet_outlined,
-                size: 16,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'Wallet balance: ₦${balance.toStringAsFixed(0)}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              if (finalAmt != null)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: hasSufficientBalance
-                        ? AppColors.emerald.withValues(alpha: 0.12)
-                        : AppColors.error.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
+      child: AppCard(
+        strongBorder: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Title row
+            Row(
+              children: [
+                Icon(AppIcons.wallet, color: c.textSecondary, size: 20),
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  'Pay for your order',
+                  style: AppTypography.meta(c).copyWith(
+                    color: c.textPrimary,
+                    fontWeight: FontWeight.w600,
                   ),
-                  child: Text(
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+
+            // Final amount
+            Text(
+              finalAmt != null ? Money.format(finalAmt) : '—',
+              style: AppTypography.tabular(
+                  Theme.of(context).textTheme.headlineMedium!),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+
+            // Wallet balance row
+            Row(
+              children: [
+                Icon(AppIcons.wallet, size: 16, color: c.textTertiary),
+                const SizedBox(width: 4),
+                Text(
+                  'Wallet balance: ${Money.format(balance)}',
+                  style: AppTypography.tabular(AppTypography.meta(c)),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                if (finalAmt != null)
+                  Text(
                     hasSufficientBalance ? 'Sufficient' : 'Insufficient',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: hasSufficientBalance
-                          ? AppColors.emerald
-                          : AppColors.error,
+                    style: AppTypography.caption(c).copyWith(
+                      color: hasSufficientBalance ? c.brandText : c.dangerText,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
 
-          // Pay button
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
+            // Pay button
+            AppButton(
+              label: 'Pay ${finalAmt != null ? Money.format(finalAmt) : '—'}',
+              isLoading: isPayingFinal,
               onPressed: (isPayingFinal || isDeclining || finalAmt == null)
                   ? null
                   : onPay,
-              child: isPayingFinal
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppColors.pureWhite),
-                    )
-                  : Text(
-                      'Pay ₦${finalAmt?.toStringAsFixed(0) ?? '—'}',
-                    ),
             ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
+            const SizedBox(height: AppSpacing.sm),
 
-          // Decline button
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.error,
-                side: const BorderSide(color: AppColors.error),
-              ),
+            // Decline button
+            AppButton(
+              label: 'Decline order',
+              variant: AppButtonVariant.quietDanger,
+              isLoading: isDeclining,
               onPressed: (isPayingFinal || isDeclining) ? null : onDecline,
-              child: isDeclining
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppColors.error),
-                    )
-                  : const Text('Decline order'),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1214,33 +881,82 @@ class _GiftSenderBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = context.colors;
     final hasMessage = message != null && message!.trim().isNotEmpty;
-    return Container(
+    return SizedBox(
       key: const ValueKey('gift-sender-banner'),
       width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.orange.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.orange.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('🎁 Gift to ${nickname ?? 'a student'}',
-              style: theme.textTheme.titleSmall),
-          const SizedBox(height: 2),
-          Text(
-            'You pay and can cancel. They get the food and give the rider '
-            'the delivery PIN.',
-            style: theme.textTheme.bodySmall,
-          ),
-          if (hasMessage) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Text('“${message!.trim()}”',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(fontStyle: FontStyle.italic)),
+      child: AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('🎁 Gift to ${nickname ?? 'a student'}',
+                style: theme.textTheme.titleSmall),
+            const SizedBox(height: 2),
+            Text(
+              'You pay and can cancel. They get the food and give the rider '
+              'the delivery PIN.',
+              style: AppTypography.meta(c),
+            ),
+            if (hasMessage) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Text('“${message!.trim()}”',
+                  style: AppTypography.meta(c)
+                      .copyWith(fontStyle: FontStyle.italic)),
+            ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The delivery PIN as one box per digit, tap to copy. Neutral: surface
+/// raised, hairline border, textPrimary digits in tabular figures.
+class _PinBoxes extends StatelessWidget {
+  const _PinBoxes({required this.pin});
+  final String pin;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return GestureDetector(
+      onTap: () {
+        Clipboard.setData(ClipboardData(text: pin));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('PIN copied'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      },
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          ...pin.split('').map(
+                (digit) => Container(
+                  width: 44,
+                  height: 52,
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  decoration: BoxDecoration(
+                    color: c.surfaceRaised,
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                    border: Border.all(color: c.borderStrong),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    digit,
+                    style: AppTypography.tabular(
+                      Theme.of(context)
+                          .textTheme
+                          .headlineMedium!
+                          .copyWith(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ),
+          const SizedBox(width: AppSpacing.sm),
+          Icon(AppIcons.copy, size: 16, color: c.textSecondary),
         ],
       ),
     );
@@ -1256,90 +972,42 @@ class _GroupDeliveryConfirmedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final c = context.colors;
 
-    return Container(
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.emerald.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.emerald.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.check_circle_outline,
-                  color: AppColors.emerald, size: 20),
-              const SizedBox(width: AppSpacing.sm),
-              Text(
-                'Payment confirmed',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: AppColors.emerald,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            'Your rider is on the way. Give them your delivery PIN at the door:',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: AppColors.emerald.withValues(alpha: 0.85),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          GestureDetector(
-            onTap: () {
-              Clipboard.setData(ClipboardData(text: pin));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('PIN copied'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+      child: AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                ...pin.split('').map(
-                      (digit) => Container(
-                        width: 44,
-                        height: 52,
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.emerald.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                              color: AppColors.emerald.withValues(alpha: 0.4)),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          digit,
-                          style: theme.textTheme.headlineMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.emerald,
-                          ),
-                        ),
-                      ),
-                    ),
+                Icon(AppIcons.success, color: c.brandText, size: 20),
                 const SizedBox(width: AppSpacing.sm),
-                const Icon(Icons.copy_outlined,
-                    size: 16, color: AppColors.emerald),
+                Text(
+                  'Payment confirmed',
+                  style: AppTypography.meta(c).copyWith(
+                    color: c.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            'Tap to copy',
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: AppColors.emerald.withValues(alpha: 0.6),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Your rider is on the way. Give them your delivery PIN at the door:',
+              style: AppTypography.meta(c),
             ),
-            textAlign: TextAlign.center,
-          ),
-        ],
+            const SizedBox(height: AppSpacing.md),
+            _PinBoxes(pin: pin),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Tap to copy',
+              style: AppTypography.caption(c),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1353,64 +1021,34 @@ class _TrackingPinCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
+    final c = context.colors;
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.emerald.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.emerald.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.lock_outline,
-                  color: AppColors.emerald, size: 18),
-              const SizedBox(width: AppSpacing.sm),
-              Text(
-                'Your Delivery PIN',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: AppColors.emerald,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          GestureDetector(
-            onTap: () {
-              Clipboard.setData(ClipboardData(text: pin));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('PIN copied')),
-              );
-            },
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+      child: AppCard(
+        child: Column(
+          children: [
+            Row(
               children: [
+                Icon(AppIcons.lock, color: c.textSecondary, size: 18),
+                const SizedBox(width: AppSpacing.sm),
                 Text(
-                  pin,
-                  style: theme.textTheme.displaySmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 12,
-                    color: AppColors.emerald,
+                  'Your Delivery PIN',
+                  style: AppTypography.meta(c).copyWith(
+                    color: c.textPrimary,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
-                const Icon(Icons.copy_outlined,
-                    size: 16, color: AppColors.emerald),
               ],
             ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            'Show this to your rider at the door.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: AppColors.emerald.withValues(alpha: 0.8),
+            const SizedBox(height: AppSpacing.sm),
+            _PinBoxes(pin: pin),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Show this to your rider at the door.',
+              style: AppTypography.meta(c),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1425,37 +1063,22 @@ class DeliveredCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
+    final c = context.colors;
+    return AppCard(
       key: const ValueKey('delivered-card'),
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.emerald.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.emerald.withValues(alpha: 0.3)),
-      ),
       child: Row(
         children: [
-          const Icon(Icons.check_circle, color: AppColors.emerald, size: 32),
+          Icon(AppIcons.success, color: c.brandText, size: 32),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Delivered',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: AppColors.emerald,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+                Text('Delivered', style: AppTypography.title(c)),
                 if (completedAt != null)
                   Text(
                     formatLocalDateTime(completedAt!),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color:
-                          theme.colorScheme.onSurface.withValues(alpha: 0.65),
-                    ),
+                    style: AppTypography.meta(c),
                   ),
               ],
             ),

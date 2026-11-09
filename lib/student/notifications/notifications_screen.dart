@@ -4,9 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/models/app_notification.dart';
 import '../../shared/services/notifications/notification_inbox_service.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
+import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/lists/app_list_group.dart';
+import '../../shared/widgets/lists/notification_row.dart';
 import 'notification_router.dart';
 
 /// The student's notification inbox: automatic order-progress updates plus
@@ -28,7 +33,11 @@ class NotificationsScreen extends ConsumerWidget {
         title: 'Notifications',
         actions: [
           if (hasUnread)
-            TextButton(
+            AppButton(
+              label: 'Mark all read',
+              variant: AppButtonVariant.text,
+              size: AppButtonSize.small,
+              expand: false,
               onPressed: () async {
                 try {
                   await ref
@@ -49,7 +58,6 @@ class NotificationsScreen extends ConsumerWidget {
                   }
                 }
               },
-              child: const Text('Mark all read'),
             ),
         ],
       ),
@@ -61,12 +69,13 @@ class NotificationsScreen extends ConsumerWidget {
         ),
         data: (items) {
           if (items.isEmpty) return const _EmptyInbox();
-          return ListView.separated(
+          return ListView(
             padding: const EdgeInsets.all(AppSpacing.screenGutter),
-            itemCount: items.length,
-            separatorBuilder: (_, __) =>
-                const SizedBox(height: AppSpacing.cardGap),
-            itemBuilder: (context, i) => _NotificationTile(items[i]),
+            children: [
+              AppListGroup(
+                children: [for (final n in items) _NotificationTile(n)],
+              ),
+            ],
           );
         },
       ),
@@ -79,32 +88,21 @@ class _EmptyInbox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final c = context.colors;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                color: AppColors.emerald.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.notifications_none_rounded,
-                  size: 36, color: AppColors.emerald),
-            ),
+            Icon(AppIcons.bell, size: 36, color: c.textTertiary),
             const SizedBox(height: AppSpacing.md),
-            Text('Nothing yet', style: theme.textTheme.titleMedium),
+            Text('Nothing yet', style: AppTypography.title(c)),
             const SizedBox(height: AppSpacing.xs),
             Text(
               'Updates about your orders will appear here.',
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-              ),
+              style: AppTypography.meta(c),
             ),
           ],
         ),
@@ -120,91 +118,20 @@ class _NotificationTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final unread = item.isUnread;
-
-    return Material(
-      color: unread
-          ? AppColors.emerald.withValues(alpha: 0.06)
-          : theme.colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(AppRadius.card),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        onTap: () => openNotificationTarget(
-          context,
-          ref,
-          NotificationTarget.fromNotification(item),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: (item.isFromStatusChange
-                          ? AppColors.emerald
-                          : AppColors.orange)
-                      .withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  item.type == 'final_price'
-                      ? Icons.payments_outlined
-                      : item.isFromStatusChange
-                          ? Icons.local_shipping_outlined
-                          : Icons.chat_bubble_outline,
-                  size: 18,
-                  color: item.isFromStatusChange
-                      ? AppColors.emerald
-                      : AppColors.orange,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            item.title,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight:
-                                  unread ? FontWeight.w700 : FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                        if (unread)
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              color: AppColors.emerald,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(item.body, style: theme.textTheme.bodySmall),
-                    const SizedBox(height: 6),
-                    Text(
-                      _relativeTime(item.createdAt),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color:
-                            theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+    return NotificationRow(
+      icon: item.type == 'final_price'
+          ? AppIcons.receipt
+          : item.isFromStatusChange
+              ? AppIcons.delivery
+              : AppIcons.chat,
+      title: item.title,
+      body: item.body,
+      timeText: _relativeTime(item.createdAt),
+      unread: item.isUnread,
+      onTap: () => openNotificationTarget(
+        context,
+        ref,
+        NotificationTarget.fromNotification(item),
       ),
     );
   }

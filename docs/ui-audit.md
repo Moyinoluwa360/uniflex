@@ -22,20 +22,20 @@ Navigation is `Navigator.push(MaterialPageRoute)`; no named routes. Shell tabs a
 |---|---|---|---|
 | Home | `home/student_home_screen.dart` (1134 lines) | SEEN | A ✅ |
 | Search / All vendors / Ad popup / Ad carousel | `home/search_screen.dart`, `all_vendors_screen.dart`, `ad_popup.dart`, `ad_carousel.dart` | | A (ad carousel + popup ✅; search / all vendors pending C) |
-| Orders tabs (Cart / Preparing=Active / Completed) | `orders/orders_screen.dart` | SEEN |  |
+| Orders tabs (Cart / Preparing=Active / Completed) | `orders/orders_screen.dart` | SEEN | B ✅ |
 | Uniflex vendor page (catalog) | `ordering/catalog_screen.dart` | SEEN |  |
 | Food Packs | `ordering/pack_builder_screen.dart` | SEEN |  |
-| Your Cart (vendor-grouped) | `ordering/cart_screen.dart` | SEEN |  |
-| Checkout | `ordering/checkout_screen.dart` | |  |
-| Pay delivery fee (+ PIN sheet) | `ordering/commitment_fee_screen.dart`, `shared/widgets/pin/pin_entry_sheet.dart` | SEEN |  |
+| Your Cart (vendor-grouped) | `ordering/cart_screen.dart` | SEEN | B ✅ |
+| Checkout | `ordering/checkout_screen.dart` | | B ✅ |
+| Pay delivery fee (+ PIN sheet) | `ordering/commitment_fee_screen.dart`, `shared/widgets/pin/pin_entry_sheet.dart` | SEEN | B ✅ (PIN boxes not added: kept the existing field) |
 | Order confirmation | `ordering/order_confirmation_screen.dart` | |  |
-| Track Order / Errand tracking | `tracking/order_tracking_screen.dart` (1467 lines), `errand_tracking_screen.dart` | SEEN (Track Order) |  |
+| Track Order / Errand tracking | `tracking/order_tracking_screen.dart` (1467 lines), `errand_tracking_screen.dart` | SEEN (Track Order) | B: Track Order ✅; errand tracking → C4 |
 | Wallet | `wallet/wallet_screen.dart` | SEEN |  |
 | Saving Plan | `wallet/saving_plan_screen.dart` | SEEN |  |
 | Paystack checkout (WebView) | `wallet/paystack_checkout_*.dart` | |  |
 | Profile | `profile/student_profile_screen.dart` | SEEN |  |
 | Membership card / Badges / Preferences / Refer / Scheduled orders | `profile/*.dart` | |  |
-| Notifications | `notifications/notifications_screen.dart` | SEEN |  |
+| Notifications | `notifications/notifications_screen.dart` | SEEN | B ✅ (+ received-gift card on Orders) |
 | Gifts (send / list / received) | `gifts/*.dart` | |  |
 | Group checkout | `group_checkout/*.dart` | |  |
 | Errand create / confirmation | `errand/*.dart` | |  |

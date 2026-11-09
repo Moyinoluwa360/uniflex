@@ -51,6 +51,7 @@ class AppButton extends StatefulWidget {
     this.variant = AppButtonVariant.primary,
     this.size = AppButtonSize.medium,
     this.icon,
+    this.trailingIcon,
     this.isLoading = false,
     this.expand = true,
   }) : _kind = null;
@@ -62,6 +63,7 @@ class AppButton extends StatefulWidget {
   })  : variant = AppButtonVariant.primary,
         size = AppButtonSize.medium,
         icon = null,
+        trailingIcon = null,
         isLoading = false,
         expand = true,
         _kind = _Kind.danger,
@@ -74,6 +76,9 @@ class AppButton extends StatefulWidget {
 
   /// Optional 20px leading icon.
   final IconData? icon;
+
+  /// Optional trailing icon (e.g. a chevron on "Track").
+  final IconData? trailingIcon;
 
   /// Shows a small spinner in place of the label, keeping the same width.
   final bool isLoading;
@@ -114,8 +119,8 @@ class _AppButtonState extends State<AppButton> {
     final c = context.colors;
     final kind = _kind;
     final small = widget.size == AppButtonSize.small;
-    final enabled = widget.onPressed != null && !widget.isLoading &&
-        kind != _Kind.disabled;
+    final enabled =
+        widget.onPressed != null && !widget.isLoading && kind != _Kind.disabled;
 
     final (Color fill, Color label, BorderSide side) = switch (kind) {
       _Kind.primary => (c.brand, c.onBrand, BorderSide.none),
@@ -138,13 +143,12 @@ class _AppButtonState extends State<AppButton> {
       _Kind.disabled => (c.surfaceRaised, c.textTertiary, BorderSide.none),
     };
 
-    final style = small
-        ? AppTypography.buttonSmall(label)
-        : AppTypography.button(label);
+    final style =
+        small ? AppTypography.buttonSmall(label) : AppTypography.button(label);
     final height =
         small ? AppSpacing.controlHeightSmall : AppSpacing.controlHeight;
-    final radius = BorderRadius.circular(
-        small ? AppRadius.buttonSmall : AppRadius.button);
+    final radius =
+        BorderRadius.circular(small ? AppRadius.buttonSmall : AppRadius.button);
 
     final content = Row(
       mainAxisSize: widget.expand ? MainAxisSize.max : MainAxisSize.min,
@@ -162,6 +166,10 @@ class _AppButtonState extends State<AppButton> {
             overflow: TextOverflow.ellipsis,
           ),
         ),
+        if (widget.trailingIcon != null) ...[
+          const SizedBox(width: AppSpacing.xs),
+          Icon(widget.trailingIcon, size: AppIconSize.inButton, color: label),
+        ],
       ],
     );
 

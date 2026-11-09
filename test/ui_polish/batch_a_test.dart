@@ -16,11 +16,13 @@ void main() {
       await pumpUi(
         tester,
         Container(
-          color: dark ? AppColors.dark.headerSolid : AppColors.light.headerSolid,
+          color:
+              dark ? AppColors.dark.headerSolid : AppColors.light.headerSolid,
           padding: const EdgeInsets.all(12),
           child: Column(children: [
             Row(children: [
-              HeaderGlassButton(icon: AppIcons.bell, onTap: () {}, showDot: true),
+              HeaderGlassButton(
+                  icon: AppIcons.bell, onTap: () {}, showDot: true),
               const SizedBox(width: 8),
               HeaderAvatar(initial: 'A', onTap: () {}),
             ]),
@@ -43,21 +45,25 @@ void main() {
         (tester) async {
       await pumpUi(
         tester,
-        HeaderWalletPanel(label: 'WALLET BALANCE', balance: null, onTopUp: () {}),
+        HeaderWalletPanel(
+            label: 'WALLET BALANCE', balance: null, onTopUp: () {}),
       );
       expect(find.text('₦--'), findsOneWidget);
       await pumpUi(
         tester,
-        HeaderWalletPanel(label: 'WALLET BALANCE', balance: 1200.5, onTopUp: () {}),
+        HeaderWalletPanel(
+            label: 'WALLET BALANCE', balance: 1200.5, onTopUp: () {}),
       );
       expect(find.text('₦1,200.50'), findsOneWidget);
     });
 
-    testWidgets('Top up is 40 high, fires once on a double tap', (tester) async {
+    testWidgets('Top up is 40 high, fires once on a double tap',
+        (tester) async {
       var n = 0;
       await pumpUi(
         tester,
-        HeaderWalletPanel(label: 'WALLET BALANCE', balance: 5, onTopUp: () => n++),
+        HeaderWalletPanel(
+            label: 'WALLET BALANCE', balance: 5, onTopUp: () => n++),
       );
       expect(tester.getSize(find.byType(InkWell).last).height, 40);
       await tester.tap(find.text('Top up'));

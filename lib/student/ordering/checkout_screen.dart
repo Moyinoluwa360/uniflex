@@ -6,9 +6,16 @@ import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
-import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/theme/app_icons.dart';
+import '../../shared/theme/app_typography.dart';
+import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/cards/app_card.dart';
+import '../../shared/widgets/cart/summary_row.dart';
+import '../../shared/widgets/format/money.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../../shared/widgets/navigation/app_bottom_nav_shell.dart';
+import '../../shared/widgets/notice/app_inline_notice.dart';
+import '../../shared/widgets/sheets/app_sheet.dart';
 import '../gifts/gift_models.dart';
 import '../gifts/gift_section.dart';
 import 'cart_provider.dart';
@@ -88,40 +95,33 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       return;
     }
 
-    final picked = await showModalBottomSheet<DateTime>(
-      context: context,
+    final picked = await AppSheet.show<DateTime>(
+      context,
       builder: (ctx) {
         final theme = Theme.of(ctx);
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.screenGutter),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Pick a time', style: theme.textTheme.titleMedium),
-                const SizedBox(height: AppSpacing.xs),
-                Text("Same-day pre-order — choose when you'd like it ready.",
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    )),
-                const SizedBox(height: AppSpacing.md),
-                Wrap(
-                  spacing: AppSpacing.sm,
-                  runSpacing: AppSpacing.sm,
-                  children: slots.map((slot) {
-                    final label =
-                        '${slot.hour.toString().padLeft(2, '0')}:${slot.minute.toString().padLeft(2, '0')}';
-                    return ActionChip(
-                      label: Text(label),
-                      onPressed: () => Navigator.pop(ctx, slot),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: AppSpacing.md),
-              ],
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Pick a time', style: theme.textTheme.titleMedium),
+            const SizedBox(height: AppSpacing.xs),
+            Text("Same-day pre-order — choose when you'd like it ready.",
+                style: AppTypography.meta(ctx.colors)),
+            const SizedBox(height: AppSpacing.md),
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              children: slots.map((slot) {
+                final label =
+                    '${slot.hour.toString().padLeft(2, '0')}:${slot.minute.toString().padLeft(2, '0')}';
+                return ActionChip(
+                  label: Text(label),
+                  onPressed: () => Navigator.pop(ctx, slot),
+                );
+              }).toList(),
             ),
-          ),
+            const SizedBox(height: AppSpacing.md),
+          ],
         );
       },
     );
@@ -188,6 +188,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = context.colors;
     final cart = ref.watch(cartProvider);
     final balanceAsync = ref.watch(walletBalanceProvider);
     final locationsAsync = ref.watch(deliveryLocationsProvider);
@@ -224,12 +225,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               // ── Order summary (grouped by vendor) ──────────────────
               Text('Order summary', style: theme.textTheme.titleSmall),
               const SizedBox(height: AppSpacing.sm),
-              Container(
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(AppRadius.card),
-                ),
-                padding: const EdgeInsets.all(AppSpacing.md),
+              AppCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -237,8 +233,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       if (vi > 0) const Divider(height: AppSpacing.md),
                       Row(
                         children: [
-                          Icon(Icons.storefront,
-                              size: 16, color: theme.colorScheme.primary),
+                          Icon(AppIcons.vendor,
+                              size: 16, color: c.textSecondary),
                           const SizedBox(width: AppSpacing.xs),
                           Text(
                             vendorGroups[vi].vendor.name,
@@ -257,8 +253,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                                     '${item.quantity}×',
                                     style:
                                         theme.textTheme.labelMedium?.copyWith(
-                                      color: theme.colorScheme.onSurface
-                                          .withValues(alpha: 0.55),
+                                      color: c.textSecondary,
                                     ),
                                   ),
                                   const SizedBox(width: AppSpacing.sm),
@@ -272,17 +267,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                                         if (item.optionsSummary.isNotEmpty)
                                           Text(
                                             item.optionsSummary,
-                                            style: theme.textTheme.labelSmall
-                                                ?.copyWith(
-                                              color: theme.colorScheme.onSurface
-                                                  .withValues(alpha: 0.5),
-                                            ),
+                                            style: AppTypography.caption(c),
                                           ),
                                       ],
                                     ),
                                   ),
-                                  Text(
-                                    '₦${item.lineTotal.toStringAsFixed(0)}',
+                                  MoneyText(
+                                    item.lineTotal,
                                     style: theme.textTheme.labelMedium,
                                   ),
                                 ],
@@ -297,15 +288,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                             children: [
                               Text(
                                 '${vendorGroups[vi].packCount} pack${vendorGroups[vi].packCount > 1 ? 's' : ''}',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: AppColors.emerald,
-                                ),
+                                style: AppTypography.meta(c),
                               ),
                               Text(
-                                '+₦${vendorGroups[vi].packFee.toStringAsFixed(0)}',
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: AppColors.emerald,
-                                ),
+                                Money.plus(vendorGroups[vi].packFee),
+                                style: AppTypography.tabular(
+                                    AppTypography.meta(c)),
                               ),
                             ],
                           ),
@@ -316,8 +304,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text('Subtotal', style: theme.textTheme.bodySmall),
-                        Text(
-                          '₦${(cart.subtotal + cart.totalPackFee).toStringAsFixed(0)}',
+                        MoneyText(
+                          cart.subtotal + cart.totalPackFee,
                           style: theme.textTheme.labelMedium,
                         ),
                       ],
@@ -338,7 +326,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     Expanded(
                       child: _FulfillmentChoice(
                         label: 'Pickup',
-                        icon: Icons.storefront_outlined,
+                        icon: AppIcons.vendor,
                         subtitle: 'Free',
                         selected: _isPickup,
                         onTap: () => setState(() => _isPickup = true),
@@ -349,9 +337,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   Expanded(
                     child: _FulfillmentChoice(
                       label: 'Delivery',
-                      icon: Icons.delivery_dining_outlined,
+                      icon: AppIcons.delivery,
                       subtitle: _selectedLocation != null
-                          ? '₦${_selectedLocation!.price.toStringAsFixed(0)}/bracket'
+                          ? '${Money.format(_selectedLocation!.price)}/bracket'
                           : 'Select location',
                       selected: !_isPickup,
                       onTap: () => setState(() => _isPickup = false),
@@ -374,8 +362,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   ),
                   error: (_, __) => Text(
                     'Could not load locations.',
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: AppColors.error),
+                    style: AppTypography.meta(c).copyWith(color: c.dangerText),
                   ),
                   data: (locations) => DropdownButtonFormField<String>(
                     initialValue: _selectedLocation?.id,
@@ -388,7 +375,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         DropdownMenuItem(
                           value: loc.id,
                           child: Text(
-                            '${loc.name}  (₦${loc.price.toStringAsFixed(0)})',
+                            '${loc.name}  (${Money.format(loc.price)})',
                           ),
                         ),
                     ],
@@ -456,67 +443,51 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               const SizedBox(height: AppSpacing.xl),
 
               // ── Order total ──────────────────────────────────────────
-              Container(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(AppRadius.card),
-                ),
+              AppCard(
                 child: Column(
                   children: [
-                    _TotalRow(
+                    SummaryRow(
                       label: 'Food + packs',
-                      value:
-                          '₦${(cart.subtotal + cart.totalPackFee).toStringAsFixed(0)}',
+                      value: Money.format(cart.subtotal + cart.totalPackFee),
                       bold: false,
-                      theme: theme,
                     ),
                     if (!_isPickup && _selectedLocation != null) ...[
                       for (final g in vendorGroups)
-                        _TotalRow(
+                        SummaryRow(
                           label: 'Delivery (${g.vendor.name})',
-                          value:
-                              '+₦${vendorDeliveryFee(locationPrice, g.packCount).toStringAsFixed(0)}',
+                          value: Money.plus(
+                              vendorDeliveryFee(locationPrice, g.packCount)),
                           bold: false,
-                          theme: theme,
                         ),
                     ],
                     const Divider(height: AppSpacing.md),
                     if (_isPickup)
-                      _TotalRow(
+                      SummaryRow(
                         label: 'Total',
-                        value:
-                            '₦${(cart.subtotal + cart.totalPackFee).toStringAsFixed(0)}',
+                        value: Money.format(cart.subtotal + cart.totalPackFee),
                         bold: true,
-                        theme: theme,
                       )
                     else ...[
-                      _TotalRow(
+                      SummaryRow(
                         label: 'Delivery fees',
-                        value: '₦${totalDeliveryFee.toStringAsFixed(0)}',
+                        value: Money.format(totalDeliveryFee),
                         bold: true,
-                        theme: theme,
                       ),
                       const SizedBox(height: 2),
                       Text(
                         'A small service charge is added on the next page. Food is paid after the rider confirms the price.',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: 0.5),
-                        ),
+                        style: AppTypography.caption(c),
                       ),
                     ],
                     const Divider(height: AppSpacing.md),
                     if (_isPickup)
                       balanceAsync.when(
-                        data: (b) => _TotalRow(
+                        data: (b) => SummaryRow(
                           label: 'Wallet balance',
-                          value: '₦${(b ?? 0).toStringAsFixed(0)}',
+                          value: Money.format(b ?? 0),
                           bold: false,
-                          theme: theme,
-                          valueColor: hasSufficientBalance
-                              ? AppColors.emerald
-                              : AppColors.error,
+                          valueColor:
+                              hasSufficientBalance ? c.brandText : c.dangerText,
                         ),
                         loading: () => const SizedBox(
                           height: 20,
@@ -535,50 +506,35 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   !hasSufficientBalance &&
                   balanceAsync.hasValue) ...[
                 const SizedBox(height: AppSpacing.sm),
-                Container(
-                  padding: const EdgeInsets.all(AppSpacing.sm),
-                  decoration: BoxDecoration(
-                    color: AppColors.error.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(AppRadius.card),
-                    border: Border.all(
-                        color: AppColors.error.withValues(alpha: 0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.warning_amber_rounded,
-                          color: AppColors.error, size: 18),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: Text.rich(
-                          TextSpan(
-                            text: 'Insufficient balance. ',
-                            style: theme.textTheme.bodySmall
-                                ?.copyWith(color: AppColors.error),
-                            children: [
-                              WidgetSpan(
-                                child: GestureDetector(
-                                  onTap: () {
-                                    ref
-                                        .read(shellTabRequestProvider.notifier)
-                                        .state = _studentWalletTabIndex;
-                                    Navigator.of(context)
-                                        .popUntil((route) => route.isFirst);
-                                  },
-                                  child: Text(
-                                    'Top up your wallet →',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: AppColors.error,
-                                      fontWeight: FontWeight.w600,
-                                      decoration: TextDecoration.underline,
-                                    ),
-                                  ),
-                                ),
+                AppInlineNotice.custom(
+                  isError: true,
+                  icon: AppIcons.error,
+                  child: Text.rich(
+                    TextSpan(
+                      text: 'Insufficient balance. ',
+                      style:
+                          AppTypography.meta(c).copyWith(color: c.dangerText),
+                      children: [
+                        WidgetSpan(
+                          child: GestureDetector(
+                            onTap: () {
+                              ref.read(shellTabRequestProvider.notifier).state =
+                                  _studentWalletTabIndex;
+                              Navigator.of(context)
+                                  .popUntil((route) => route.isFirst);
+                            },
+                            child: Text(
+                              'Top up your wallet →',
+                              style: AppTypography.meta(c).copyWith(
+                                color: c.dangerText,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.underline,
                               ),
-                            ],
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -597,9 +553,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               MediaQuery.of(context).padding.bottom +
               AppSpacing.md,
         ),
-        child: PrimaryButton(
+        child: AppButton(
           label: 'Continue',
-          icon: Icons.arrow_forward,
+          icon: AppIcons.forward,
           isLoading: _isContinuing,
           onPressed: _isContinuing ? null : _continue,
         ),
@@ -623,9 +579,10 @@ class _ScheduleRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (scheduledFor == null) {
-      return OutlinedButton.icon(
-        icon: const Icon(Icons.schedule_outlined),
-        label: const Text('Order ASAP (schedule for later)'),
+      return AppButton(
+        icon: AppIcons.clock,
+        label: 'Order ASAP (schedule for later)',
+        variant: AppButtonVariant.secondary,
         onPressed: onPickSchedule,
       );
     }
@@ -634,14 +591,15 @@ class _ScheduleRow extends StatelessWidget {
         'Today at ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
     return Row(
       children: [
-        const Icon(Icons.schedule, size: 18),
+        Icon(AppIcons.clock, size: 18, color: context.colors.textSecondary),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child:
               Text('Scheduled for $label', style: theme.textTheme.bodyMedium),
         ),
         IconButton(
-          icon: const Icon(Icons.close, size: 18),
+          icon: Icon(AppIcons.close,
+              size: 18, color: context.colors.textTertiary),
           onPressed: onClear,
           tooltip: 'Remove schedule',
         ),
@@ -668,18 +626,17 @@ class _FulfillmentChoice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = context.colors;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.all(AppSpacing.md),
         decoration: BoxDecoration(
-          color: selected
-              ? theme.colorScheme.primary.withValues(alpha: 0.08)
-              : theme.colorScheme.surfaceContainerHighest,
+          color: c.surface,
           borderRadius: BorderRadius.circular(AppRadius.card),
           border: Border.all(
-            color: selected ? theme.colorScheme.primary : theme.dividerColor,
+            color: selected ? c.brand : c.border,
             width: selected ? 1.5 : 1,
           ),
         ),
@@ -687,66 +644,18 @@ class _FulfillmentChoice extends StatelessWidget {
           children: [
             Icon(
               icon,
-              color: selected
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              color: selected ? c.brandText : c.textTertiary,
             ),
             const SizedBox(height: 4),
             Text(label, style: theme.textTheme.labelMedium),
             Text(
               subtitle,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: selected
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              style: AppTypography.caption(c).copyWith(
+                color: selected ? c.brandText : c.textTertiary,
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _TotalRow extends StatelessWidget {
-  const _TotalRow({
-    required this.label,
-    required this.value,
-    required this.bold,
-    required this.theme,
-    this.valueColor,
-  });
-  final String label;
-  final String value;
-  final bool bold;
-  final ThemeData theme;
-  final Color? valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: bold
-                  ? theme.textTheme.titleSmall
-                  : theme.textTheme.bodyMedium,
-            ),
-          ),
-          Text(
-            value,
-            style: (bold
-                    ? theme.textTheme.titleSmall
-                    : theme.textTheme.labelMedium)
-                ?.copyWith(
-              color: valueColor ?? (bold ? theme.colorScheme.primary : null),
-            ),
-          ),
-        ],
       ),
     );
   }

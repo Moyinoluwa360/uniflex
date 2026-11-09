@@ -27,7 +27,8 @@ void main() {
         Column(
           children: [
             for (final v in AppButtonVariant.values) ...[
-              AppButton(label: 'Place order ${v.name}', onPressed: () {}, variant: v),
+              AppButton(
+                  label: 'Place order ${v.name}', onPressed: () {}, variant: v),
               const SizedBox(height: 8),
               AppButton(
                 label: 'A rather long label that must not overflow ${v.name}',
@@ -97,7 +98,8 @@ void main() {
       await pumpUi(
         tester,
         Column(children: [
-          AppButton(label: 'Save changes', onPressed: () => fired++, expand: false),
+          AppButton(
+              label: 'Save changes', onPressed: () => fired++, expand: false),
         ]),
       );
       final idle = tester.getSize(find.byType(AppButton)).width;
@@ -269,7 +271,8 @@ void main() {
         tester,
         const AppListGroup(children: [AppListRow(title: 'Row')]),
       );
-      expect(tester.getSize(find.byType(AppListRow)).height, greaterThanOrEqualTo(56));
+      expect(tester.getSize(find.byType(AppListRow)).height,
+          greaterThanOrEqualTo(56));
     });
 
     testWidgets('AppSheet shows a 36x4 handle', (tester) async {
@@ -294,7 +297,8 @@ void main() {
   });
 
   group('AppSegmentedTabs', () {
-    forEachVariant('renders with counts, no overflow', (tester, dark, scale) async {
+    forEachVariant('renders with counts, no overflow',
+        (tester, dark, scale) async {
       await pumpUi(
         tester,
         AppSegmentedTabs(
@@ -370,7 +374,8 @@ void main() {
       await pumpUi(
         tester,
         Column(children: [
-          for (final t in StatusTone.values) AppStatusLabel(tone: t, text: t.name),
+          for (final t in StatusTone.values)
+            AppStatusLabel(tone: t, text: t.name),
         ]),
       );
       final dots = tester
@@ -388,7 +393,14 @@ void main() {
         tester,
         Column(
           children: [
-            for (final tier in ['Bronze', 'Silver', 'Gold', 'Platinum', 'Mythic', null]) ...[
+            for (final tier in [
+              'Bronze',
+              'Silver',
+              'Gold',
+              'Platinum',
+              'Mythic',
+              null
+            ]) ...[
               TierHeader(
                 tier: tier,
                 name: 'Adaeze Okafor-Williams',
@@ -410,15 +422,18 @@ void main() {
       expect(find.byKey(const ValueKey('tier-header')), findsNWidgets(6));
     });
 
-    testWidgets('unknown tier = plain surface, no tint, no ring', (tester) async {
+    testWidgets('unknown tier = plain surface, no tint, no ring',
+        (tester) async {
       await pumpUi(
         tester,
-        const TierHeader(tier: 'Mythic', name: 'N', nickname: 'n', initial: 'N'),
+        const TierHeader(
+            tier: 'Mythic', name: 'N', nickname: 'n', initial: 'N'),
       );
       expect(TierTokens.of('Mythic', Brightness.light), isNull);
       expect(TierTokens.of(null, Brightness.dark), isNull);
       expect(find.byKey(const ValueKey('avatar-ring')), findsNothing);
-      final box = tester.widget<DecoratedBox>(find.byKey(const ValueKey('tier-header')));
+      final box = tester
+          .widget<DecoratedBox>(find.byKey(const ValueKey('tier-header')));
       final deco = box.decoration as BoxDecoration;
       expect(deco.color, AppColors.light.surface);
       expect(deco.border!.top.color, AppColors.light.border);
@@ -427,7 +442,8 @@ void main() {
     testWidgets('a known tier uses its border and ring', (tester) async {
       await pumpUi(
         tester,
-        const TierHeader(tier: 'platinum', name: 'N', nickname: 'n', initial: 'N'),
+        const TierHeader(
+            tier: 'platinum', name: 'N', nickname: 'n', initial: 'N'),
       );
       final deco = tester
           .widget<DecoratedBox>(find.byKey(const ValueKey('tier-header')))
@@ -446,7 +462,8 @@ void main() {
       AppGlassNavItem(label: 'Profile', icon: AppIcons.profile),
     ];
 
-    Future<void> pumpBar(WidgetTester tester, int index, ValueChanged<int> onTap,
+    Future<void> pumpBar(
+        WidgetTester tester, int index, ValueChanged<int> onTap,
         {bool dark = false, double scale = 1.0, int count = 4}) async {
       tester.view.physicalSize = const Size(780, 1688);
       tester.view.devicePixelRatio = 2;
@@ -475,7 +492,8 @@ void main() {
 
     for (final dark in [false, true]) {
       for (final scale in [1.0, 1.3]) {
-        testWidgets('renders (${dark ? 'dark' : 'light'}, x$scale)', (tester) async {
+        testWidgets('renders (${dark ? 'dark' : 'light'}, x$scale)',
+            (tester) async {
           await pumpBar(tester, 0, (_) {}, dark: dark, scale: scale);
           expect(find.byKey(const ValueKey('glass-nav')), findsOneWidget);
           expect(tester.takeException(), isNull);
@@ -550,7 +568,8 @@ void main() {
       expect(find.byType(BackdropFilter), findsOneWidget);
       expect(
         find.ancestor(
-            of: find.byType(BackdropFilter), matching: find.byType(RepaintBoundary)),
+            of: find.byType(BackdropFilter),
+            matching: find.byType(RepaintBoundary)),
         findsWidgets,
       );
     });

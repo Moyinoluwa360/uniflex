@@ -155,10 +155,10 @@ class _AppBottomNavShellState extends ConsumerState<AppBottomNavShell> {
             for (var i = 0; i < widget.tabs.length; i++)
               AppGlassNavItem.fromTab(
                 widget.tabs[i],
-                badgeCount: widget.badgeCounts != null &&
-                        i < widget.badgeCounts!.length
-                    ? widget.badgeCounts![i]
-                    : 0,
+                badgeCount:
+                    widget.badgeCounts != null && i < widget.badgeCounts!.length
+                        ? widget.badgeCounts![i]
+                        : 0,
               ),
           ],
           currentIndex: _index,

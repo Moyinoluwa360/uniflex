@@ -225,7 +225,8 @@ class _OuterShadowPainter extends CustomPainter {
     final outside = Path.combine(
       PathOperation.difference,
       Path()
-        ..addRect(Rect.fromLTWH(-200, -200, size.width + 400, size.height + 400)),
+        ..addRect(
+            Rect.fromLTWH(-200, -200, size.width + 400, size.height + 400)),
       Path()..addRRect(rrect),
     );
     canvas.save();
