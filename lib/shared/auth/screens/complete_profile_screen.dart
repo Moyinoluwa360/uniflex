@@ -6,9 +6,13 @@ import '../../services/auth/auth_providers.dart';
 import '../../services/profile/profile_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
+import '../../theme/app_typography.dart';
 import '../../widgets/buttons/app_button.dart';
+import '../../widgets/auth/app_auth_header.dart';
+import '../../widgets/auth/auth_scaffold.dart';
+import '../../widgets/inputs/app_form_parts.dart';
+import '../../widgets/inputs/app_picker_field.dart';
 import '../../widgets/inputs/app_text_field.dart';
-import '../../widgets/progress/onboarding_progress_bar.dart';
 import '../validators.dart';
 import '../../widgets/notice/app_inline_notice.dart';
 import '../../theme/app_icons.dart';
@@ -144,185 +148,138 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final dobLabel =
-        _dateOfBirth == null ? 'Date of birth' : _formatDate(_dateOfBirth!);
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
-    final secondaryInk = context.colors.textSecondary;
+    final c = context.colors;
 
-    return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.screenGutter),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                OnboardingProgressHeader(
-                  step: 2,
-                  totalSteps: 2,
-                  onBack: () {
-                    // If we can pop (pushed from Step 1), do so. Otherwise
-                    // this is a root route (app reopened mid-onboarding) —
-                    // sign out so AuthGate returns to LoginScreen.
-                    if (Navigator.of(context).canPop()) {
-                      Navigator.of(context).pop();
-                    } else {
-                      ref.read(authServiceProvider).signOut();
-                    }
-                  },
+    return AppAuthScaffold(
+      header: AppAuthHeader.compact(
+        title: 'Complete your\nprofile',
+        subtitle: 'So riders and vendors know who they are looking for.',
+        onBack: () {
+          // If we can pop (pushed from Step 1), do so. Otherwise
+          // this is a root route (app reopened mid-onboarding) —
+          // sign out so AuthGate returns to LoginScreen.
+          if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          } else {
+            ref.read(authServiceProvider).signOut();
+          }
+        },
+        step: 2,
+        totalSteps: 2,
+        stepLabel: '2 / 2',
+      ),
+      body: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 22),
+            if (_errorText != null) ...[
+              AppInlineNotice(isError: true, text: _errorText!),
+              const SizedBox(height: AppSpacing.md),
+            ],
+            AppFieldPair(
+              left: AppTextField(
+                large: true,
+                controller: _nicknameController,
+                label: 'Nickname',
+                textInputAction: TextInputAction.next,
+                validator: (v) => AuthValidators.required(
+                  v,
+                  fieldName: 'a nickname',
                 ),
-                const SizedBox(height: AppSpacing.xl),
-                Text(
-                  'Complete your\nprofile',
-                  style: textTheme.headlineMedium,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  'So riders and vendors know who they are looking for.',
-                  style: textTheme.bodyMedium?.copyWith(color: secondaryInk),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                if (_errorText != null) ...[
-                  AppInlineNotice(isError: true, text: _errorText!),
-                  const SizedBox(height: AppSpacing.md),
-                ],
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: AppTextField(
-                        controller: _nicknameController,
-                        label: 'Nickname',
-                        prefixIcon: Icons.alternate_email,
-                        textInputAction: TextInputAction.next,
-                        validator: (v) => AuthValidators.required(
-                          v,
-                          fieldName: 'a nickname',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: InkWell(
-                        onTap: _pickDateOfBirth,
-                        child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Date of birth',
-                            suffixIcon: Icon(Icons.calendar_today_outlined),
-                          ),
-                          child: Text(dobLabel),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.md),
-                AppTextField(
-                  controller: _fullNameController,
-                  label: 'Full name',
-                  hint: 'As written on your ID card',
-                  prefixIcon: Icons.badge_outlined,
-                  textInputAction: TextInputAction.next,
-                  validator: (v) =>
-                      AuthValidators.required(v, fieldName: 'your full name'),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                AppTextField(
-                  controller: _matricController,
-                  label: 'Matric number (optional)',
-                  hint: 'RUN / CMP / 22 / 1234',
-                  prefixIcon: Icons.badge_outlined,
-                  textInputAction: TextInputAction.next,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                DropdownButtonFormField<String>(
-                  initialValue: _school,
-                  decoration: const InputDecoration(
-                    labelText: 'Region / School',
-                  ),
-                  items: [
-                    for (final school in _availableSchools)
-                      DropdownMenuItem(value: school, child: Text(school)),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _school = value ?? _school),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                AppTextField(
-                  controller: _referralController,
-                  label: 'Referral code',
-                  hint: 'FLEX500 (optional)',
-                  prefixIcon: Icons.card_giftcard_outlined,
-                  textInputAction: TextInputAction.done,
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                Text('Transaction PIN', style: textTheme.titleSmall),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  'You\'ll enter this 4-digit PIN to confirm every order.',
-                  style: textTheme.bodySmall?.copyWith(
-                    color: secondaryInk,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Row(
-                  children: [
-                    Expanded(
-                      child: AppTextField(
-                        controller: _pinController,
-                        label: 'PIN',
-                        obscureText: true,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(4),
-                        ],
-                        validator: (v) => (v == null || v.length != 4)
-                            ? 'Enter 4 digits'
-                            : null,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: AppTextField(
-                        controller: _pinConfirmController,
-                        label: 'Confirm PIN',
-                        obscureText: true,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(4),
-                        ],
-                        validator: (v) => (v == null || v.length != 4)
-                            ? 'Enter 4 digits'
-                            : null,
-                      ),
-                    ),
-                  ],
-                ),
-                if (_pinError != null) ...[
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    _pinError!,
-                    style: textTheme.bodySmall?.copyWith(
-                      color: colorScheme.error,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: AppSpacing.xl),
-                AppButton(
-                  label: 'Finish setup',
-                  icon: AppIcons.success,
-                  isLoading: _isLoading,
-                  onPressed: _submit,
-                ),
-              ],
+              ),
+              right: AppPickerField(
+                placeholder: 'Date of birth',
+                valueText:
+                    _dateOfBirth == null ? null : _formatDate(_dateOfBirth!),
+                trailingIcon: AppIcons.calendar,
+                onTap: _pickDateOfBirth,
+              ),
             ),
-          ),
+            const SizedBox(height: 10),
+            AppTextField(
+              large: true,
+              controller: _fullNameController,
+              label: 'Full name',
+              hint: 'As written on your ID card',
+              prefixIcon: AppIcons.idCard,
+              textInputAction: TextInputAction.next,
+              validator: (v) =>
+                  AuthValidators.required(v, fieldName: 'your full name'),
+            ),
+            const SizedBox(height: 10),
+            AppTextField(
+              large: true,
+              controller: _matricController,
+              label: 'Matric number (optional)',
+              hint: 'RUN / CMP / 22 / 1234',
+              prefixIcon: AppIcons.idCard,
+              textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 10),
+            AppDropdownField<String>(
+              label: 'Region / School',
+              leadingIcon: AppIcons.building,
+              value: _school,
+              items: [
+                for (final school in _availableSchools)
+                  AppDropdownItem(school, school),
+              ],
+              onChanged: (value) => setState(() => _school = value),
+            ),
+            const SizedBox(height: 10),
+            AppTextField(
+              large: true,
+              controller: _referralController,
+              label: 'Referral code',
+              hint: 'FLEX500 (optional)',
+              prefixIcon: AppIcons.gift,
+              textInputAction: TextInputAction.done,
+            ),
+            const SizedBox(height: 22),
+            const AppFormSection(title: 'Transaction PIN'),
+            Padding(
+              padding: const EdgeInsets.only(left: 2, bottom: 10),
+              child: Text(
+                'You\'ll enter this 4-digit PIN to confirm every order.',
+                style: AppTypography.meta(c),
+              ),
+            ),
+            AppFieldPair(
+              left: _pinField(_pinController, 'PIN'),
+              right: _pinField(_pinConfirmController, 'Confirm PIN'),
+            ),
+            if (_pinError != null) ...[
+              const SizedBox(height: AppSpacing.sm),
+              AppFieldErrorRow(_pinError!),
+            ],
+          ],
+        ),
+      ),
+      footer: AppPinnedFooter(
+        primary: AppButton(
+          label: 'Finish setup',
+          icon: AppIcons.success,
+          isLoading: _isLoading,
+          onPressed: _submit,
         ),
       ),
     );
   }
+
+  Widget _pinField(TextEditingController controller, String label) =>
+      AppTextField(
+        large: true,
+        controller: controller,
+        label: label,
+        obscureText: true,
+        keyboardType: TextInputType.number,
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly,
+          LengthLimitingTextInputFormatter(4),
+        ],
+        validator: (v) =>
+            (v == null || v.length != 4) ? 'Enter 4 digits' : null,
+      );
 }

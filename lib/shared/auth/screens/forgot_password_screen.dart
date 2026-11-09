@@ -5,7 +5,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth/auth_providers.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
-import '../../widgets/app_bar/uniflex_app_bar.dart';
+import '../../theme/app_typography.dart';
+import '../../widgets/auth/app_auth_header.dart';
+import '../../widgets/auth/auth_scaffold.dart';
 import '../../widgets/buttons/app_button.dart';
 import '../../widgets/inputs/app_text_field.dart';
 import '../validators.dart';
@@ -64,53 +66,48 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final secondaryInk = context.colors.textSecondary;
+    final c = context.colors;
 
-    return Scaffold(
-      appBar: const UniflexAppBar(title: 'Forgot Password'),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.screenGutter),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: AppSpacing.lg),
-                Text(
-                  'Reset your password',
-                  style: textTheme.headlineSmall,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  'Enter the email on your account and we\'ll send you a '
-                  '6-digit code to reset your password.',
-                  style: textTheme.bodyMedium?.copyWith(color: secondaryInk),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                if (_errorText != null) ...[
-                  AppInlineNotice(isError: true, text: _errorText!),
-                  const SizedBox(height: AppSpacing.md),
-                ],
-                AppTextField(
-                  controller: _emailController,
-                  label: 'Email address',
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.done,
-                  prefixIcon: AppIcons.mail,
-                  validator: AuthValidators.email,
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                AppButton(
-                  label: 'Send Code',
-                  icon: AppIcons.mail,
-                  isLoading: _isLoading,
-                  onPressed: _submit,
-                ),
-              ],
+    return AppAuthScaffold(
+      header: AppAuthHeader.compact(
+        title: 'Forgot Password',
+        subtitle: 'Reset your password',
+        onBack: () => Navigator.of(context).maybePop(),
+      ),
+      body: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 28),
+            Text(
+              'Enter the email on your account and we\'ll send you a '
+              '6-digit code to reset your password.',
+              style: AppTypography.meta(c),
             ),
-          ),
+            const SizedBox(height: 20),
+            if (_errorText != null) ...[
+              AppInlineNotice(isError: true, text: _errorText!),
+              const SizedBox(height: AppSpacing.md),
+            ],
+            AppTextField(
+              large: true,
+              controller: _emailController,
+              label: 'Email address',
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.done,
+              prefixIcon: AppIcons.mail,
+              validator: AuthValidators.email,
+            ),
+          ],
+        ),
+      ),
+      footer: AppPinnedFooter(
+        primary: AppButton(
+          label: 'Send Code',
+          icon: AppIcons.mail,
+          isLoading: _isLoading,
+          onPressed: _submit,
         ),
       ),
     );

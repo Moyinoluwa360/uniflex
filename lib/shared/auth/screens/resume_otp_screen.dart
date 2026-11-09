@@ -5,7 +5,10 @@ import '../../services/auth/auth_providers.dart';
 import '../../services/otp/phone_otp_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
-import '../../widgets/app_bar/uniflex_app_bar.dart';
+import '../../theme/app_typography.dart';
+import '../../widgets/auth/app_auth_header.dart';
+import '../../widgets/auth/auth_scaffold.dart';
+import '../../widgets/inputs/app_otp_field.dart';
 import '../../widgets/buttons/app_button.dart';
 import '../../widgets/inputs/app_text_field.dart';
 import '../validators.dart';
@@ -143,134 +146,122 @@ class _ResumeOtpScreenState extends ConsumerState<ResumeOtpScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
-    final secondaryInk = context.colors.textSecondary;
+    final c = context.colors;
 
-    return Scaffold(
-      appBar: UniflexAppBar(
+    // The one pinned action depends on the phase (A/B send, C verify).
+    final Widget primary;
+    if (_pinId != null) {
+      primary = AppButton(
+        label: 'Verify',
+        icon: AppIcons.success,
+        isLoading: _isVerifying,
+        onPressed: _verify,
+      );
+    } else if (_resolvedPhone == null) {
+      primary = AppButton(
+        label: 'Send Code',
+        icon: Icons.send_outlined,
+        isLoading: _isSending,
+        onPressed: _pinId == null ? _sendCode : null,
+      );
+    } else {
+      primary = AppButton(
+        label: 'Send Code',
+        icon: Icons.send_outlined,
+        isLoading: _isSending,
+        onPressed: _sendCode,
+      );
+    }
+
+    return AppAuthScaffold(
+      header: AppAuthHeader.compact(
         title: 'Verify Phone Number',
-        leading: IconButton(
-          icon: const Icon(AppIcons.close),
-          tooltip: 'Cancel sign-up',
-          onPressed: () => ref.read(authServiceProvider).signOut(),
-        ),
+        subtitle: 'Verify your phone',
+        backIcon: AppIcons.close,
+        backTooltip: 'Cancel sign-up',
+        onBack: () => ref.read(authServiceProvider).signOut(),
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.screenGutter),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Verify your phone',
-                style: textTheme.headlineMedium,
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                'We need to verify your phone number to continue.',
-                style: textTheme.bodyMedium?.copyWith(color: secondaryInk),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-
-              // ── Error banner ──────────────────────────────────────────
-              if (_errorText != null) ...[
-                AppInlineNotice(isError: true, text: _errorText!),
-                const SizedBox(height: AppSpacing.md),
-              ],
-
-              // ── Phase A: phone number unknown → ask for it ────────────
-              if (_resolvedPhone == null) ...[
-                Form(
-                  key: _phoneFormKey,
-                  child: AppTextField(
-                    controller: _phoneController,
-                    label: 'Phone number',
-                    hint: '08012345678',
-                    keyboardType: TextInputType.phone,
-                    textInputAction: TextInputAction.done,
-                    prefixIcon: AppIcons.phone,
-                    validator: AuthValidators.phone,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                AppButton(
-                  label: 'Send Code',
-                  icon: Icons.send_outlined,
-                  isLoading: _isSending,
-                  onPressed: _pinId == null ? _sendCode : null,
-                ),
-              ],
-
-              // ── Phase B: phone known, OTP not yet sent → confirm + send
-              if (_resolvedPhone != null && _pinId == null) ...[
-                Container(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(AppRadius.control),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        AppIcons.phone,
-                        size: 20,
-                        color: colorScheme.onSurface.withValues(alpha: 0.7),
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: Text(
-                          "We'll send a new code to $_resolvedPhone",
-                          style: textTheme.bodyMedium,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                AppButton(
-                  label: 'Send Code',
-                  icon: Icons.send_outlined,
-                  isLoading: _isSending,
-                  onPressed: _sendCode,
-                ),
-              ],
-
-              // ── Phase C: OTP sent → show input + verify ───────────────
-              if (_pinId != null) ...[
-                Text(
-                  'Enter the code sent to $_resolvedPhone.',
-                  style: textTheme.bodyMedium?.copyWith(color: secondaryInk),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                AppTextField(
-                  controller: _codeController,
-                  label: 'Verification code',
-                  keyboardType: TextInputType.number,
-                  textInputAction: TextInputAction.done,
-                  prefixIcon: Icons.sms_outlined,
-                  maxLength: 6,
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                AppButton(
-                  label: 'Verify',
-                  icon: AppIcons.success,
-                  isLoading: _isVerifying,
-                  onPressed: _verify,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                AppButton(
-                  label: _isSending ? 'Resending…' : 'Resend code',
-                  variant: AppButtonVariant.text,
-                  size: AppButtonSize.small,
-                  expand: false,
-                  onPressed: _isSending ? null : _resend,
-                ),
-              ],
-            ],
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 28),
+          Text(
+            'We need to verify your phone number to continue.',
+            style: AppTypography.meta(c),
           ),
-        ),
+          const SizedBox(height: 20),
+
+          // ── Error banner ──────────────────────────────────────────
+          if (_errorText != null && _pinId == null) ...[
+            AppInlineNotice(isError: true, text: _errorText!),
+            const SizedBox(height: AppSpacing.md),
+          ],
+
+          // ── Phase A: phone number unknown → ask for it ────────────
+          if (_resolvedPhone == null)
+            Form(
+              key: _phoneFormKey,
+              child: AppTextField(
+                large: true,
+                controller: _phoneController,
+                label: 'Phone number',
+                hint: '08012345678',
+                keyboardType: TextInputType.phone,
+                textInputAction: TextInputAction.done,
+                prefixIcon: AppIcons.phone,
+                validator: AuthValidators.phone,
+              ),
+            ),
+
+          // ── Phase B: phone known, OTP not yet sent → confirm + send
+          if (_resolvedPhone != null && _pinId == null)
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: c.surface,
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                border: Border.all(color: c.border),
+              ),
+              child: Row(
+                children: [
+                  Icon(AppIcons.phone, size: 22, color: c.textSecondary),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      "We'll send a new code to $_resolvedPhone",
+                      style: AppTypography.body(c),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // ── Phase C: OTP sent → show input + verify ───────────────
+          if (_pinId != null) ...[
+            Text(
+              'Enter the code sent to $_resolvedPhone.',
+              style: AppTypography.meta(c),
+            ),
+            const SizedBox(height: 20),
+            AppOtpField(
+              controller: _codeController,
+              length: 6,
+              errorText: _errorText,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Center(
+              child: AppButton(
+                label: _isSending ? 'Resending…' : 'Resend code',
+                variant: AppButtonVariant.text,
+                size: AppButtonSize.small,
+                expand: false,
+                onPressed: _isSending ? null : _resend,
+              ),
+            ),
+          ],
+        ],
       ),
+      footer: AppPinnedFooter(primary: primary),
     );
   }
 }

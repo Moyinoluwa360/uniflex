@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented here, phase by phase.
 
+## UI Polish 3 — login + create-account look (2026-11-09)
+
+**Presentation only.** Every field, label/hint string, validator, keyboard type,
+OTP length/resend/timer, route, referral and fire-once guard is unchanged.
+
+**Changed**
+- Login, sign-up steps 1-3, Forgot/Reset password, the legacy Resume-OTP and
+  Complete-profile screens use a green header (Home gradient) with an orange
+  accent circle, 56 px inputs, and one primary button pinned above the keyboard.
+- Step 2's code is six boxes drawn over ONE hidden field (same controller).
+- A field's label now sits inside its box as the placeholder; a separate hint
+  becomes the helper line under it. The school dropdown opens an `AppSheet`.
+- The only new text: Login's "Food / Deliveries / Errands" chips and the
+  "Redeemer's University" caption.
+
+**Added** `AppAuthHeader`, `AppStepProgress`, `AppAuthScaffold`,
+`AppPinnedFooter`, `AppTextField(large)`, `AppPickerField`, `AppDropdownField`,
+`AppOtpField`, `AppFormSection`, `AppChoiceChip`, `AppCheckboxRow`,
+`AppFieldPair`; tokens `authAccent`, `authSub`. **Removed**
+`OnboardingProgressHeader`.
+
 ## UI Polish 2 — every screen on the new look (2026-11-09)
 
 **Presentation only.** Branch `ui-polish`, one commit per batch (A glass nav +

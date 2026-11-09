@@ -5,7 +5,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth/auth_providers.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
-import '../../widgets/app_bar/uniflex_app_bar.dart';
+import '../../theme/app_typography.dart';
+import '../../widgets/auth/app_auth_header.dart';
+import '../../widgets/auth/auth_scaffold.dart';
 import '../../widgets/buttons/app_button.dart';
 import '../../widgets/inputs/app_text_field.dart';
 import '../../widgets/notice/app_inline_notice.dart';
@@ -76,84 +78,81 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final secondaryInk = context.colors.textSecondary;
+    final c = context.colors;
 
-    return Scaffold(
-      appBar: const UniflexAppBar(title: 'Reset Password'),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.screenGutter),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: AppSpacing.lg),
-                Text(
-                  'Check your email',
-                  style: textTheme.headlineSmall,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  'We sent a 6-digit code to ${widget.email}. Enter it '
-                  'below along with your new password.',
-                  style: textTheme.bodyMedium?.copyWith(color: secondaryInk),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                if (_errorText != null) ...[
-                  AppInlineNotice(isError: true, text: _errorText!),
-                  const SizedBox(height: AppSpacing.md),
-                ],
-                AppTextField(
-                  controller: _codeController,
-                  label: '6-digit code',
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                  prefixIcon: Icons.pin_outlined,
-                  validator: (v) => (v == null || v.trim().length != 6)
-                      ? 'Enter the 6-digit code'
-                      : null,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                AppTextField(
-                  controller: _passwordController,
-                  label: 'New password',
-                  obscureText: _obscure,
-                  prefixIcon: AppIcons.lock,
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscure ? AppIcons.eye : AppIcons.eyeOff),
-                    onPressed: () => setState(() => _obscure = !_obscure),
-                  ),
-                  validator: (v) {
-                    if (v == null || v.length < 8) {
-                      return 'At least 8 characters';
-                    }
-                    if (!RegExp(r'\d').hasMatch(v)) {
-                      return 'Include at least one digit';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: AppSpacing.md),
-                AppTextField(
-                  controller: _confirmController,
-                  label: 'Confirm new password',
-                  obscureText: _obscure,
-                  prefixIcon: AppIcons.lock,
-                  validator: (v) =>
-                      (v ?? '').isEmpty ? 'Confirm your new password' : null,
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                AppButton(
-                  label: 'Reset Password',
-                  icon: Icons.lock_reset_outlined,
-                  isLoading: _isLoading,
-                  onPressed: _submit,
-                ),
-              ],
+    return AppAuthScaffold(
+      header: AppAuthHeader.compact(
+        title: 'Reset Password',
+        subtitle: 'Check your email',
+        onBack: () => Navigator.of(context).maybePop(),
+      ),
+      body: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 28),
+            Text(
+              'We sent a 6-digit code to ${widget.email}. Enter it '
+              'below along with your new password.',
+              style: AppTypography.meta(c),
             ),
-          ),
+            const SizedBox(height: 20),
+            if (_errorText != null) ...[
+              AppInlineNotice(isError: true, text: _errorText!),
+              const SizedBox(height: AppSpacing.md),
+            ],
+            AppTextField(
+              large: true,
+              controller: _codeController,
+              label: '6-digit code',
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              prefixIcon: AppIcons.pin,
+              validator: (v) => (v == null || v.trim().length != 6)
+                  ? 'Enter the 6-digit code'
+                  : null,
+            ),
+            const SizedBox(height: 10),
+            AppTextField(
+              large: true,
+              controller: _passwordController,
+              label: 'New password',
+              obscureText: _obscure,
+              prefixIcon: AppIcons.lock,
+              suffixIcon: IconButton(
+                icon: Icon(_obscure ? AppIcons.eye : AppIcons.eyeOff),
+                onPressed: () => setState(() => _obscure = !_obscure),
+              ),
+              validator: (v) {
+                if (v == null || v.length < 8) {
+                  return 'At least 8 characters';
+                }
+                if (!RegExp(r'\d').hasMatch(v)) {
+                  return 'Include at least one digit';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 10),
+            AppTextField(
+              large: true,
+              controller: _confirmController,
+              label: 'Confirm new password',
+              obscureText: _obscure,
+              prefixIcon: AppIcons.lock,
+              validator: (v) =>
+                  (v ?? '').isEmpty ? 'Confirm your new password' : null,
+            ),
+          ],
+        ),
+      ),
+      footer: AppPinnedFooter(
+        primary: AppButton(
+          label: 'Reset Password',
+          icon: Icons.lock_reset_outlined,
+          isLoading: _isLoading,
+          onPressed: _submit,
         ),
       ),
     );

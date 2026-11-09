@@ -457,6 +457,20 @@ reach: [docs/ui-audit.md](docs/ui-audit.md).
 Rider/admin shells keep the classic bottom bar: their scrollables are not
 padded for the floating glass bar.
 
+**UI Polish 3 additions (login + sign-up look)** — `auth/app_auth_header.dart`
+(`AppAuthHeader.login/.compact`, `AppStepProgress`: the Home-header gradient
+with the orange `authAccent` circle; text is width-limited so it never sits on
+the circle), `auth/auth_scaffold.dart` (`AppAuthScaffold`: header + body scroll
+together, `AppPinnedFooter` pinned above the keyboard with a 22 px fade),
+`inputs/app_text_field.dart` (`large: true` 56 px look; `AppFieldErrorRow`,
+`appLargeInputDecoration`), `inputs/app_picker_field.dart` (`AppPickerField`,
+`AppDropdownField` -> `AppSheet`), `inputs/app_otp_field.dart` (digit boxes
+painted from ONE hidden `AppTextField`, so paste/backspace/one-time-code work as
+before), `inputs/app_form_parts.dart` (`AppFormSection`, `AppChoiceChip`,
+`AppCheckboxRow`, `AppFieldPair`). Tokens: `authAccent`, `authSub` (white in
+light so header sub-text reaches 4.5:1), halo/disc/track colours. The old
+`OnboardingProgressHeader` is deleted.
+
 **Components — `lib/shared/widgets/`**
 
 `buttons/app_button.dart` (`AppButton`: primary / secondary / text /
