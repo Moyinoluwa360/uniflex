@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
-import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../services/admin_providers.dart';
 import '../services/admin_service.dart';
@@ -299,7 +299,7 @@ class _ReferralCodeFormScreenState
                 maxLines: 2,
               ),
               const SizedBox(height: AppSpacing.xl),
-              PrimaryButton(
+              AppButton(
                 label: _isEdit ? 'Save changes' : 'Create code',
                 icon: Icons.check,
                 isLoading: _isSaving,
@@ -330,14 +330,14 @@ class _SelectedOwnerTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: AppColors.emerald.withValues(alpha: 0.08),
+        color: context.colors.surfaceRaised,
         borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.emerald.withValues(alpha: 0.3)),
+        border: Border.all(color: context.colors.border),
       ),
       child: Row(
         children: [
-          const Icon(Icons.check_circle_outline,
-              color: AppColors.emerald, size: 18),
+          Icon(Icons.check_circle_outline,
+              color: context.colors.brandText, size: 18),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(

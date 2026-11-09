@@ -267,7 +267,7 @@ class _ConversationTile extends StatelessWidget {
                   child: Text(
                     '${conv.adminUnreadCount}',
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: AppColors.pureWhite,
+                      color: context.colors.onBrand,
                       fontWeight: FontWeight.w700,
                       fontSize: 10,
                     ),

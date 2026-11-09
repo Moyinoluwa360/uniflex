@@ -5,7 +5,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
-import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../services/admin_providers.dart';
 import '../services/admin_service.dart';
@@ -88,28 +88,16 @@ class RiderManagementScreen extends ConsumerWidget {
   ) async {
     final makeActive = !rider.isActive;
     if (!makeActive) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Remove rider?'),
-          content: Text(
-            '"${rider.fullName}" will no longer be able to sign in or '
+      final confirmed = await AppDialog.show(
+context,
+title: 'Remove rider?',
+body: '"${rider.fullName}" will no longer be able to sign in or '
             'receive jobs. Their account and delivery history are kept — '
             'you can reactivate them any time.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Remove'),
-            ),
-          ],
-        ),
-      );
+secondaryLabel: 'Cancel',
+confirmLabel: 'Remove',
+destructive: true,
+);
       if (confirmed != true) return;
     }
 
@@ -241,7 +229,7 @@ class RiderManagementScreen extends ConsumerWidget {
                           : null,
                     ),
                     const SizedBox(height: AppSpacing.lg),
-                    PrimaryButton(
+                    AppButton(
                       label: 'Create Rider Account',
                       icon: Icons.person_add_outlined,
                       isLoading: isSaving,
@@ -279,12 +267,12 @@ class _RiderCard extends StatelessWidget {
           children: [
             CircleAvatar(
               backgroundColor: rider.isActive
-                  ? AppColors.emerald.withValues(alpha: 0.15)
+                  ? context.colors.surfaceRaised
                   : theme.colorScheme.surfaceContainerHighest,
               child: Icon(
                 Icons.two_wheeler_outlined,
                 color: rider.isActive
-                    ? AppColors.emerald
+                    ? context.colors.brandText
                     : theme.colorScheme.onSurface.withValues(alpha: 0.4),
               ),
             ),
@@ -305,7 +293,7 @@ class _RiderCard extends StatelessWidget {
                       rider.isOnline ? 'Online now' : 'Offline',
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: rider.isOnline
-                            ? AppColors.emerald
+                            ? context.colors.brandText
                             : theme.colorScheme.onSurface
                                 .withValues(alpha: 0.4),
                       ),
@@ -313,16 +301,12 @@ class _RiderCard extends StatelessWidget {
                 ],
               ),
             ),
-            OutlinedButton(
+            AppButton(
+              label: rider.isActive ? 'Remove' : 'Reactivate',
+              variant: AppButtonVariant.quietDanger,
+              size: AppButtonSize.small,
+              expand: false,
               onPressed: onToggle,
-              style: OutlinedButton.styleFrom(
-                foregroundColor:
-                    rider.isActive ? AppColors.error : AppColors.emerald,
-                side: BorderSide(
-                  color: rider.isActive ? AppColors.error : AppColors.emerald,
-                ),
-              ),
-              child: Text(rider.isActive ? 'Remove' : 'Reactivate'),
             ),
           ],
         ),

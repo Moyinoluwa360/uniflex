@@ -8,6 +8,7 @@ import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../services/admin_providers.dart';
 import 'vendor_form_screen.dart';
 import 'vendor_products_screen.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 
 /// Manage partner vendors: list all vendors, add/edit, and manage each
 /// vendor's product menu. The Uniflex vendor itself is excluded — its menu
@@ -94,26 +95,14 @@ class VendorManagementScreen extends ConsumerWidget {
     WidgetRef ref,
     Vendor vendor,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete vendor?'),
-        content: Text(
-          'Remove "${vendor.name}"? This will also delete all their products.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
+    final confirmed = await AppDialog.show(
+context,
+title: 'Delete vendor?',
+body: 'Remove "${vendor.name}"? This will also delete all their products.',
+secondaryLabel: 'Cancel',
+confirmLabel: 'Delete',
+destructive: true,
+);
     if (confirmed != true) return;
     try {
       await ref.read(adminServiceProvider).deleteVendor(vendor.id);
@@ -231,7 +220,7 @@ class _VendorCard extends StatelessWidget {
                 Switch(
                   value: vendor.isActive,
                   onChanged: onToggle,
-                  activeThumbColor: AppColors.emerald,
+                  activeThumbColor: context.colors.brand,
                 ),
                 // More options
                 PopupMenuButton<String>(
@@ -240,13 +229,15 @@ class _VendorCard extends StatelessWidget {
                     if (v == 'menu') onManageMenu();
                     if (v == 'delete') onDelete();
                   },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'edit', child: Text('Edit')),
-                    PopupMenuItem(value: 'menu', child: Text('Manage Menu')),
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(
+                        value: 'edit', child: Text('Edit')),
+                    const PopupMenuItem(
+                        value: 'menu', child: Text('Manage Menu')),
                     PopupMenuItem(
                       value: 'delete',
                       child: Text('Delete',
-                          style: TextStyle(color: AppColors.error)),
+                          style: TextStyle(color: context.colors.dangerText)),
                     ),
                   ],
                 ),
@@ -283,16 +274,12 @@ class _VendorCard extends StatelessWidget {
               ),
             ],
             const SizedBox(height: AppSpacing.sm),
-            OutlinedButton.icon(
+            AppButton(
+              label: 'Manage Menu',
+              variant: AppButtonVariant.secondary,
+              size: AppButtonSize.small,
+              icon: Icons.menu_book_outlined,
               onPressed: onManageMenu,
-              icon: const Icon(Icons.menu_book_outlined, size: 16),
-              label: const Text('Manage Menu'),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.md,
-                  vertical: AppSpacing.xs + 2,
-                ),
-              ),
             ),
           ],
         ),

@@ -9,6 +9,7 @@ import '../../shared/widgets/async/retry_section.dart';
 import '../../shared/widgets/media/app_image.dart';
 import '../services/admin_providers.dart';
 import 'advertisement_form_screen.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 
 /// Admin management of the advertisement banners on the student home page.
 /// Replaces the hardcoded promo list that used to live in the Flutter app.
@@ -93,24 +94,14 @@ class AdvertisementsScreen extends ConsumerWidget {
     WidgetRef ref,
     Advertisement ad,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete advertisement?'),
-        content: Text('Remove "${ad.title}" from the home carousel?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
+    final confirmed = await AppDialog.show(
+context,
+title: 'Delete advertisement?',
+body: 'Remove "${ad.title}" from the home carousel?',
+secondaryLabel: 'Cancel',
+confirmLabel: 'Delete',
+destructive: true,
+);
     if (confirmed != true) return;
     await ref.read(adminServiceProvider).deleteAdvertisement(ad.id);
     ref.invalidate(adminAdvertisementsProvider);
@@ -130,18 +121,18 @@ class _AdCard extends StatelessWidget {
   final ValueChanged<bool> onToggle;
   final VoidCallback onDelete;
 
-  Color _statusColor() => switch (ad.statusLabel) {
-        'Live' => AppColors.emerald,
-        'Scheduled' => AppColors.info,
-        'Ended' => AppColors.mediumGrey,
-        _ => AppColors.orange,
+  Color _statusColor(BuildContext context) => switch (ad.statusLabel) {
+        'Live' => context.colors.brandText,
+        'Scheduled' => context.colors.textSecondary,
+        'Ended' => context.colors.textTertiary,
+        _ => context.colors.statusAmber,
       };
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
-    final statusColor = _statusColor();
+    final statusColor = _statusColor(context);
 
     return Card(
       margin: const EdgeInsets.only(bottom: AppSpacing.cardGap),
@@ -161,10 +152,11 @@ class _AdCard extends StatelessWidget {
                 child: ad.imageUrl != null && ad.imageUrl!.isNotEmpty
                     ? AppImage(url: ad.imageUrl, fit: BoxFit.cover)
                     : ColoredBox(
-                        color:
-                            ad.isDark ? AppColors.matteBlack : AppColors.orange,
+                        color: ad.isDark
+                            ? AppColors.adDark
+                            : context.colors.promoOrangeStart,
                         child: const Icon(Icons.campaign_outlined,
-                            color: AppColors.pureWhite, size: 20),
+                            color: AppColors.onMedia, size: 20),
                       ),
               ),
             ),
@@ -191,7 +183,7 @@ class _AdCard extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: AppSpacing.sm, vertical: 2),
                         decoration: BoxDecoration(
-                          color: statusColor.withValues(alpha: 0.12),
+                          color: context.colors.surfaceRaised,
                           borderRadius: BorderRadius.circular(AppRadius.pill),
                         ),
                         child: Text(
@@ -220,19 +212,19 @@ class _AdCard extends StatelessWidget {
             Switch(
               value: ad.isActive,
               onChanged: onToggle,
-              activeThumbColor: AppColors.emerald,
+              activeThumbColor: context.colors.brand,
             ),
             PopupMenuButton<String>(
               onSelected: (v) {
                 if (v == 'edit') onEdit();
                 if (v == 'delete') onDelete();
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'edit', child: Text('Edit')),
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'edit', child: Text('Edit')),
                 PopupMenuItem(
                   value: 'delete',
-                  child:
-                      Text('Delete', style: TextStyle(color: AppColors.error)),
+                  child: Text('Delete',
+                      style: TextStyle(color: context.colors.dangerText)),
                 ),
               ],
             ),

@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/connectivity/connectivity_service.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_icons.dart';
+import '../../theme/app_typography.dart';
 
 /// Riverpod provider that re-emits the connectivity stream.
 final connectivityProvider = StreamProvider<bool>((ref) {
@@ -108,32 +111,29 @@ class _BannerStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isOnline ? const Color(0xFF2E7D32) : const Color(0xFFC62828);
+    final c = context.colors;
+    final color = isOnline ? c.brandText : c.dangerText;
     final label = isOnline ? 'Back online' : 'No internet connection';
-    final icon = isOnline ? Icons.wifi : Icons.wifi_off;
+    final icon = isOnline ? AppIcons.success : AppIcons.offline;
 
     return Material(
-      color: color,
+      color: c.surfaceRaised,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Row(
           children: [
-            Icon(icon, color: Colors.white, size: 16),
+            Icon(icon, color: color, size: 16),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: AppTypography.meta(c).copyWith(color: color),
               ),
             ),
             if (onDismiss != null)
               GestureDetector(
                 onTap: onDismiss,
-                child: const Icon(Icons.close, color: Colors.white, size: 18),
+                child: Icon(AppIcons.close, color: c.textSecondary, size: 18),
               ),
           ],
         ),

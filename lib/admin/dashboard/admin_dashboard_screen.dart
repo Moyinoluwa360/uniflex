@@ -76,14 +76,15 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                       Text(
                         'Dashboard',
                         style: theme.textTheme.titleLarge?.copyWith(
-                          color: AppColors.pureWhite,
+                          color: context.colors.onBrand,
                         ),
                       ),
                       if (profile?.fullName != null)
                         Text(
                           profile!.fullName!,
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: AppColors.pureWhite.withValues(alpha: 0.8),
+                            color:
+                                context.colors.onBrand.withValues(alpha: 0.8),
                           ),
                         ),
                     ],
@@ -91,7 +92,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                 ),
                 actions: [
                   IconButton(
-                    icon: const Icon(Icons.refresh, color: AppColors.pureWhite),
+                    icon: Icon(Icons.refresh, color: context.colors.onBrand),
                     tooltip: 'Refresh',
                     onPressed: _refresh,
                   ),
@@ -158,19 +159,19 @@ class DashboardStatsView extends StatelessWidget {
               label: 'Pending / in progress',
               value: '${statNum(stats, 'pending_count').toInt()}',
               icon: Icons.hourglass_empty_outlined,
-              color: AppColors.orange,
+              color: context.colors.statusAmber,
             ),
             StatTile(
               label: 'Completed today',
               value: '${statNum(stats, 'completed_today').toInt()}',
               icon: Icons.check_circle_outline,
-              color: AppColors.emerald,
+              color: context.colors.brandText,
             ),
             StatTile(
               label: 'Cancelled today',
               value: '${statNum(stats, 'cancelled_today').toInt()}',
               icon: Icons.cancel_outlined,
-              color: AppColors.error,
+              color: context.colors.dangerText,
             ),
           ],
         ),
@@ -184,7 +185,7 @@ class DashboardStatsView extends StatelessWidget {
           today: statNum(stats, 'fees_today'),
           week: statNum(stats, 'fees_week'),
           month: statNum(stats, 'fees_month'),
-          color: kFeesColor,
+          color: context.colors.chartFees,
           icon: Icons.payments_outlined,
         ),
         const SizedBox(height: AppSpacing.cardGap),
@@ -194,7 +195,7 @@ class DashboardStatsView extends StatelessWidget {
           today: statNum(stats, 'food_today'),
           week: statNum(stats, 'food_week'),
           month: statNum(stats, 'food_month'),
-          color: kFoodColor,
+          color: context.colors.chartFood,
           icon: Icons.restaurant_outlined,
         ),
         const SizedBox(height: AppSpacing.md),

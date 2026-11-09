@@ -5,7 +5,7 @@ import '../../shared/models/errand_category.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
-import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../services/admin_providers.dart';
 
@@ -209,12 +209,12 @@ class _ErrandCategoryFormScreenState
                   Switch(
                     value: _isActive,
                     onChanged: (v) => setState(() => _isActive = v),
-                    activeThumbColor: AppColors.emerald,
+                    activeThumbColor: context.colors.brand,
                   ),
                 ],
               ),
               const SizedBox(height: AppSpacing.xl),
-              PrimaryButton(
+              AppButton(
                 label: isEditing ? 'Save Changes' : 'Add Category',
                 icon: Icons.check,
                 isLoading: _isSaving,

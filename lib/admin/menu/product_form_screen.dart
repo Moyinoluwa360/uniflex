@@ -5,7 +5,7 @@ import '../../shared/models/product.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
-import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 import '../../shared/widgets/image_upload/image_upload_field.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../../shared/utils/app_error_mapper.dart';
@@ -240,14 +240,14 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                   Switch(
                     value: _isAvailable,
                     onChanged: (v) => setState(() => _isAvailable = v),
-                    activeThumbColor: AppColors.emerald,
+                    activeThumbColor: context.colors.brand,
                   ),
                 ],
               ),
 
               const SizedBox(height: AppSpacing.xl),
 
-              PrimaryButton(
+              AppButton(
                 label: isEditing ? 'Save Changes' : 'Add Item',
                 icon: Icons.check,
                 isLoading: _isSaving,

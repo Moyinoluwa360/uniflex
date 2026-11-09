@@ -8,7 +8,7 @@ import '../../shared/theme/app_spacing.dart';
 import '../../shared/utils/app_error_mapper.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
-import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../services/admin_providers.dart';
 import 'menu_section.dart';
@@ -88,26 +88,15 @@ class VendorMenuManager extends ConsumerWidget {
     WidgetRef ref,
     Product product,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Remove item?'),
-        content: Text(
-            'Remove "${product.name}" from the menu? Students will no longer '
-            'see it. Past orders are not affected.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
-    );
+    final confirmed = await AppDialog.show(
+context,
+title: 'Remove item?',
+body: 'Remove "${product.name}" from the menu? Students will no longer '
+            'see it. Past orders are not affected.',
+secondaryLabel: 'Cancel',
+confirmLabel: 'Remove',
+destructive: true,
+);
     if (confirmed != true) return;
     try {
       await ref.read(adminServiceProvider).deleteProduct(product.id);
@@ -205,7 +194,7 @@ class VendorMenuManager extends ConsumerWidget {
                     },
                   ),
                   const SizedBox(height: AppSpacing.lg),
-                  PrimaryButton(
+                  AppButton(
                     label: 'Save',
                     icon: Icons.check,
                     isLoading: saving,
@@ -418,19 +407,19 @@ class MenuItemTile extends StatelessWidget {
               key: ValueKey('switch-${product.id}'),
               value: product.isAvailable,
               onChanged: onToggle,
-              activeThumbColor: AppColors.emerald,
+              activeThumbColor: context.colors.brand,
             ),
             PopupMenuButton<String>(
               onSelected: (v) {
                 if (v == 'edit') onEdit();
                 if (v == 'delete') onDelete();
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'edit', child: Text('Edit')),
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'edit', child: Text('Edit')),
                 PopupMenuItem(
                   value: 'delete',
-                  child:
-                      Text('Remove', style: TextStyle(color: AppColors.error)),
+                  child: Text('Remove',
+                      style: TextStyle(color: context.colors.dangerText)),
                 ),
               ],
             ),

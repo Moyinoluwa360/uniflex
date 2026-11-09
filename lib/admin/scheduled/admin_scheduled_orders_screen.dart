@@ -7,6 +7,7 @@ import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../services/admin_providers.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 
 /// Admin view of all upcoming scheduled orders, ordered by scheduled_for
 /// with a live countdown to each. Backed by Supabase Realtime so counts
@@ -31,8 +32,8 @@ class AdminScheduledOrdersScreen extends ConsumerWidget {
                 Container(
                   width: 8,
                   height: 8,
-                  decoration: const BoxDecoration(
-                    color: AppColors.emerald,
+                  decoration: BoxDecoration(
+                    color: context.colors.brandText,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -40,7 +41,7 @@ class AdminScheduledOrdersScreen extends ConsumerWidget {
                 Text(
                   'Live',
                   style: theme.textTheme.labelSmall
-                      ?.copyWith(color: AppColors.emerald),
+                      ?.copyWith(color: context.colors.brandText),
                 ),
               ],
             ),
@@ -172,9 +173,7 @@ class _ScheduledOrderCardState extends State<_ScheduledOrderCard> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.card),
         side: BorderSide(
-          color: isOverdue
-              ? AppColors.error.withValues(alpha: 0.5)
-              : theme.dividerColor,
+          color: isOverdue ? context.colors.surfaceRaised : theme.dividerColor,
           width: isOverdue ? 1.5 : 1,
         ),
       ),
@@ -196,14 +195,15 @@ class _ScheduledOrderCardState extends State<_ScheduledOrderCard> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: AppSpacing.sm, vertical: 3),
                   decoration: BoxDecoration(
-                    color: (isOverdue ? AppColors.error : AppColors.info)
-                        .withValues(alpha: 0.12),
+                    color: context.colors.surfaceRaised,
                     borderRadius: BorderRadius.circular(AppRadius.pill),
                   ),
                   child: Text(
                     _countdown,
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: isOverdue ? AppColors.error : AppColors.info,
+                      color: isOverdue
+                          ? context.colors.dangerText
+                          : context.colors.textSecondary,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -253,13 +253,13 @@ class _ScheduledOrderCardState extends State<_ScheduledOrderCard> {
                 padding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.sm, vertical: 2),
                 decoration: BoxDecoration(
-                  color: AppColors.orange.withValues(alpha: 0.12),
+                  color: context.colors.surfaceRaised,
                   borderRadius: BorderRadius.circular(AppRadius.pill),
                 ),
                 child: Text(
                   'BULK',
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: AppColors.orange,
+                    color: context.colors.statusAmber,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1,
                   ),
@@ -272,27 +272,27 @@ class _ScheduledOrderCardState extends State<_ScheduledOrderCard> {
                 Text(
                   '₦${order.totalAmount.toStringAsFixed(0)}',
                   style: theme.textTheme.titleSmall?.copyWith(
-                    color: AppColors.emerald,
+                    color: context.colors.brandText,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const Spacer(),
                 if (order.status == OrderStatus.placed)
-                  FilledButton(
+                  AppButton(
+                    label: 'Start Preparing',
+                    variant: AppButtonVariant.primary,
+                    size: AppButtonSize.small,
+                    expand: false,
                     onPressed: widget.onAdvance,
-                    style:
-                        FilledButton.styleFrom(minimumSize: const Size(0, 36)),
-                    child: const Text('Start Preparing'),
                   )
                 else if (order.status == OrderStatus.preparing &&
                     widget.onMarkReady != null)
-                  FilledButton(
+                  AppButton(
+                    label: 'Mark Ready for Pickup',
+                    variant: AppButtonVariant.primary,
+                    size: AppButtonSize.small,
+                    expand: false,
                     onPressed: widget.onMarkReady,
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(0, 36),
-                      backgroundColor: AppColors.emerald,
-                    ),
-                    child: const Text('Mark Ready for Pickup'),
                   ),
               ],
             ),

@@ -5,7 +5,7 @@ import '../../shared/models/vendor.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
-import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 import '../../shared/widgets/image_upload/image_upload_field.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../services/admin_providers.dart';
@@ -188,14 +188,14 @@ class _VendorFormScreenState extends ConsumerState<VendorFormScreen> {
                   Switch(
                     value: _isActive,
                     onChanged: (v) => setState(() => _isActive = v),
-                    activeThumbColor: AppColors.emerald,
+                    activeThumbColor: context.colors.brand,
                   ),
                 ],
               ),
 
               const SizedBox(height: AppSpacing.xl),
 
-              PrimaryButton(
+              AppButton(
                 label: isEditing ? 'Save Changes' : 'Add Vendor',
                 icon: Icons.check,
                 isLoading: _isSaving,

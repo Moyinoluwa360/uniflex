@@ -139,6 +139,17 @@ class AppColors extends ThemeExtension<AppColors> {
   final Color topUpLabel;
   final Color searchFill;
 
+  // ── Chart palette (admin money cards / analytics) ──────────────────
+  /// Fees series. Same hue as the brand so it reads as "money in".
+  Color get chartFees => brand;
+
+  /// Food-payments series. Amber, never the promo orange.
+  Color get chartFood => statusAmber;
+
+  /// Ordered series colours for charts: fees, food, then neutrals.
+  List<Color> get chartPalette =>
+      [chartFees, chartFood, textSecondary, textTertiary];
+
   LinearGradient get homeHeaderGradient => isDark
       ? _css(
           165,
@@ -198,6 +209,17 @@ class AppColors extends ThemeExtension<AppColors> {
   /// The one orange allowed outside promos and the cart: the Home bell's
   /// unread dot.
   static const Color notifyDot = Color(0xFFF97316);
+
+  /// Splash screen (brand moment, same in both themes).
+  static const List<Color> splashGradient = [
+    Color(0xFF12C48C),
+    Color(0xFF10B981),
+    Color(0xFF0E9E74),
+    Color(0xFFF97316),
+  ];
+  static const Color splashHighlightStart = Color.fromRGBO(255, 255, 255, 0.34);
+  static const Color splashHighlightEnd = Color.fromRGBO(255, 255, 255, 0.0);
+  static const Color splashShadow = Color.fromRGBO(6, 46, 35, 0.18);
 
   /// WhatsApp brand green (the "Message on WhatsApp" affordance; third-party
   /// brand colour, same in both themes).

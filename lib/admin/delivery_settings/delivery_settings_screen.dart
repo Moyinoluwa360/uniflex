@@ -6,7 +6,7 @@ import '../../shared/services/supabase/supabase_providers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
-import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../../student/ordering/order_repository.dart';
 
@@ -83,22 +83,14 @@ class DeliverySettingsScreen extends ConsumerWidget {
 
   Future<void> _confirmDelete(
       BuildContext context, WidgetRef ref, DeliveryLocation loc) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete location?'),
-        content: Text('Remove "${loc.name}"? This cannot be undone.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Delete',
-                  style: TextStyle(color: AppColors.error))),
-        ],
-      ),
-    );
+    final confirmed = await AppDialog.show(
+context,
+title: 'Delete location?',
+body: 'Remove "${loc.name}"? This cannot be undone.',
+secondaryLabel: 'Cancel',
+confirmLabel: 'Delete',
+destructive: true,
+);
 
     if (confirmed != true) return;
 
@@ -161,13 +153,13 @@ class _LocationTile extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: AppColors.error.withValues(alpha: 0.12),
+                          color: context.colors.surfaceRaised,
                           borderRadius: BorderRadius.circular(AppRadius.pill),
                         ),
                         child: Text(
                           'Hidden',
                           style: theme.textTheme.labelSmall
-                              ?.copyWith(color: AppColors.error),
+                              ?.copyWith(color: context.colors.dangerText),
                         ),
                       ),
                     ],
@@ -189,8 +181,8 @@ class _LocationTile extends StatelessWidget {
             tooltip: 'Edit',
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline,
-                size: 20, color: AppColors.error),
+            icon: Icon(Icons.delete_outline,
+                size: 20, color: context.colors.dangerText),
             onPressed: onDelete,
             tooltip: 'Delete',
           ),
@@ -333,7 +325,7 @@ class _DeliveryLocationFormScreenState
                 onChanged: (v) => setState(() => _isActive = v),
               ),
               const SizedBox(height: AppSpacing.xl),
-              PrimaryButton(
+              AppButton(
                 label: isEditing ? 'Save Changes' : 'Add Location',
                 icon: Icons.save_outlined,
                 isLoading: _isSaving,

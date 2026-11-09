@@ -69,7 +69,7 @@ class RiderJobCard extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(
                         horizontal: AppSpacing.sm, vertical: 3),
                     decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.12),
+                      color: context.colors.surfaceRaised,
                       borderRadius: BorderRadius.circular(AppRadius.pill),
                     ),
                     child: Text(

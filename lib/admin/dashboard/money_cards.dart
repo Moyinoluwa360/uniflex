@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 
 /// Reads a number out of a stats map (the database returns numeric as
@@ -177,6 +176,3 @@ class StatsFootnote extends StatelessWidget {
     );
   }
 }
-
-const Color kFeesColor = AppColors.emerald;
-const Color kFoodColor = AppColors.orange;

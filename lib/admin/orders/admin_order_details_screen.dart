@@ -13,6 +13,8 @@ import '../../shared/services/supabase/supabase_providers.dart';
 import '../services/admin_providers.dart';
 import '../services/profile_basics.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
+import '../../shared/theme/app_icons.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 
 // ── Detail data models ────────────────────────────────────────────────────────
 
@@ -89,30 +91,18 @@ class _AdminOrderDetailsScreenState
 
   Future<void> _cancel() async {
     final reasonCtrl = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(_isGroup ? 'Cancel this delivery?' : 'Cancel this errand?'),
-        content: AppTextField(
-          controller: reasonCtrl,
-          maxLines: 2,
-          decoration: const InputDecoration(
-            labelText: 'Reason (optional)',
-            hintText: 'e.g. Student requested cancellation',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Keep'),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Cancel Order'),
-          ),
-        ],
+    final confirmed = await AppDialog.show(
+      context,
+      title: _isGroup ? 'Cancel this delivery?' : 'Cancel this errand?',
+      content: AppTextField(
+        controller: reasonCtrl,
+        maxLines: 2,
+        label: 'Reason (optional)',
+        hint: 'e.g. Student requested cancellation',
       ),
+      secondaryLabel: 'Keep',
+      confirmLabel: 'Cancel Order',
+      destructive: true,
     );
     if (confirmed != true || !mounted) return;
 
@@ -183,13 +173,13 @@ class _AdminOrderDetailsScreenState
               padding: const EdgeInsets.symmetric(
                   horizontal: AppSpacing.sm, vertical: 3),
               decoration: BoxDecoration(
-                color: AppColors.accentViolet.withValues(alpha: 0.12),
+                color: context.colors.surfaceRaised,
                 borderRadius: BorderRadius.circular(AppRadius.pill),
               ),
               child: Text(
                 '🎁 GIFT',
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: AppColors.accentViolet,
+                      color: context.colors.textSecondary,
                       fontWeight: FontWeight.w700,
                     ),
               ),
@@ -236,7 +226,7 @@ class _AdminOrderDetailsScreenState
           _InfoRow(
             icon: Icons.sticky_note_2_outlined,
             text: group.studentNote!,
-            color: AppColors.warning,
+            color: context.colors.statusAmber,
           ),
         const SizedBox(height: AppSpacing.lg),
 
@@ -384,7 +374,7 @@ class _AdminOrderDetailsScreenState
           _InfoRow(
             icon: Icons.sticky_note_2_outlined,
             text: order.notes!,
-            color: AppColors.warning,
+            color: context.colors.statusAmber,
           ),
         const SizedBox(height: AppSpacing.lg),
 
@@ -434,23 +424,23 @@ class _AdminOrderDetailsScreenState
 
   Color _groupStatusColor(DeliveryGroupStatus s) {
     return switch (s) {
-      DeliveryGroupStatus.placed => AppColors.orange,
+      DeliveryGroupStatus.placed => context.colors.statusAmber,
       DeliveryGroupStatus.commitmentPaid ||
       DeliveryGroupStatus.riderAccepted =>
         Theme.of(context).colorScheme.primary,
-      DeliveryGroupStatus.awaitingFinalPayment => AppColors.info,
-      DeliveryGroupStatus.outForDelivery => AppColors.emerald,
-      DeliveryGroupStatus.completed => AppColors.emerald,
+      DeliveryGroupStatus.awaitingFinalPayment => context.colors.textSecondary,
+      DeliveryGroupStatus.outForDelivery => context.colors.brandText,
+      DeliveryGroupStatus.completed => context.colors.brandText,
       DeliveryGroupStatus.cancelled => Theme.of(context).colorScheme.error,
     };
   }
 
   Color _errandStatusColor(OrderStatus s) {
     return switch (s) {
-      OrderStatus.placed => AppColors.orange,
+      OrderStatus.placed => context.colors.statusAmber,
       OrderStatus.beingSourced => Theme.of(context).colorScheme.primary,
-      OrderStatus.outForDelivery => AppColors.emerald,
-      OrderStatus.completed => AppColors.emerald,
+      OrderStatus.outForDelivery => context.colors.brandText,
+      OrderStatus.completed => context.colors.brandText,
       OrderStatus.cancelled => Theme.of(context).colorScheme.error,
       _ => Theme.of(context).colorScheme.outline,
     };
@@ -555,9 +545,9 @@ class _StatusBadge extends StatelessWidget {
         padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md, vertical: AppSpacing.xs + 2),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
+          color: context.colors.surfaceRaised,
           borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
+          border: Border.all(color: context.colors.border),
         ),
         child: Text(
           statusLabel,
@@ -578,24 +568,12 @@ class _CancelButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: isCancelling ? null : onCancel,
-        icon: isCancelling
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.cancel_outlined),
-        label: Text(isCancelling ? 'Cancelling…' : 'Cancel Order'),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: Colors.red,
-          side: const BorderSide(color: Colors.red),
-          minimumSize: const Size(double.infinity, AppSpacing.controlHeight),
-        ),
-      ),
+    return AppButton(
+      label: isCancelling ? 'Cancelling…' : 'Cancel Order',
+      variant: AppButtonVariant.quietDanger,
+      icon: AppIcons.close,
+      isLoading: isCancelling,
+      onPressed: isCancelling ? null : onCancel,
     );
   }
 }
@@ -699,14 +677,15 @@ class _FeeRow extends StatelessWidget {
             padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.sm, vertical: 2),
             decoration: BoxDecoration(
-              color: (paid ? AppColors.emerald : AppColors.orange)
-                  .withValues(alpha: 0.12),
+              color: context.colors.surfaceRaised,
               borderRadius: BorderRadius.circular(AppRadius.pill),
             ),
             child: Text(
               paid ? 'paid' : 'pending',
               style: theme.textTheme.labelSmall?.copyWith(
-                color: paid ? AppColors.emerald : AppColors.orange,
+                color: paid
+                    ? context.colors.brandText
+                    : context.colors.statusAmber,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -731,7 +710,7 @@ class _GroupTimeline extends StatelessWidget {
       label: 'Order placed',
       time: group.createdAt,
       icon: Icons.shopping_cart_outlined,
-      color: AppColors.orange,
+      color: context.colors.statusAmber,
     ));
 
     if (group.status.index >= DeliveryGroupStatus.commitmentPaid.index) {
@@ -752,11 +731,11 @@ class _GroupTimeline extends StatelessWidget {
     }
     if (group.status == DeliveryGroupStatus.outForDelivery ||
         group.status == DeliveryGroupStatus.completed) {
-      events.add(const _TimelineEvent(
+      events.add(_TimelineEvent(
         label: 'Out for delivery',
         time: null,
         icon: Icons.delivery_dining_outlined,
-        color: AppColors.emerald,
+        color: context.colors.brandText,
       ));
     }
     if (group.status == DeliveryGroupStatus.completed) {
@@ -764,7 +743,7 @@ class _GroupTimeline extends StatelessWidget {
         label: 'Delivered',
         time: group.completedAt,
         icon: Icons.check_circle_outline,
-        color: AppColors.emerald,
+        color: context.colors.brandText,
       ));
     }
     if (group.status == DeliveryGroupStatus.cancelled) {
@@ -793,7 +772,7 @@ class _ErrandTimeline extends StatelessWidget {
         label: 'Errand placed',
         time: order.createdAt,
         icon: Icons.shopping_bag_outlined,
-        color: AppColors.orange,
+        color: context.colors.statusAmber,
       ),
     ];
 
@@ -807,11 +786,11 @@ class _ErrandTimeline extends StatelessWidget {
     }
     if (order.status == OrderStatus.outForDelivery ||
         order.status == OrderStatus.completed) {
-      events.add(const _TimelineEvent(
+      events.add(_TimelineEvent(
         label: 'Out for delivery',
         time: null,
         icon: Icons.delivery_dining_outlined,
-        color: AppColors.emerald,
+        color: context.colors.brandText,
       ));
     }
     if (order.status == OrderStatus.completed) {
@@ -819,7 +798,7 @@ class _ErrandTimeline extends StatelessWidget {
         label: 'Completed',
         time: order.completedAt,
         icon: Icons.check_circle_outline,
-        color: AppColors.emerald,
+        color: context.colors.brandText,
       ));
     }
     if (order.status == OrderStatus.cancelled) {
@@ -871,7 +850,7 @@ class _TimelineList extends StatelessWidget {
                       width: 28,
                       height: 28,
                       decoration: BoxDecoration(
-                        color: e.color.withValues(alpha: 0.12),
+                        color: context.colors.surfaceRaised,
                         shape: BoxShape.circle,
                       ),
                       child: Icon(e.icon, size: 14, color: e.color),

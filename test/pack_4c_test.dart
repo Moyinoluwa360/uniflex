@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:uniflex/shared/widgets/buttons/app_button.dart';
 import 'package:uniflex/admin/analytics/admin_analytics_screen.dart';
 import 'package:uniflex/admin/dashboard/admin_dashboard_screen.dart';
 import 'package:uniflex/admin/dashboard/money_cards.dart';
@@ -90,7 +91,9 @@ class _FakeAdmin implements AdminService {
 }
 
 Product _product(String id, String name,
-        {String section = 'food', String? sub = 'meal', bool available = true}) =>
+        {String section = 'food',
+        String? sub = 'meal',
+        bool available = true}) =>
     Product(
       id: id,
       vendorId: 'v1',
@@ -177,7 +180,9 @@ Profile _profile({String? nickname = 'Ada', String? fullName = 'Ada Obi'}) =>
 void main() {
   // ── 1. Menu ────────────────────────────────────────────────────────────
   group('Shared menu manager', () {
-    test('MenuSection.of follows the same section/subsection the student page uses', () {
+    test(
+        'MenuSection.of follows the same section/subsection the student page uses',
+        () {
       expect(MenuSection.of(_product('a', 'x')), MenuSection.meals);
       expect(MenuSection.of(_product('a', 'x', sub: 'protein_topping')),
           MenuSection.proteins);
@@ -198,7 +203,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(VendorMenuManager), findsOneWidget);
       expect(
-          tester.widget<VendorMenuManager>(find.byType(VendorMenuManager)).vendorId,
+          tester
+              .widget<VendorMenuManager>(find.byType(VendorMenuManager))
+              .vendorId,
           MenuManagementScreen.uniflexVendorId);
 
       await tester.pumpWidget(_app(
@@ -207,7 +214,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(VendorMenuManager), findsOneWidget);
       expect(
-          tester.widget<VendorMenuManager>(find.byType(VendorMenuManager)).vendorId,
+          tester
+              .widget<VendorMenuManager>(find.byType(VendorMenuManager))
+              .vendorId,
           'partner-1');
       expect(find.text('Mama Put — Menu'), findsOneWidget);
     });
@@ -242,7 +251,8 @@ void main() {
       (MenuSection.drinks, 'drinks', null, false),
       (MenuSection.others, 'others', null, false),
     ]) {
-      testWidgets('"+ Add" in ${c.$1.label} pre-selects it (no category choice)',
+      testWidgets(
+          '"+ Add" in ${c.$1.label} pre-selects it (no category choice)',
           (tester) async {
         final admin = _FakeAdmin();
         await tester.pumpWidget(_app(
@@ -273,7 +283,8 @@ void main() {
       });
     }
 
-    testWidgets('availability switch changes ONLY availability', (tester) async {
+    testWidgets('availability switch changes ONLY availability',
+        (tester) async {
       final admin = _FakeAdmin();
       await tester.pumpWidget(_app(
           const VendorProductsScreen(vendor: _partnerVendor),
@@ -295,7 +306,8 @@ void main() {
       await tester.tap(find.text('Remove').last);
       await tester.pumpAndSettle();
       expect(admin.deleted, isEmpty); // still waiting for the confirm
-      await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+      await tester.tap(find.descendant(
+          of: find.byType(AppDialog), matching: find.text('Remove')));
       await tester.pumpAndSettle();
       expect(admin.deleted, ['m1']);
     });
@@ -365,7 +377,9 @@ void main() {
           'Adaeze Obi');
       expect(const ProfileBasics(id: '1', fullName: 'Adaeze Obi').secondaryName,
           isNull);
-      expect(const ProfileBasics(id: '1', nickname: 'ada', fullName: 'Ada').secondaryName,
+      expect(
+          const ProfileBasics(id: '1', nickname: 'ada', fullName: 'Ada')
+              .secondaryName,
           isNull);
       expect(const ProfileBasics(id: '1').displayName('Student'), 'Student');
       expect(profileIdsKey(['b', null, 'a', 'b', ' ']), 'a,b');
@@ -383,7 +397,8 @@ void main() {
         SupportOptionsScreen(
           orderShortId: orderShortId,
           launcher: launcher,
-          liveChatBuilder: (_) => const Scaffold(body: Text('LIVE CHAT SCREEN')),
+          liveChatBuilder: (_) =>
+              const Scaffold(body: Text('LIVE CHAT SCREEN')),
         ),
         overrides: [
           supportWhatsappProvider.overrideWith((ref) async => number),
@@ -404,25 +419,26 @@ void main() {
         (tester) async {
       await tester.pumpWidget(_app(
         SupportOptionsScreen(
-          liveChatBuilder: (_) => const Scaffold(body: Text('LIVE CHAT SCREEN')),
+          liveChatBuilder: (_) =>
+              const Scaffold(body: Text('LIVE CHAT SCREEN')),
         ),
         overrides: [
-          supportWhatsappProvider.overrideWith((ref) async => throw Exception('x')),
+          supportWhatsappProvider
+              .overrideWith((ref) async => throw Exception('x')),
         ],
       ));
       await tester.pumpAndSettle();
       expect(find.text('LIVE CHAT SCREEN'), findsOneWidget);
     });
 
-    testWidgets('number set → both options; WhatsApp opens the right wa.me link',
+    testWidgets(
+        'number set → both options; WhatsApp opens the right wa.me link',
         (tester) async {
       final opened = <Uri>[];
-      await pumpOptions(tester,
-          number: '2348031234567',
-          launcher: (u) async {
-            opened.add(u);
-            return true;
-          });
+      await pumpOptions(tester, number: '2348031234567', launcher: (u) async {
+        opened.add(u);
+        return true;
+      });
       expect(find.byKey(const ValueKey('option-live-chat')), findsOneWidget);
       expect(find.byKey(const ValueKey('option-whatsapp')), findsOneWidget);
 
@@ -437,13 +453,11 @@ void main() {
     testWidgets('from an order the message names the short order id',
         (tester) async {
       final opened = <Uri>[];
-      await pumpOptions(tester,
-          number: '2348031234567',
-          orderShortId: 'AB12CD',
+      await pumpOptions(tester, number: '2348031234567', orderShortId: 'AB12CD',
           launcher: (u) async {
-            opened.add(u);
-            return true;
-          });
+        opened.add(u);
+        return true;
+      });
       await tester.tap(find.byKey(const ValueKey('option-whatsapp')));
       await tester.pumpAndSettle();
       expect(opened.single.queryParameters['text'],
@@ -489,7 +503,8 @@ void main() {
           'Hi, this is a Uniflex student. Order #X1.');
     });
 
-    test('Support settings validator: empty ok, bad rejected, friendly error', () {
+    test('Support settings validator: empty ok, bad rejected, friendly error',
+        () {
       expect(validateWhatsappNumber(''), isNull);
       expect(validateWhatsappNumber('0803 123 4567'), isNull);
       expect(validateWhatsappNumber('+234 803 123 4567'), isNull);
@@ -501,7 +516,8 @@ void main() {
 
   // ── 3. Rider name ──────────────────────────────────────────────────────
   group('Rider name on Admin cards', () {
-    test('waiting before accept, name after, fallback only if name missing', () {
+    test('waiting before accept, name after, fallback only if name missing',
+        () {
       expect(riderLineText(null, null), 'Waiting for rider');
       expect(riderLineText(null, 'Tunde'), 'Waiting for rider');
       expect(riderLineText('r1', 'Tunde'), 'Rider: Tunde');
@@ -528,7 +544,8 @@ void main() {
     testWidgets('dashboard shows the four counts and TWO separate money cards',
         (tester) async {
       await tester.pumpWidget(_app(Scaffold(
-          body: SingleChildScrollView(child: DashboardStatsView(stats: stats)))));
+          body:
+              SingleChildScrollView(child: DashboardStatsView(stats: stats)))));
       expect(find.text('Orders today'), findsOneWidget);
       expect(find.text('Pending / in progress'), findsOneWidget);
       expect(find.text('Completed today'), findsOneWidget);
@@ -572,8 +589,8 @@ void main() {
         ],
         'users': {'students': 120, 'riders': 6},
       };
-      await tester.pumpWidget(
-          _app(Scaffold(body: SizedBox(height: 2400, child: AnalyticsView(data: data)))));
+      await tester.pumpWidget(_app(Scaffold(
+          body: SizedBox(height: 2400, child: AnalyticsView(data: data)))));
       await tester.pumpAndSettle();
       expect(find.text('90.0% completion rate'), findsOneWidget);
       expect(find.text('Jollof Rice'), findsOneWidget);
@@ -630,7 +647,8 @@ void main() {
       expect(calls, 1);
     });
 
-    testWidgets('an order change (after the first snapshot) triggers one refresh',
+    testWidgets(
+        'an order change (after the first snapshot) triggers one refresh',
         (tester) async {
       final groups = StreamController<List<AdminDeliveryGroupRow>>();
       final errands = StreamController<List<AdminErrandRow>>();
@@ -678,7 +696,8 @@ void main() {
       expect(normalizeAdLink('example.com/promo'), 'https://example.com/promo');
       expect(normalizeAdLink(' https://example.com '), 'https://example.com');
       expect(normalizeAdLink('http://example.com'), 'http://example.com');
-      expect(normalizeAdLink('example.com:8080/x'), 'https://example.com:8080/x');
+      expect(
+          normalizeAdLink('example.com:8080/x'), 'https://example.com:8080/x');
       expect(normalizeAdLink(''), isNull);
       expect(normalizeAdLink(null), isNull);
       expect(normalizeAdLink('javascript:alert(1)'), isNull);
@@ -695,19 +714,26 @@ void main() {
       expect(validateAdLink('javascript:x'), contains('valid web address'));
     });
 
-    test('Advertisement.hasLink: existing url ads keep it; bad/old types never throw', () {
-      expect(_ad('a', type: AdLinkType.url, link: 'https://x.com').hasLink, isTrue);
-      expect(_ad('a', type: AdLinkType.url, link: 'x.com').webLink, 'https://x.com');
+    test(
+        'Advertisement.hasLink: existing url ads keep it; bad/old types never throw',
+        () {
+      expect(_ad('a', type: AdLinkType.url, link: 'https://x.com').hasLink,
+          isTrue);
+      expect(_ad('a', type: AdLinkType.url, link: 'x.com').webLink,
+          'https://x.com');
       expect(_ad('a').hasLink, isFalse);
       expect(_ad('a', type: AdLinkType.url, link: '').hasLink, isFalse);
-      expect(_ad('a', type: AdLinkType.url, link: 'javascript:1').hasLink, isFalse);
+      expect(_ad('a', type: AdLinkType.url, link: 'javascript:1').hasLink,
+          isFalse);
       // old vendor/wallet rows come back as `none` — their value is an id.
-      expect(Advertisement.fromMap({
-        'id': '1',
-        'title': 't',
-        'link_type': 'vendor',
-        'link_value': 'some-vendor-id',
-      }).hasLink, isFalse);
+      expect(
+          Advertisement.fromMap({
+            'id': '1',
+            'title': 't',
+            'link_type': 'vendor',
+            'link_value': 'some-vendor-id',
+          }).hasLink,
+          isFalse);
     });
   });
 
@@ -730,7 +756,8 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('shows the whole image (contain), centred, under 85% of the screen',
+    testWidgets(
+        'shows the whole image (contain), centred, under 85% of the screen',
         (tester) async {
       await open(tester, _ad('a', image: 'https://img.invalid/a.png'));
       final image =
@@ -818,7 +845,8 @@ void main() {
     double dotWidth(WidgetTester tester, int i) =>
         tester.getSize(find.byKey(ValueKey('ad-dot-$i'))).width - 6;
 
-    testWidgets('moves by itself every 5 s over ~0.8 s, and loops', (tester) async {
+    testWidgets('moves by itself every 5 s over ~0.8 s, and loops',
+        (tester) async {
       await pump(tester, [_ad('a'), _ad('b'), _ad('c')]);
       expect(dotWidth(tester, 0), 16);
 
@@ -845,8 +873,8 @@ void main() {
 
     testWidgets('pauses while touched, resumes after release', (tester) async {
       await pump(tester, [_ad('a'), _ad('b')]);
-      final gesture =
-          await tester.startGesture(tester.getCenter(find.byKey(const ValueKey('ad-pager'))));
+      final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(const ValueKey('ad-pager'))));
       await tester.pump(const Duration(seconds: 12));
       expect(dotWidth(tester, 0), 16); // finger down → no movement
 
@@ -859,7 +887,8 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('a single ad stays put: no pager, no dots, no timer', (tester) async {
+    testWidgets('a single ad stays put: no pager, no dots, no timer',
+        (tester) async {
       await pump(tester, [_ad('only')]);
       await tester.pump(const Duration(seconds: 30));
       expect(find.byKey(const ValueKey('ad-pager')), findsNothing);
@@ -868,7 +897,8 @@ void main() {
       await tester.pumpWidget(const SizedBox()); // would fail if a timer leaked
     });
 
-    testWidgets('every ad is tappable (always opens the popup)', (tester) async {
+    testWidgets('every ad is tappable (always opens the popup)',
+        (tester) async {
       final tapped = <String>[];
       await pump(tester, [_ad('a'), _ad('b')], onTap: (a) => tapped.add(a.id));
       await tester.tap(find.text('Ad a'));
@@ -884,13 +914,16 @@ void main() {
       var opened = 0;
       await tester.pumpWidget(
           MaterialApp(home: ReferAStudentScreen(openSupport: () => opened++)));
-      expect(find.text('Contact Admin to get a referral code.'), findsOneWidget);
+      expect(
+          find.text('Contact Admin to get a referral code.'), findsOneWidget);
       expect(find.textContaining('₦'), findsNothing);
       await tester.tap(find.text('Contact support'));
       expect(opened, 1);
     });
 
-    test('no student file shows a referral code, amounts, counts or leaderboard', () {
+    test(
+        'no student file shows a referral code, amounts, counts or leaderboard',
+        () {
       final banned = <String>[
         'Your referral code',
         'ReferralScreen',
@@ -919,7 +952,8 @@ void main() {
     });
 
     test('the referral-related badges are hidden from the student', () {
-      final text = File('lib/student/profile/badges_screen.dart').readAsStringSync();
+      final text =
+          File('lib/student/profile/badges_screen.dart').readAsStringSync();
       expect(text.contains("'Refer your first friend'"), isFalse);
       expect(text.contains("'Refer 10 friends'"), isFalse);
     });

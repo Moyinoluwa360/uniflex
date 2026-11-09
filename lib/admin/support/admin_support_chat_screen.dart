@@ -14,6 +14,7 @@ import '../../shared/widgets/chat/support_order_chip.dart';
 import '../orders/admin_order_details_screen.dart';
 import '../services/profile_basics.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 
 /// Admin chat view for a specific student conversation.
 /// Shows student name + phone in the header, allows replying from any admin,
@@ -71,25 +72,13 @@ class _AdminSupportChatScreenState
   }
 
   Future<void> _confirmResolve() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Mark as resolved?'),
-        content: const Text(
-          'This will close the conversation. '
+    final confirmed = await AppDialog.show(
+      context,
+      title: 'Mark as resolved?',
+      body: 'This will close the conversation. '
           'The student can still send a message to reopen it.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Resolve'),
-          ),
-        ],
-      ),
+      secondaryLabel: 'Cancel',
+      confirmLabel: 'Resolve',
     );
     if (confirmed != true || !mounted) return;
 
@@ -144,7 +133,7 @@ class _AdminSupportChatScreenState
           if (conv.isResolved)
             Container(
               width: double.infinity,
-              color: AppColors.mediumGrey.withValues(alpha: 0.1),
+              color: context.colors.surfaceRaised,
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.md,
                 vertical: AppSpacing.sm,
@@ -176,21 +165,21 @@ class _AdminSupportChatScreenState
           if (_error != null)
             Container(
               width: double.infinity,
-              color: AppColors.error.withValues(alpha: 0.1),
+              color: context.colors.surfaceRaised,
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.md,
                 vertical: AppSpacing.sm,
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.error_outline,
-                      color: AppColors.error, size: 16),
+                  Icon(Icons.error_outline,
+                      color: context.colors.dangerText, size: 16),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
                       _error!,
                       style: theme.textTheme.labelSmall
-                          ?.copyWith(color: AppColors.error),
+                          ?.copyWith(color: context.colors.dangerText),
                     ),
                   ),
                   GestureDetector(
@@ -243,25 +232,36 @@ class _AdminSupportChatScreenState
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
-                  SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        shape: const CircleBorder(),
+                  Semantics(
+                    button: true,
+                    enabled: !_isSending,
+                    label: 'Send',
+                    child: Material(
+                      color: _isSending
+                          ? context.colors.surfaceRaised
+                          : context.colors.brand,
+                      shape: const CircleBorder(),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: _isSending ? null : _send,
+                        child: SizedBox(
+                          width: 44,
+                          height: 44,
+                          child: Center(
+                            child: _isSending
+                                ? SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: context.colors.textSecondary,
+                                    ),
+                                  )
+                                : Icon(Icons.send_rounded,
+                                    size: 18, color: context.colors.onBrand),
+                          ),
+                        ),
                       ),
-                      onPressed: _isSending ? null : _send,
-                      child: _isSending
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.pureWhite,
-                              ),
-                            )
-                          : const Icon(Icons.send_rounded, size: 18),
                     ),
                   ),
                 ],
@@ -309,7 +309,7 @@ class _StudentHeader extends ConsumerWidget implements PreferredSizeWidget {
             profile?.displayName('Student') ?? 'Student',
             key: const ValueKey('chat-header-name'),
             style: theme.textTheme.titleMedium?.copyWith(
-              color: AppColors.pureWhite,
+              color: context.colors.onBrand,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -318,29 +318,28 @@ class _StudentHeader extends ConsumerWidget implements PreferredSizeWidget {
               fullName,
               key: const ValueKey('chat-header-full-name'),
               style: theme.textTheme.labelMedium?.copyWith(
-                color: AppColors.pureWhite.withValues(alpha: 0.9),
+                color: context.colors.onBrand.withValues(alpha: 0.9),
               ),
             ),
           if (phone != null && phone.isNotEmpty)
             Text(
               phone,
               style: theme.textTheme.labelSmall?.copyWith(
-                color: AppColors.pureWhite.withValues(alpha: 0.8),
+                color: context.colors.onBrand.withValues(alpha: 0.8),
               ),
             ),
         ],
       ),
       backgroundColor: Theme.of(context).colorScheme.primary,
-      foregroundColor: AppColors.pureWhite,
       actions: [
         if (onResolve != null)
           TextButton.icon(
             onPressed: onResolve,
-            icon: const Icon(Icons.check_circle_outline,
-                color: AppColors.pureWhite, size: 16),
-            label: const Text(
+            icon: Icon(Icons.check_circle_outline,
+                color: context.colors.onBrand, size: 16),
+            label: Text(
               'Resolve',
-              style: TextStyle(color: AppColors.pureWhite),
+              style: TextStyle(color: context.colors.onBrand),
             ),
           ),
       ],
@@ -543,9 +542,10 @@ class _AdminBubble extends StatelessWidget {
     final bubbleColor = isMe
         ? theme.colorScheme.primary
         : theme.colorScheme.surfaceContainerHighest;
-    final textColor = isMe ? AppColors.pureWhite : theme.colorScheme.onSurface;
+    final textColor =
+        isMe ? context.colors.onBrand : theme.colorScheme.onSurface;
     final labelColor = isMe
-        ? AppColors.pureWhite.withValues(alpha: 0.7)
+        ? context.colors.onBrand.withValues(alpha: 0.7)
         : theme.colorScheme.onSurface.withValues(alpha: 0.5);
 
     // Admin messages show which admin sent them.

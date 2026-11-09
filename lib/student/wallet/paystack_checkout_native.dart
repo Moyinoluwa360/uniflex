@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
+import '../../shared/theme/app_colors.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
@@ -54,7 +56,7 @@ class _PaystackCheckoutPageState extends State<PaystackCheckoutPage> {
   void _initWebView() {
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.white)
+      ..setBackgroundColor(AppColors.onMedia)
       ..addJavaScriptChannel(
         'PaystackChannel',
         onMessageReceived: _onPaystackMessage,

@@ -10,6 +10,8 @@ import '../../shared/widgets/async/retry_section.dart';
 import '../../shared/widgets/notify/message_customer_sheet.dart';
 import '../services/admin_providers.dart';
 import '../services/admin_service.dart';
+import '../../shared/theme/app_icons.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 
 /// The kitchen queue — live view of all Uniflex-source orders currently
 /// in the kitchen stages (placed / preparing / ready). Updates via
@@ -35,8 +37,8 @@ class KitchenQueueScreen extends ConsumerWidget {
                 Container(
                   width: 8,
                   height: 8,
-                  decoration: const BoxDecoration(
-                    color: AppColors.emerald,
+                  decoration: BoxDecoration(
+                    color: context.colors.brandText,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -44,7 +46,7 @@ class KitchenQueueScreen extends ConsumerWidget {
                 Text(
                   'Live',
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: AppColors.emerald,
+                    color: context.colors.brandText,
                   ),
                 ),
               ],
@@ -83,13 +85,13 @@ class KitchenQueueBody extends ConsumerWidget {
                   width: 88,
                   height: 88,
                   decoration: BoxDecoration(
-                    color: AppColors.emerald.withValues(alpha: 0.12),
+                    color: context.colors.surfaceRaised,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.check_circle_outline,
                     size: 36,
-                    color: AppColors.emerald,
+                    color: context.colors.brandText,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -147,13 +149,17 @@ class KitchenQueueBody extends ConsumerWidget {
               .addAll(items.map((ko) => _KitchenOrderCard(kitchenOrder: ko)));
         }
 
-        addSection('Being Sourced', beingSourced, AppColors.orange);
-        addSection('Scheduled', placed, AppColors.orange);
+        addSection('Being Sourced', beingSourced, context.colors.statusAmber);
+        addSection('Scheduled', placed, context.colors.statusAmber);
         addSection('Preparing', preparing, theme.colorScheme.primary);
-        addSection('Awaiting Final Payment', awaitingPayment, AppColors.info);
-        addSection('Ready for Pickup', readyForPickup, AppColors.emerald);
-        addSection('Ready for Delivery', readyForDelivery, AppColors.emerald);
-        addSection('Out for Delivery', outForDelivery, AppColors.orange);
+        addSection('Awaiting Final Payment', awaitingPayment,
+            context.colors.textSecondary);
+        addSection(
+            'Ready for Pickup', readyForPickup, context.colors.brandText);
+        addSection(
+            'Ready for Delivery', readyForDelivery, context.colors.brandText);
+        addSection(
+            'Out for Delivery', outForDelivery, context.colors.statusAmber);
 
         return ListView(
           padding: const EdgeInsets.all(AppSpacing.screenGutter),
@@ -197,7 +203,7 @@ class _SectionHeader extends StatelessWidget {
             vertical: 1,
           ),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
+            color: context.colors.surfaceRaised,
             borderRadius: BorderRadius.circular(AppRadius.pill),
           ),
           child: Text(
@@ -330,7 +336,7 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
       margin: const EdgeInsets.only(bottom: AppSpacing.cardGap),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.card),
-        side: BorderSide(color: statusColor.withValues(alpha: 0.3)),
+        side: BorderSide(color: context.colors.border),
       ),
       child: Column(
         children: [
@@ -379,13 +385,13 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: AppSpacing.sm, vertical: 2),
                       decoration: BoxDecoration(
-                        color: AppColors.emerald.withValues(alpha: 0.12),
+                        color: context.colors.surfaceRaised,
                         borderRadius: BorderRadius.circular(AppRadius.pill),
                       ),
                       child: Text(
                         'GROUP',
                         style: theme.textTheme.labelSmall?.copyWith(
-                          color: AppColors.emerald,
+                          color: context.colors.brandText,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 1,
                         ),
@@ -399,13 +405,13 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: AppSpacing.sm, vertical: 2),
                       decoration: BoxDecoration(
-                        color: AppColors.info.withValues(alpha: 0.12),
+                        color: context.colors.surfaceRaised,
                         borderRadius: BorderRadius.circular(AppRadius.pill),
                       ),
                       child: Text(
                         'PARTNER',
                         style: theme.textTheme.labelSmall?.copyWith(
-                          color: AppColors.info,
+                          color: context.colors.textSecondary,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 1,
                         ),
@@ -419,13 +425,13 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: AppSpacing.sm, vertical: 2),
                       decoration: BoxDecoration(
-                        color: AppColors.orange.withValues(alpha: 0.12),
+                        color: context.colors.surfaceRaised,
                         borderRadius: BorderRadius.circular(AppRadius.pill),
                       ),
                       child: Text(
                         'BULK',
                         style: theme.textTheme.labelSmall?.copyWith(
-                          color: AppColors.orange,
+                          color: context.colors.statusAmber,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 1,
                         ),
@@ -574,7 +580,7 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
                   Icon(
                     Icons.sticky_note_2_outlined,
                     size: 14,
-                    color: AppColors.warning.withValues(alpha: 0.8),
+                    color: context.colors.surfaceRaised,
                   ),
                   const SizedBox(width: 4),
                   Expanded(
@@ -604,29 +610,21 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
               children: [
                 // Status changes already notify the customer automatically;
                 // this is for anything that needs saying in words.
-                OutlinedButton.icon(
+                AppButton(
+                  label: 'Message',
+                  variant: AppButtonVariant.secondary,
+                  size: AppButtonSize.small,
+                  expand: false,
+                  icon: AppIcons.chat,
                   onPressed: _isAdvancing ? null : _messageCustomer,
-                  icon: const Icon(Icons.chat_bubble_outline, size: 16),
-                  label: const Text('Message'),
                 ),
                 if (nextLabel != null && action != null) ...[
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
-                    child: FilledButton(
+                    child: AppButton(
+                      label: nextLabel,
+                      isLoading: _isAdvancing,
                       onPressed: _isAdvancing ? null : action.$2,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: statusColor,
-                      ),
-                      child: _isAdvancing
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.pureWhite,
-                              ),
-                            )
-                          : Text(nextLabel),
                     ),
                   ),
                 ],
@@ -640,12 +638,14 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
 
   Color _statusColor(OrderStatus status) {
     return switch (status) {
-      OrderStatus.beingSourced => AppColors.orange,
-      OrderStatus.placed => AppColors.orange,
+      OrderStatus.beingSourced => context.colors.statusAmber,
+      OrderStatus.placed => context.colors.statusAmber,
       OrderStatus.preparing => Theme.of(context).colorScheme.primary,
-      OrderStatus.awaitingFinalPayment => AppColors.info,
-      OrderStatus.ready || OrderStatus.readyForPickup => AppColors.emerald,
-      OrderStatus.outForDelivery => AppColors.orange,
+      OrderStatus.awaitingFinalPayment => context.colors.textSecondary,
+      OrderStatus.ready ||
+      OrderStatus.readyForPickup =>
+        context.colors.brandText,
+      OrderStatus.outForDelivery => context.colors.statusAmber,
       _ => Theme.of(context).colorScheme.outline,
     };
   }

@@ -7,7 +7,7 @@ import '../../shared/theme/app_spacing.dart';
 import '../../shared/utils/ad_link.dart';
 import '../../shared/utils/app_error_mapper.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
-import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 import '../../shared/widgets/image_upload/image_upload_field.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../../shared/widgets/media/app_image.dart';
@@ -282,7 +282,7 @@ class _AdvertisementFormScreenState
                       Switch(
                         value: _isActive,
                         onChanged: (v) => setState(() => _isActive = v),
-                        activeThumbColor: AppColors.emerald,
+                        activeThumbColor: context.colors.brand,
                       ),
                     ],
                   ),
@@ -290,7 +290,7 @@ class _AdvertisementFormScreenState
               ),
 
               const SizedBox(height: AppSpacing.xl),
-              PrimaryButton(
+              AppButton(
                 label: _isEdit ? 'Save changes' : 'Create ad',
                 icon: Icons.check,
                 isLoading: _isSaving,
@@ -322,7 +322,7 @@ class _AdPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final base = dark ? AppColors.matteBlack : AppColors.orange;
+    final base = dark ? AppColors.adDark : context.colors.promoOrangeStart;
     final hasImage = imageUrl != null && imageUrl!.isNotEmpty;
 
     return ClipRRect(
@@ -340,8 +340,8 @@ class _AdPreview extends StatelessWidget {
                     begin: Alignment.centerLeft,
                     end: Alignment.centerRight,
                     colors: [
-                      AppColors.matteBlack.withValues(alpha: 0.72),
-                      AppColors.matteBlack.withValues(alpha: 0.15),
+                      AppColors.adDark.withValues(alpha: 0.72),
+                      AppColors.adDark.withValues(alpha: 0.15),
                     ],
                   ),
                 ),
@@ -358,7 +358,7 @@ class _AdPreview extends StatelessWidget {
                   Text(
                     title,
                     style: theme.textTheme.titleSmall
-                        ?.copyWith(color: AppColors.pureWhite),
+                        ?.copyWith(color: context.colors.onBrand),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -367,7 +367,7 @@ class _AdPreview extends StatelessWidget {
                     Text(
                       subtitle,
                       style: theme.textTheme.labelSmall?.copyWith(
-                        color: AppColors.pureWhite.withValues(alpha: 0.85),
+                        color: context.colors.onBrand.withValues(alpha: 0.85),
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,

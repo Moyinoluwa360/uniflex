@@ -10,6 +10,7 @@ import '../services/admin_providers.dart';
 import '../services/admin_service.dart';
 import 'referral_code_form_screen.dart';
 import 'referral_code_uses_screen.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 
 /// Admin management of referral codes (Phase 10). Codes are minted here and
 /// allocated to a person; students no longer generate their own at signup.
@@ -98,32 +99,19 @@ class ReferralCodesScreen extends ConsumerWidget {
     WidgetRef ref,
     ReferralCodeRow row,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete code?'),
-        content: Text(
-          row.useCount > 0
+    final confirmed = await AppDialog.show(
+context,
+title: 'Delete code?',
+body: row.useCount > 0
               ? '${row.code} has ${row.useCount} signup'
                   '${row.useCount == 1 ? '' : 's'} attributed to it, so it '
                   'cannot be deleted — the attribution has to survive. '
                   'Pause it instead.'
               : 'Delete ${row.code}? Nobody has used it, so nothing is lost.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          if (row.useCount == 0)
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Delete'),
-            ),
-        ],
-      ),
-    );
+secondaryLabel: 'Cancel',
+confirmLabel: 'Delete',
+destructive: true,
+);
     if (confirmed != true) return;
     try {
       await ref.read(adminServiceProvider).deleteReferralCode(row.id);
@@ -153,11 +141,11 @@ class _EmptyCodes extends StatelessWidget {
               width: 88,
               height: 88,
               decoration: BoxDecoration(
-                color: AppColors.emerald.withValues(alpha: 0.1),
+                color: context.colors.surfaceRaised,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.confirmation_number_outlined,
-                  size: 36, color: AppColors.emerald),
+              child: Icon(Icons.confirmation_number_outlined,
+                  size: 36, color: context.colors.brandText),
             ),
             const SizedBox(height: AppSpacing.md),
             Text('No codes yet', style: theme.textTheme.titleMedium),
@@ -241,7 +229,7 @@ class _CodeCard extends StatelessWidget {
                   Switch(
                     value: row.isActive,
                     onChanged: onToggle,
-                    activeThumbColor: AppColors.emerald,
+                    activeThumbColor: context.colors.brand,
                   ),
                   PopupMenuButton<String>(
                     onSelected: (v) {
@@ -249,13 +237,15 @@ class _CodeCard extends StatelessWidget {
                       if (v == 'uses') onViewUses();
                       if (v == 'delete') onDelete();
                     },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'edit', child: Text('Edit')),
-                      PopupMenuItem(value: 'uses', child: Text('View signups')),
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(
+                          value: 'edit', child: Text('Edit')),
+                      const PopupMenuItem(
+                          value: 'uses', child: Text('View signups')),
                       PopupMenuItem(
                         value: 'delete',
                         child: Text('Delete',
-                            style: TextStyle(color: AppColors.error)),
+                            style: TextStyle(color: context.colors.dangerText)),
                       ),
                     ],
                   ),
@@ -283,13 +273,13 @@ class _CodeCard extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(
                         horizontal: AppSpacing.sm, vertical: 2),
                     decoration: BoxDecoration(
-                      color: AppColors.emerald.withValues(alpha: 0.12),
+                      color: context.colors.surfaceRaised,
                       borderRadius: BorderRadius.circular(AppRadius.pill),
                     ),
                     child: Text(
                       '${row.useCount} used',
                       style: theme.textTheme.labelSmall
-                          ?.copyWith(color: AppColors.emerald),
+                          ?.copyWith(color: context.colors.brandText),
                     ),
                   ),
                 ],

@@ -7,7 +7,7 @@ import '../../shared/theme/app_spacing.dart';
 import '../../shared/utils/app_error_mapper.dart';
 import '../../shared/utils/phone_format.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
-import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 import '../services/admin_providers.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 
@@ -124,11 +124,11 @@ class _SupportSettingsScreenState extends ConsumerState<SupportSettingsScreen> {
                 Text(
                   _error!,
                   style: theme.textTheme.bodySmall
-                      ?.copyWith(color: AppColors.error),
+                      ?.copyWith(color: context.colors.dangerText),
                 ),
               ],
               const SizedBox(height: AppSpacing.xl),
-              PrimaryButton(
+              AppButton(
                 label: 'Save',
                 icon: Icons.check,
                 isLoading: _saving,

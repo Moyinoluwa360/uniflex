@@ -52,8 +52,8 @@ class _AdminOrdersScreenState extends ConsumerState<AdminOrdersScreen>
           Container(
             width: 8,
             height: 8,
-            decoration: const BoxDecoration(
-              color: AppColors.emerald,
+            decoration: BoxDecoration(
+              color: context.colors.brandText,
               shape: BoxShape.circle,
             ),
           ),
@@ -61,7 +61,7 @@ class _AdminOrdersScreenState extends ConsumerState<AdminOrdersScreen>
           Text(
             'Live',
             style: theme.textTheme.labelSmall?.copyWith(
-              color: AppColors.emerald,
+              color: context.colors.brandText,
             ),
           ),
         ],
@@ -297,13 +297,13 @@ class _DeliveryGroupCard extends StatelessWidget {
     final group = row.group;
 
     final statusColor = switch (group.status) {
-      DeliveryGroupStatus.placed => AppColors.orange,
+      DeliveryGroupStatus.placed => context.colors.statusAmber,
       DeliveryGroupStatus.commitmentPaid ||
       DeliveryGroupStatus.riderAccepted =>
         theme.colorScheme.primary,
-      DeliveryGroupStatus.awaitingFinalPayment => AppColors.info,
-      DeliveryGroupStatus.outForDelivery => AppColors.emerald,
-      DeliveryGroupStatus.completed => AppColors.emerald,
+      DeliveryGroupStatus.awaitingFinalPayment => context.colors.textSecondary,
+      DeliveryGroupStatus.outForDelivery => context.colors.brandText,
+      DeliveryGroupStatus.completed => context.colors.brandText,
       DeliveryGroupStatus.cancelled => theme.colorScheme.error,
     };
 
@@ -317,7 +317,7 @@ class _DeliveryGroupCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: AppSpacing.cardGap),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.card),
-        side: BorderSide(color: statusColor.withValues(alpha: 0.3)),
+        side: BorderSide(color: context.colors.border),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.card),
@@ -397,8 +397,8 @@ class _DeliveryGroupCard extends StatelessWidget {
                         : Icons.two_wheeler_outlined,
                     size: 14,
                     color: group.riderId == null
-                        ? AppColors.orange
-                        : AppColors.emerald,
+                        ? context.colors.statusAmber
+                        : context.colors.brandText,
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -406,8 +406,8 @@ class _DeliveryGroupCard extends StatelessWidget {
                     key: const ValueKey('rider-line'),
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: group.riderId == null
-                          ? AppColors.orange
-                          : AppColors.emerald,
+                          ? context.colors.statusAmber
+                          : context.colors.brandText,
                     ),
                   ),
                   const Spacer(),
@@ -551,10 +551,10 @@ class _ErrandOrderCard extends StatelessWidget {
     final order = row.order;
 
     final statusColor = switch (order.status) {
-      OrderStatus.placed => AppColors.orange,
+      OrderStatus.placed => context.colors.statusAmber,
       OrderStatus.beingSourced => theme.colorScheme.primary,
-      OrderStatus.outForDelivery => AppColors.emerald,
-      OrderStatus.completed => AppColors.emerald,
+      OrderStatus.outForDelivery => context.colors.brandText,
+      OrderStatus.completed => context.colors.brandText,
       OrderStatus.cancelled => theme.colorScheme.error,
       _ => theme.colorScheme.outline,
     };
@@ -565,7 +565,7 @@ class _ErrandOrderCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: AppSpacing.cardGap),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.card),
-        side: BorderSide(color: statusColor.withValues(alpha: 0.3)),
+        side: BorderSide(color: context.colors.border),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.card),
@@ -584,13 +584,13 @@ class _ErrandOrderCard extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(
                         horizontal: AppSpacing.sm, vertical: 3),
                     decoration: BoxDecoration(
-                      color: AppColors.accentViolet.withValues(alpha: 0.12),
+                      color: context.colors.surfaceRaised,
                       borderRadius: BorderRadius.circular(AppRadius.pill),
                     ),
                     child: Text(
                       'Errand',
                       style: theme.textTheme.labelSmall?.copyWith(
-                        color: AppColors.accentViolet,
+                        color: context.colors.textSecondary,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -682,8 +682,8 @@ class _ErrandOrderCard extends StatelessWidget {
                         : Icons.two_wheeler_outlined,
                     size: 14,
                     color: order.riderId == null
-                        ? AppColors.orange
-                        : AppColors.emerald,
+                        ? context.colors.statusAmber
+                        : context.colors.brandText,
                   ),
                   const SizedBox(width: 6),
                   Expanded(
@@ -692,8 +692,8 @@ class _ErrandOrderCard extends StatelessWidget {
                       key: const ValueKey('rider-line'),
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: order.riderId == null
-                            ? AppColors.orange
-                            : AppColors.emerald,
+                            ? context.colors.statusAmber
+                            : context.colors.brandText,
                       ),
                     ),
                   ),
@@ -732,7 +732,7 @@ class _StatusChip extends StatelessWidget {
       padding:
           const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: context.colors.surfaceRaised,
         borderRadius: BorderRadius.circular(AppRadius.pill),
       ),
       child: Text(

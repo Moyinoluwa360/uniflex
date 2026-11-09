@@ -184,9 +184,9 @@ class _OnlineToggleCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
+        color: context.colors.surfaceRaised,
         borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(color: context.colors.border),
       ),
       child: Row(
         children: [

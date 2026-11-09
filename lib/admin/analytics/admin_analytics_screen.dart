@@ -138,7 +138,7 @@ class AnalyticsView extends StatelessWidget {
           today: statNum(data, 'fees_today'),
           week: statNum(data, 'fees_week'),
           month: statNum(data, 'fees_month'),
-          color: kFeesColor,
+          color: context.colors.chartFees,
           icon: Icons.payments_outlined,
         ),
         const SizedBox(height: AppSpacing.cardGap),
@@ -148,7 +148,7 @@ class AnalyticsView extends StatelessWidget {
           today: statNum(data, 'food_today'),
           week: statNum(data, 'food_week'),
           month: statNum(data, 'food_month'),
-          color: kFoodColor,
+          color: context.colors.chartFood,
           icon: Icons.restaurant_outlined,
         ),
         const SizedBox(height: AppSpacing.lg),
@@ -194,7 +194,7 @@ class AnalyticsView extends StatelessWidget {
                 label: 'Riders',
                 value: '${statNum(users, 'riders').toInt()}',
                 icon: Icons.two_wheeler_outlined,
-                color: AppColors.orange,
+                color: context.colors.statusAmber,
               ),
             ),
           ],
@@ -337,7 +337,7 @@ class _CompletionCard extends StatelessWidget {
               Text(
                 '$completed',
                 style: theme.textTheme.labelLarge?.copyWith(
-                  color: AppColors.emerald,
+                  color: context.colors.brandText,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -351,7 +351,7 @@ class _CompletionCard extends StatelessWidget {
               Text(
                 '$cancelled',
                 style: theme.textTheme.labelLarge?.copyWith(
-                  color: AppColors.error,
+                  color: context.colors.dangerText,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -362,9 +362,9 @@ class _CompletionCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(3),
             child: LinearProgressIndicator(
               value: fraction,
-              backgroundColor: AppColors.error.withValues(alpha: 0.15),
+              backgroundColor: context.colors.surfaceRaised,
               valueColor:
-                  const AlwaysStoppedAnimation<Color>(AppColors.emerald),
+                  AlwaysStoppedAnimation<Color>(context.colors.brandText),
               minHeight: 8,
             ),
           ),
@@ -391,25 +391,25 @@ class _StatusBreakdownCard extends StatelessWidget {
 
   // Delivery checkouts and pickup/errand orders share one list; statuses
   // that don't exist for a kind simply stay 0 and are hidden.
-  static const _labels = <String, (String, Color)>{
-    'placed': ('Placed', AppColors.info),
-    'commitment_paid': ('Waiting for rider', AppColors.orange),
-    'rider_accepted': ('Rider accepted', AppColors.warning),
-    'preparing': ('Preparing', AppColors.warning),
-    'being_sourced': ('Being sourced', AppColors.warning),
-    'ready': ('Ready', AppColors.emerald),
-    'ready_for_pickup': ('Ready for pickup', AppColors.emerald),
-    'awaiting_final_payment': ('Awaiting final payment', AppColors.info),
-    'out_for_delivery': ('Out for delivery', AppColors.orange),
-    'completed': ('Completed', AppColors.emerald),
-    'cancelled': ('Cancelled', AppColors.error),
-  };
+  static Map<String, (String, Color)> _labelsFor(AppColors c) => {
+        'placed': ('Placed', c.textSecondary),
+        'commitment_paid': ('Waiting for rider', c.statusAmber),
+        'rider_accepted': ('Rider accepted', c.statusAmber),
+        'preparing': ('Preparing', c.statusAmber),
+        'being_sourced': ('Being sourced', c.statusAmber),
+        'ready': ('Ready', c.brandText),
+        'ready_for_pickup': ('Ready for pickup', c.brandText),
+        'awaiting_final_payment': ('Awaiting final payment', c.textSecondary),
+        'out_for_delivery': ('Out for delivery', c.statusAmber),
+        'completed': ('Completed', c.brandText),
+        'cancelled': ('Cancelled', c.dangerText),
+      };
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final entries = <(String, int, Color)>[
-      for (final e in _labels.entries)
+      for (final e in _labelsFor(context.colors).entries)
         if (statNum(byStatus, e.key) > 0)
           (e.value.$1, statNum(byStatus, e.key).toInt(), e.value.$2),
     ];
@@ -582,7 +582,7 @@ class _RiderPerformanceList extends StatelessWidget {
                     '${riders[i]['completed'] ?? 0} completed',
                     style: theme.textTheme.labelMedium?.copyWith(
                       fontWeight: FontWeight.w600,
-                      color: AppColors.emerald,
+                      color: context.colors.brandText,
                     ),
                   ),
                 ],

@@ -55,12 +55,7 @@ class _SplashScreenState extends State<SplashScreen>
             begin: Alignment(-0.4, -1.0),
             end: Alignment(0.9, 1.0),
             stops: [0.0, 0.34, 0.62, 1.0],
-            colors: [
-              AppColors.splashGradientTop,
-              AppColors.emerald,
-              AppColors.splashGradientMid,
-              AppColors.orange,
-            ],
+            colors: AppColors.splashGradient,
           ),
         ),
         child: Stack(
@@ -73,8 +68,8 @@ class _SplashScreenState extends State<SplashScreen>
                   radius: 1.1,
                   stops: [0.0, 0.55],
                   colors: [
-                    Color.fromRGBO(255, 255, 255, 0.34),
-                    Color.fromRGBO(255, 255, 255, 0.0),
+                    AppColors.splashHighlightStart,
+                    AppColors.splashHighlightEnd,
                   ],
                 ),
               ),
@@ -89,13 +84,13 @@ class _SplashScreenState extends State<SplashScreen>
                       'Uniflex',
                       style: AppTypography.wordmark(
                         fontSize: 52,
-                        color: AppColors.pureWhite,
+                        color: AppColors.onMedia,
                       ).copyWith(
                         shadows: const [
                           Shadow(
                             offset: Offset(0, 2),
                             blurRadius: 24,
-                            color: Color.fromRGBO(6, 46, 35, 0.18),
+                            color: AppColors.splashShadow,
                           ),
                         ],
                       ),

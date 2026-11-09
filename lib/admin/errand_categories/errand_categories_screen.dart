@@ -8,6 +8,7 @@ import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../services/admin_providers.dart';
 import 'errand_category_form_screen.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 
 /// Admin management of Errand service categories — add/edit/remove the
 /// categories the Student-facing Errand flow reads dynamically.
@@ -95,28 +96,16 @@ class ErrandCategoriesScreen extends ConsumerWidget {
     WidgetRef ref,
     ErrandCategoryData category,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete category?'),
-        content: Text(
-          'Remove "${category.title}"? Past requests keep their record — '
+    final confirmed = await AppDialog.show(
+context,
+title: 'Delete category?',
+body: 'Remove "${category.title}"? Past requests keep their record — '
           'if any exist for this category, deleting will fail; deactivate '
           'it instead.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
+secondaryLabel: 'Cancel',
+confirmLabel: 'Delete',
+destructive: true,
+);
     if (confirmed != true) return;
     try {
       await ref.read(adminServiceProvider).deleteErrandCategory(category.id);
@@ -187,19 +176,19 @@ class _CategoryCard extends StatelessWidget {
             Switch(
               value: category.isActive,
               onChanged: onToggle,
-              activeThumbColor: AppColors.emerald,
+              activeThumbColor: context.colors.brand,
             ),
             PopupMenuButton<String>(
               onSelected: (v) {
                 if (v == 'edit') onEdit();
                 if (v == 'delete') onDelete();
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'edit', child: Text('Edit')),
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'edit', child: Text('Edit')),
                 PopupMenuItem(
                   value: 'delete',
-                  child:
-                      Text('Delete', style: TextStyle(color: AppColors.error)),
+                  child: Text('Delete',
+                      style: TextStyle(color: context.colors.dangerText)),
                 ),
               ],
             ),

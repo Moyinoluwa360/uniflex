@@ -70,10 +70,7 @@ class RiderHistoryDetailView extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
-            color: (cancelled
-                    ? context.colors.dangerText
-                    : context.colors.brandText)
-                .withValues(alpha: 0.08),
+            color: context.colors.surfaceRaised,
             borderRadius: BorderRadius.circular(AppRadius.card),
           ),
           child: Row(
