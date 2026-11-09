@@ -6,10 +6,12 @@ import '../../services/auth/auth_providers.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/app_bar/uniflex_app_bar.dart';
-import '../../widgets/buttons/primary_button.dart';
+import '../../widgets/buttons/app_button.dart';
 import '../../widgets/inputs/app_text_field.dart';
 import '../validators.dart';
 import 'reset_password_screen.dart';
+import '../../widgets/notice/app_inline_notice.dart';
+import '../../theme/app_icons.dart';
 
 /// Forgot Password — Step 1: enter the account email, request a 6-digit
 /// recovery code. Reachable from the Login screen.
@@ -63,10 +65,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
-    final secondaryInk = Theme.of(context).brightness == Brightness.dark
-        ? AppColors.darkInkSecondary
-        : AppColors.mediumGrey;
+    final secondaryInk = context.colors.textSecondary;
 
     return Scaffold(
       appBar: const UniflexAppBar(title: 'Forgot Password'),
@@ -91,35 +90,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 if (_errorText != null) ...[
-                  Container(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    decoration: BoxDecoration(
-                      color: colorScheme.error.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(AppRadius.control),
-                      border: Border.all(
-                        color: colorScheme.error.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 20,
-                          color: colorScheme.error,
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: Text(
-                            _errorText!,
-                            style: textTheme.bodyMedium?.copyWith(
-                              color: colorScheme.error,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  AppInlineNotice(isError: true, text: _errorText!),
                   const SizedBox(height: AppSpacing.md),
                 ],
                 AppTextField(
@@ -127,13 +98,13 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                   label: 'Email address',
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.done,
-                  prefixIcon: Icons.mail_outline,
+                  prefixIcon: AppIcons.mail,
                   validator: AuthValidators.email,
                 ),
                 const SizedBox(height: AppSpacing.xl),
-                PrimaryButton(
+                AppButton(
                   label: 'Send Code',
-                  icon: Icons.mail_outline,
+                  icon: AppIcons.mail,
                   isLoading: _isLoading,
                   onPressed: _submit,
                 ),

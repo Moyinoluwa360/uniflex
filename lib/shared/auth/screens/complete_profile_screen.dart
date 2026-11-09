@@ -6,10 +6,12 @@ import '../../services/auth/auth_providers.dart';
 import '../../services/profile/profile_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
-import '../../widgets/buttons/primary_button.dart';
+import '../../widgets/buttons/app_button.dart';
 import '../../widgets/inputs/app_text_field.dart';
 import '../../widgets/progress/onboarding_progress_bar.dart';
 import '../validators.dart';
+import '../../widgets/notice/app_inline_notice.dart';
+import '../../theme/app_icons.dart';
 
 /// The only school selectable today; modelled as a plain string field
 /// (not an enum) on `profiles.school` so more schools can be added later
@@ -146,9 +148,7 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
         _dateOfBirth == null ? 'Date of birth' : _formatDate(_dateOfBirth!);
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
-    final secondaryInk = Theme.of(context).brightness == Brightness.dark
-        ? AppColors.darkInkSecondary
-        : AppColors.mediumGrey;
+    final secondaryInk = context.colors.textSecondary;
 
     return Scaffold(
       body: SafeArea(
@@ -185,35 +185,7 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 if (_errorText != null) ...[
-                  Container(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    decoration: BoxDecoration(
-                      color: colorScheme.error.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(AppRadius.control),
-                      border: Border.all(
-                        color: colorScheme.error.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 20,
-                          color: colorScheme.error,
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: Text(
-                            _errorText!,
-                            style: textTheme.bodyMedium?.copyWith(
-                              color: colorScheme.error,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  AppInlineNotice(isError: true, text: _errorText!),
                   const SizedBox(height: AppSpacing.md),
                 ],
                 Row(
@@ -340,9 +312,9 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
                   ),
                 ],
                 const SizedBox(height: AppSpacing.xl),
-                PrimaryButton(
+                AppButton(
                   label: 'Finish setup',
-                  icon: Icons.check_circle_outline,
+                  icon: AppIcons.success,
                   isLoading: _isLoading,
                   onPressed: _submit,
                 ),

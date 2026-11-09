@@ -6,8 +6,10 @@ import '../../services/auth/auth_providers.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/app_bar/uniflex_app_bar.dart';
-import '../../widgets/buttons/primary_button.dart';
+import '../../widgets/buttons/app_button.dart';
 import '../../widgets/inputs/app_text_field.dart';
+import '../../widgets/notice/app_inline_notice.dart';
+import '../../theme/app_icons.dart';
 
 /// Forgot Password — Step 2: enter the 6-digit code emailed to
 /// [email], then set a new password. On success this establishes a
@@ -75,10 +77,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
-    final secondaryInk = Theme.of(context).brightness == Brightness.dark
-        ? AppColors.darkInkSecondary
-        : AppColors.mediumGrey;
+    final secondaryInk = context.colors.textSecondary;
 
     return Scaffold(
       appBar: const UniflexAppBar(title: 'Reset Password'),
@@ -103,35 +102,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 if (_errorText != null) ...[
-                  Container(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    decoration: BoxDecoration(
-                      color: colorScheme.error.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(AppRadius.control),
-                      border: Border.all(
-                        color: colorScheme.error.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 20,
-                          color: colorScheme.error,
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: Text(
-                            _errorText!,
-                            style: textTheme.bodyMedium?.copyWith(
-                              color: colorScheme.error,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  AppInlineNotice(isError: true, text: _errorText!),
                   const SizedBox(height: AppSpacing.md),
                 ],
                 AppTextField(
@@ -149,11 +120,9 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                   controller: _passwordController,
                   label: 'New password',
                   obscureText: _obscure,
-                  prefixIcon: Icons.lock_outline,
+                  prefixIcon: AppIcons.lock,
                   suffixIcon: IconButton(
-                    icon: Icon(_obscure
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined),
+                    icon: Icon(_obscure ? AppIcons.eye : AppIcons.eyeOff),
                     onPressed: () => setState(() => _obscure = !_obscure),
                   ),
                   validator: (v) {
@@ -171,12 +140,12 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                   controller: _confirmController,
                   label: 'Confirm new password',
                   obscureText: _obscure,
-                  prefixIcon: Icons.lock_outline,
+                  prefixIcon: AppIcons.lock,
                   validator: (v) =>
                       (v ?? '').isEmpty ? 'Confirm your new password' : null,
                 ),
                 const SizedBox(height: AppSpacing.xl),
-                PrimaryButton(
+                AppButton(
                   label: 'Reset Password',
                   icon: Icons.lock_reset_outlined,
                   isLoading: _isLoading,

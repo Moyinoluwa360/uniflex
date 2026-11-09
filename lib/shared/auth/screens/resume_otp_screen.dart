@@ -6,10 +6,12 @@ import '../../services/otp/phone_otp_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/app_bar/uniflex_app_bar.dart';
-import '../../widgets/buttons/primary_button.dart';
+import '../../widgets/buttons/app_button.dart';
 import '../../widgets/inputs/app_text_field.dart';
 import '../validators.dart';
 import 'complete_profile_screen.dart';
+import '../../widgets/notice/app_inline_notice.dart';
+import '../../theme/app_icons.dart';
 
 /// LEGACY (pre-Pack-5 accounts only). Shown by [AuthGate] when a user from the
 /// old 2-step flow returns to the app mid-signup: their
@@ -143,15 +145,13 @@ class _ResumeOtpScreenState extends ConsumerState<ResumeOtpScreen> {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
-    final secondaryInk = Theme.of(context).brightness == Brightness.dark
-        ? AppColors.darkInkSecondary
-        : AppColors.mediumGrey;
+    final secondaryInk = context.colors.textSecondary;
 
     return Scaffold(
       appBar: UniflexAppBar(
         title: 'Verify Phone Number',
         leading: IconButton(
-          icon: const Icon(Icons.close),
+          icon: const Icon(AppIcons.close),
           tooltip: 'Cancel sign-up',
           onPressed: () => ref.read(authServiceProvider).signOut(),
         ),
@@ -175,35 +175,7 @@ class _ResumeOtpScreenState extends ConsumerState<ResumeOtpScreen> {
 
               // ── Error banner ──────────────────────────────────────────
               if (_errorText != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  decoration: BoxDecoration(
-                    color: colorScheme.error.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(AppRadius.control),
-                    border: Border.all(
-                      color: colorScheme.error.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 20,
-                        color: colorScheme.error,
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: Text(
-                          _errorText!,
-                          style: textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.error,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                AppInlineNotice(isError: true, text: _errorText!),
                 const SizedBox(height: AppSpacing.md),
               ],
 
@@ -217,12 +189,12 @@ class _ResumeOtpScreenState extends ConsumerState<ResumeOtpScreen> {
                     hint: '08012345678',
                     keyboardType: TextInputType.phone,
                     textInputAction: TextInputAction.done,
-                    prefixIcon: Icons.phone_outlined,
+                    prefixIcon: AppIcons.phone,
                     validator: AuthValidators.phone,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.xl),
-                PrimaryButton(
+                AppButton(
                   label: 'Send Code',
                   icon: Icons.send_outlined,
                   isLoading: _isSending,
@@ -241,7 +213,7 @@ class _ResumeOtpScreenState extends ConsumerState<ResumeOtpScreen> {
                   child: Row(
                     children: [
                       Icon(
-                        Icons.phone_outlined,
+                        AppIcons.phone,
                         size: 20,
                         color: colorScheme.onSurface.withValues(alpha: 0.7),
                       ),
@@ -256,7 +228,7 @@ class _ResumeOtpScreenState extends ConsumerState<ResumeOtpScreen> {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.xl),
-                PrimaryButton(
+                AppButton(
                   label: 'Send Code',
                   icon: Icons.send_outlined,
                   isLoading: _isSending,
@@ -280,16 +252,19 @@ class _ResumeOtpScreenState extends ConsumerState<ResumeOtpScreen> {
                   maxLength: 6,
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                PrimaryButton(
+                AppButton(
                   label: 'Verify',
-                  icon: Icons.check_circle_outline,
+                  icon: AppIcons.success,
                   isLoading: _isVerifying,
                   onPressed: _verify,
                 ),
                 const SizedBox(height: AppSpacing.md),
-                TextButton(
+                AppButton(
+                  label: _isSending ? 'Resending…' : 'Resend code',
+                  variant: AppButtonVariant.text,
+                  size: AppButtonSize.small,
+                  expand: false,
                   onPressed: _isSending ? null : _resend,
-                  child: Text(_isSending ? 'Resending…' : 'Resend code'),
                 ),
               ],
             ],

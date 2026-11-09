@@ -5,12 +5,13 @@ import 'package:flutter/services.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
-import '../../widgets/buttons/primary_button.dart';
+import '../../widgets/buttons/app_button.dart';
 import '../../widgets/inputs/app_text_field.dart';
 import '../../widgets/progress/onboarding_progress_bar.dart';
 import '../signup/signup_api.dart';
 import '../signup/signup_flow_controller.dart';
 import '../signup/signup_widgets.dart';
+import '../../theme/app_icons.dart';
 
 /// Step 2 of sign-up — "Verify your phone". Shows the masked number and a
 /// 6-digit field. Resend is disabled for 60 s with a visible countdown;
@@ -82,9 +83,7 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final secondaryInk = Theme.of(context).brightness == Brightness.dark
-        ? AppColors.darkInkSecondary
-        : AppColors.mediumGrey;
+    final secondaryInk = context.colors.textSecondary;
     final busy = _c.busy;
     final wait = _c.cooldownRemaining;
     final error = _localError ?? _c.error;
@@ -121,26 +120,30 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               ),
               const SizedBox(height: AppSpacing.lg),
-              PrimaryButton(
+              AppButton(
                 label: 'Verify',
-                icon: Icons.check_circle_outline,
+                icon: AppIcons.success,
                 isLoading: busy,
                 onPressed: busy ? null : _verify,
               ),
               const SizedBox(height: AppSpacing.md),
-              TextButton(
+              AppButton(
                 key: const ValueKey('resend'),
+                label: wait > 0
+                    ? 'Resend code in ${_countdown(wait)}'
+                    : 'Resend code',
+                variant: AppButtonVariant.text,
+                size: AppButtonSize.small,
+                expand: false,
                 onPressed: (busy || wait > 0) ? null : _resend,
-                child: Text(
-                  wait > 0
-                      ? 'Resend code in ${_countdown(wait)}'
-                      : 'Resend code',
-                ),
               ),
-              TextButton(
+              AppButton(
                 key: const ValueKey('change-number'),
+                label: 'Change number',
+                variant: AppButtonVariant.text,
+                size: AppButtonSize.small,
+                expand: false,
                 onPressed: busy ? null : _c.changeNumber,
-                child: const Text('Change number'),
               ),
             ],
           ),

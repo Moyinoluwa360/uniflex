@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/auth/auth_providers.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
-import '../../widgets/buttons/primary_button.dart';
+import '../../widgets/buttons/app_button.dart';
 import '../../widgets/inputs/app_text_field.dart';
 import '../../widgets/progress/onboarding_progress_bar.dart';
 import '../signup/signup_draft.dart';
@@ -14,6 +14,7 @@ import '../signup/signup_widgets.dart';
 import '../validators.dart';
 import '../signup/signup_final_step.dart';
 import 'verify_phone_screen.dart';
+import '../../theme/app_icons.dart';
 
 /// Student self-signup (Pack 5) — THREE steps, and the account is created
 /// only at the very end:
@@ -166,9 +167,7 @@ class _SignupDetailsStepState extends State<SignupDetailsStep> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final secondaryInk = Theme.of(context).brightness == Brightness.dark
-        ? AppColors.darkInkSecondary
-        : AppColors.mediumGrey;
+    final secondaryInk = context.colors.textSecondary;
     final busy = _c.busy;
 
     return Scaffold(
@@ -200,7 +199,7 @@ class _SignupDetailsStepState extends State<SignupDetailsStep> {
                   label: 'Email address',
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
-                  prefixIcon: Icons.mail_outline,
+                  prefixIcon: AppIcons.mail,
                   validator: AuthValidators.email,
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -210,11 +209,10 @@ class _SignupDetailsStepState extends State<SignupDetailsStep> {
                   hint: '8+ characters, at least one number',
                   obscureText: _obscurePassword,
                   textInputAction: TextInputAction.next,
-                  prefixIcon: Icons.lock_outline,
+                  prefixIcon: AppIcons.lock,
                   suffixIcon: IconButton(
-                    icon: Icon(_obscurePassword
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined),
+                    icon:
+                        Icon(_obscurePassword ? AppIcons.eye : AppIcons.eyeOff),
                     onPressed: () =>
                         setState(() => _obscurePassword = !_obscurePassword),
                   ),
@@ -226,11 +224,10 @@ class _SignupDetailsStepState extends State<SignupDetailsStep> {
                   label: 'Confirm password',
                   obscureText: _obscureConfirm,
                   textInputAction: TextInputAction.next,
-                  prefixIcon: Icons.lock_outline,
+                  prefixIcon: AppIcons.lock,
                   suffixIcon: IconButton(
-                    icon: Icon(_obscureConfirm
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined),
+                    icon:
+                        Icon(_obscureConfirm ? AppIcons.eye : AppIcons.eyeOff),
                     onPressed: () =>
                         setState(() => _obscureConfirm = !_obscureConfirm),
                   ),
@@ -249,13 +246,13 @@ class _SignupDetailsStepState extends State<SignupDetailsStep> {
                   hint: '08012345678',
                   keyboardType: TextInputType.phone,
                   textInputAction: TextInputAction.done,
-                  prefixIcon: Icons.phone_outlined,
+                  prefixIcon: AppIcons.phone,
                   validator: AuthValidators.phone,
                 ),
                 const SizedBox(height: AppSpacing.xl),
-                PrimaryButton(
+                AppButton(
                   label: 'Continue',
-                  icon: Icons.arrow_forward,
+                  icon: AppIcons.forward,
                   isLoading: busy,
                   onPressed: busy ? null : _submit,
                 ),
@@ -268,29 +265,26 @@ class _SignupDetailsStepState extends State<SignupDetailsStep> {
                       style:
                           textTheme.bodyMedium?.copyWith(color: secondaryInk),
                     ),
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
+                    AppButton(
+                      label: 'Log in',
+                      variant: AppButtonVariant.text,
+                      size: AppButtonSize.small,
+                      expand: false,
                       onPressed:
                           busy ? null : () => Navigator.of(context).maybePop(),
-                      child: const Text('Log in'),
                     ),
                   ],
                 ),
                 if (_c.hasProgress) ...[
                   const SizedBox(height: AppSpacing.sm),
                   Center(
-                    child: TextButton(
+                    child: AppButton(
                       key: const ValueKey('start-over'),
+                      label: 'Start over',
+                      variant: AppButtonVariant.text,
+                      size: AppButtonSize.small,
+                      expand: false,
                       onPressed: busy ? null : _startOver,
-                      child: Text(
-                        'Start over',
-                        style:
-                            textTheme.bodySmall?.copyWith(color: secondaryInk),
-                      ),
                     ),
                   ),
                 ],

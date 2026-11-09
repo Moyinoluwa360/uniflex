@@ -5,13 +5,14 @@ import 'package:flutter/services.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
-import '../../widgets/buttons/primary_button.dart';
+import '../../widgets/buttons/app_button.dart';
 import '../../widgets/inputs/app_text_field.dart';
 import '../../widgets/progress/onboarding_progress_bar.dart';
 import '../validators.dart';
 import 'signup_draft.dart';
 import 'signup_flow_controller.dart';
 import 'signup_widgets.dart';
+import '../../theme/app_icons.dart';
 
 const _availableSchools = ["Redeemer's University"];
 
@@ -229,16 +230,14 @@ class _SignupFinalStepState extends State<SignupFinalStep> {
                 height: 16,
                 child: CircularProgressIndicator(strokeWidth: 2)),
           ),
-        _Check.ok => const Icon(Icons.check_circle, color: AppColors.emerald),
+        _Check.ok => Icon(AppIcons.success, color: context.colors.brandText),
         _ => null,
       };
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final secondaryInk = Theme.of(context).brightness == Brightness.dark
-        ? AppColors.darkInkSecondary
-        : AppColors.mediumGrey;
+    final secondaryInk = context.colors.textSecondary;
     final busy = _c.busy;
     final banner = _localError ?? _c.error;
 
@@ -261,8 +260,8 @@ class _SignupFinalStepState extends State<SignupFinalStep> {
                 Text('Complete your\nprofile', style: textTheme.headlineMedium),
                 const SizedBox(height: AppSpacing.sm),
                 Row(children: [
-                  const Icon(Icons.verified,
-                      size: 16, color: AppColors.emerald),
+                  Icon(AppIcons.success,
+                      size: 16, color: context.colors.brandText),
                   const SizedBox(width: AppSpacing.xs),
                   Text('Phone verified',
                       style:
@@ -381,9 +380,9 @@ class _SignupFinalStepState extends State<SignupFinalStep> {
                   ],
                 ),
                 const SizedBox(height: AppSpacing.xl),
-                PrimaryButton(
+                AppButton(
                   label: 'Finish setup',
-                  icon: Icons.check_circle_outline,
+                  icon: AppIcons.success,
                   isLoading: busy,
                   onPressed: busy ? null : _submit,
                 ),

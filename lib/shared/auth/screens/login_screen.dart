@@ -4,14 +4,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
-import '../../widgets/buttons/primary_button.dart';
-import '../../widgets/buttons/secondary_button.dart';
+import '../../widgets/buttons/app_button.dart';
 import '../../widgets/inputs/app_text_field.dart';
 import '../../widgets/wordmark/uniflex_wordmark.dart';
 import '../../services/auth/auth_providers.dart';
 import '../validators.dart';
 import 'create_account_screen.dart';
 import 'forgot_password_screen.dart';
+import '../../widgets/notice/app_inline_notice.dart';
+import '../../theme/app_icons.dart';
 
 /// The one login screen every role uses — Student, Rider, and Admin
 /// alike. Which shell a person lands on after this is decided by their
@@ -71,10 +72,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
-    final secondaryInk = Theme.of(context).brightness == Brightness.dark
-        ? AppColors.darkInkSecondary
-        : AppColors.mediumGrey;
+    final secondaryInk = context.colors.textSecondary;
 
     return Scaffold(
       body: SafeArea(
@@ -99,35 +97,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 if (_errorText != null) ...[
-                  Container(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    decoration: BoxDecoration(
-                      color: colorScheme.error.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(AppRadius.control),
-                      border: Border.all(
-                        color: colorScheme.error.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 20,
-                          color: colorScheme.error,
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: Text(
-                            _errorText!,
-                            style: textTheme.bodyMedium?.copyWith(
-                              color: colorScheme.error,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  AppInlineNotice(isError: true, text: _errorText!),
                   const SizedBox(height: AppSpacing.md),
                 ],
                 AppTextField(
@@ -135,7 +105,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   label: 'Email address',
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
-                  prefixIcon: Icons.mail_outline,
+                  prefixIcon: AppIcons.mail,
                   validator: AuthValidators.email,
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -144,12 +114,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   label: 'Password',
                   obscureText: _obscurePassword,
                   textInputAction: TextInputAction.done,
-                  prefixIcon: Icons.lock_outline,
+                  prefixIcon: AppIcons.lock,
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined,
+                      _obscurePassword ? AppIcons.eye : AppIcons.eyeOff,
                     ),
                     onPressed: () =>
                         setState(() => _obscurePassword = !_obscurePassword),
@@ -160,7 +128,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 const SizedBox(height: AppSpacing.sm),
                 Align(
                   alignment: Alignment.centerRight,
-                  child: TextButton(
+                  child: AppButton(
+                    label: 'Forgot password?',
+                    variant: AppButtonVariant.text,
+                    size: AppButtonSize.small,
+                    expand: false,
                     onPressed: _isLoading
                         ? null
                         : () => Navigator.of(context).push(
@@ -168,14 +140,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 builder: (_) => const ForgotPasswordScreen(),
                               ),
                             ),
-                    child: const Text('Forgot password?'),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
-                PrimaryButton(
+                AppButton(
                   label: 'Log In',
                   isLoading: _isLoading,
-                  icon: Icons.arrow_forward,
+                  icon: AppIcons.forward,
                   onPressed: _submit,
                 ),
                 const SizedBox(height: AppSpacing.lg),
@@ -197,7 +168,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ],
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                SecondaryButton(
+                AppButton(
+                  variant: AppButtonVariant.secondary,
                   label: 'Create Account',
                   onPressed: _isLoading
                       ? null

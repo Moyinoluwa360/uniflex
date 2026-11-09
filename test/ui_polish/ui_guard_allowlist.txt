@@ -33,14 +33,6 @@ lib/rider/jobs/food_job_screen.dart 28
 lib/rider/jobs/rider_job_card.dart 5
 lib/rider/pool/job_pool_screen.dart 2
 lib/rider/profile/rider_profile_screen.dart 1
-lib/shared/auth/screens/complete_profile_screen.dart 2
-lib/shared/auth/screens/create_account_screen.dart 2
-lib/shared/auth/screens/forgot_password_screen.dart 2
-lib/shared/auth/screens/login_screen.dart 2
-lib/shared/auth/screens/reset_password_screen.dart 2
-lib/shared/auth/screens/resume_otp_screen.dart 2
-lib/shared/auth/screens/verify_phone_screen.dart 2
-lib/shared/auth/signup/signup_final_step.dart 4
 lib/shared/order_breakdown/order_breakdown_widget.dart 3
 lib/shared/router/splash_screen.dart 8
 lib/shared/widgets/connectivity/connectivity_banner.dart 5

@@ -5,7 +5,10 @@ import '../auth/screens/complete_profile_screen.dart';
 import '../auth/screens/login_screen.dart';
 import '../auth/screens/resume_otp_screen.dart';
 import '../services/auth/auth_providers.dart';
+import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+import '../theme/app_typography.dart';
+import '../widgets/buttons/app_button.dart';
 import 'role_router.dart';
 import 'splash_screen.dart';
 
@@ -125,14 +128,12 @@ class _AccountDeactivatedScreen extends ConsumerWidget {
                 'Your account has been deactivated by an admin. '
                 'Contact Uniflex support if you think this is a mistake.',
                 textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
+                style: AppTypography.meta(context.colors),
               ),
               const SizedBox(height: AppSpacing.lg),
-              FilledButton(
+              AppButton(
+                label: 'Back to Login',
                 onPressed: () => ref.read(authServiceProvider).signOut(),
-                child: const Text('Back to Login'),
               ),
             ],
           ),

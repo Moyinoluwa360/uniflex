@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uniflex/shared/widgets/buttons/app_button.dart';
 import 'package:uniflex/shared/auth/screens/create_account_screen.dart';
 import 'package:uniflex/shared/auth/signup/signup_api.dart';
 import 'package:uniflex/shared/auth/signup/signup_draft.dart';
@@ -638,7 +639,7 @@ void main() {
       await tapContinue(t);
 
       expect(find.text('Resend code in 1:00'), findsOneWidget);
-      final button = t.widget<TextButton>(find.byKey(const ValueKey('resend')));
+      final button = t.widget<AppButton>(find.byKey(const ValueKey('resend')));
       expect(button.onPressed, isNull);
       await t.pumpWidget(const SizedBox());
     });
