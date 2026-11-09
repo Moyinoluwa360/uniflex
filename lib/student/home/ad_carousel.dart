@@ -217,8 +217,9 @@ class PromoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final base = dark ? AppColors.matteBlack : AppColors.orange;
-    final shape = AppColors.pureWhite.withValues(alpha: dark ? 0.05 : 0.09);
+    final c = context.colors;
+    final base = dark ? AppColors.adDark : c.promoOrangeStart;
+    final shape = AppColors.onMedia.withValues(alpha: dark ? 0.05 : 0.09);
     final hasImage = imageUrl != null && imageUrl!.isNotEmpty;
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppRadius.card),
@@ -239,13 +240,17 @@ class PromoCard extends StatelessWidget {
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
                       colors: [
-                        AppColors.matteBlack.withValues(alpha: 0.72),
-                        AppColors.matteBlack.withValues(alpha: 0.15),
+                        AppColors.adDark.withValues(alpha: 0.72),
+                        AppColors.adDark.withValues(alpha: 0.15),
                       ],
                     ),
                   ),
                 ),
               ] else ...[
+                if (!dark)
+                  DecoratedBox(
+                    decoration: BoxDecoration(gradient: c.promoOrangeGradient),
+                  ),
                 // Subtle interior shapes — soft concentric circles off the right.
                 Positioned(
                   right: -34,
@@ -280,7 +285,7 @@ class PromoCard extends StatelessWidget {
                     Text(
                       title,
                       style: theme.textTheme.titleSmall
-                          ?.copyWith(color: AppColors.pureWhite),
+                          ?.copyWith(color: AppColors.onMedia),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -288,7 +293,7 @@ class PromoCard extends StatelessWidget {
                     Text(
                       subtitle,
                       style: theme.textTheme.labelSmall?.copyWith(
-                        color: AppColors.pureWhite.withValues(alpha: 0.85),
+                        color: AppColors.onMedia.withValues(alpha: 0.85),
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,

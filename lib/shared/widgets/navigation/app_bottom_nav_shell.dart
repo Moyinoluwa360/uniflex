@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'app_glass_nav_bar.dart';
+
 /// A pending "switch to this tab" request from a screen that is *pushed on
 /// top of* the shell rather than living inside it.
 ///
@@ -69,9 +71,15 @@ class AppBottomNavShell extends ConsumerStatefulWidget {
     super.key,
     required this.tabs,
     this.badgeCounts,
+    this.glass = false,
   });
 
   final List<AppNavTab> tabs;
+
+  /// Use the floating [AppGlassNavBar] (content scrolls under it) instead of
+  /// the classic bottom bar. Same tabs, same index/callback logic. Screens in
+  /// a glass shell pad their bottom with `AppSpacing.navClearanceOf(context)`.
+  final bool glass;
 
   /// Optional unread/badge counts, one per tab. Zero = no badge.
   final List<int>? badgeCounts;
@@ -113,6 +121,51 @@ class _AppBottomNavShellState extends ConsumerState<AppBottomNavShell> {
         () => ref.read(shellTabRequestProvider.notifier).state = null,
       );
     });
+
+    if (widget.glass) {
+      // The Scaffold grows the body's bottom padding by the bar's height;
+      // put the real device inset back so `AppSpacing.navClearanceOf` is
+      // (bar + gap + safe area) exactly once.
+      final deviceBottom = MediaQuery.paddingOf(context).bottom;
+      return Scaffold(
+        extendBody: true,
+        body: SafeArea(
+          bottom: false,
+          child: Builder(
+            builder: (context) {
+              final mq = MediaQuery.of(context);
+              return MediaQuery(
+                data: mq.copyWith(
+                  padding: mq.padding.copyWith(bottom: deviceBottom),
+                ),
+                child: AppNavShellScope(
+                  go: _go,
+                  currentIndex: _index,
+                  child: IndexedStack(
+                    index: _index,
+                    children: widget.tabs.map((tab) => tab.screen).toList(),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        bottomNavigationBar: AppGlassNavBar(
+          items: [
+            for (var i = 0; i < widget.tabs.length; i++)
+              AppGlassNavItem.fromTab(
+                widget.tabs[i],
+                badgeCount: widget.badgeCounts != null &&
+                        i < widget.badgeCounts!.length
+                    ? widget.badgeCounts![i]
+                    : 0,
+              ),
+          ],
+          currentIndex: _index,
+          onTap: (i) => setState(() => _index = i),
+        ),
+      );
+    }
 
     return Scaffold(
       body: SafeArea(

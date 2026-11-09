@@ -191,6 +191,30 @@ class AppColors extends ThemeExtension<AppColors> {
   /// Black 50% — dialog and sheet backdrop (same in both themes).
   static const Color barrier = Color(0x80000000);
 
+  // ── Fixed tokens (identical in light and dark) ──────────────────────
+  /// The one orange allowed outside promos and the cart: the Home bell's
+  /// unread dot.
+  static const Color notifyDot = Color(0xFFF97316);
+
+  /// Ink that always sits ON an image/ad/dark surface (white).
+  static const Color onMedia = Color(0xFFFFFFFF);
+
+  /// Near-black used for the dark ad card and for scrims over photos.
+  static const Color adDark = Color(0xFF101312);
+
+  /// Dark glass chip over a photo: rgba(10,12,11,.45).
+  static const Color glassChipFill = Color(0x730A0C0B);
+
+  /// Wallet card text/ink (always on dark green).
+  static const Color onWallet = Color(0xFFFFFFFF);
+
+  /// Home header base colour (dot borders sit on it).
+  Color get headerSolid =>
+      isDark ? const Color(0xFF0E4A37) : const Color(0xFF08855F);
+
+  /// Icon/placeholder colour inside the Home search field.
+  Color get headerSearchInk => isDark ? headerTextSecondary : textTertiary;
+
   // ── Token sets ──────────────────────────────────────────────────────
 
   static const AppColors dark = AppColors(

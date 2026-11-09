@@ -124,7 +124,7 @@ class AdPopupDialog extends StatelessWidget {
               top: 8,
               right: 8,
               child: Material(
-                color: AppColors.matteBlack.withValues(alpha: 0.55),
+                color: AppColors.adDark.withValues(alpha: 0.55),
                 shape: const CircleBorder(),
                 child: InkWell(
                   key: const ValueKey('ad-popup-close'),
@@ -133,7 +133,7 @@ class AdPopupDialog extends StatelessWidget {
                   child: const Padding(
                     padding: EdgeInsets.all(6),
                     child:
-                        Icon(Icons.close, size: 20, color: AppColors.pureWhite),
+                        Icon(Icons.close, size: 20, color: AppColors.onMedia),
                   ),
                 ),
               ),
@@ -156,7 +156,7 @@ class _TextFace extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      color: ad.isDark ? AppColors.matteBlack : AppColors.orange,
+      color: ad.isDark ? AppColors.adDark : context.colors.promoOrangeStart,
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, AppSpacing.xl, AppSpacing.lg, AppSpacing.xl),
       child: Column(
@@ -165,12 +165,12 @@ class _TextFace extends StatelessWidget {
         children: [
           Text(ad.title,
               style: theme.textTheme.titleLarge
-                  ?.copyWith(color: AppColors.pureWhite)),
+                  ?.copyWith(color: AppColors.onMedia)),
           if (ad.subtitle.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.sm),
             Text(ad.subtitle,
                 style: theme.textTheme.bodyMedium?.copyWith(
-                    color: AppColors.pureWhite.withValues(alpha: 0.9))),
+                    color: AppColors.onMedia.withValues(alpha: 0.9))),
           ],
         ],
       ),

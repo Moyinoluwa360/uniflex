@@ -8,10 +8,20 @@ import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/notifications/notification_inbox_service.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_icons.dart';
 import '../../shared/theme/app_spacing.dart';
+import '../../shared/theme/app_typography.dart';
 import '../../shared/widgets/async/retry_section.dart';
+import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/buttons/promo_cart_button.dart';
+import '../../shared/widgets/chips/dark_glass_chip.dart';
+import '../../shared/widgets/format/money.dart';
+import '../../shared/widgets/home/home_header_parts.dart';
 import '../../shared/widgets/media/app_image.dart';
 import '../../shared/widgets/navigation/app_bottom_nav_shell.dart';
+import '../../shared/widgets/status/app_status_label.dart';
+import '../../shared/widgets/status/status_presentation.dart';
+import '../../shared/widgets/tabs/app_segmented_tabs.dart';
 import '../errand/create_errand_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../ordering/cart_provider.dart';
@@ -34,16 +44,15 @@ const int _kWalletTabIndex = 2;
 /// avatar to jump straight to it.
 const int _kProfileTabIndex = 3;
 
-/// Soft emerald glow beneath vendor cards — a tight, low-opacity brand
-/// shadow that lifts the cards off the canvas (per the design).
-final List<BoxShadow> _cardGlow = [
-  BoxShadow(
-    color: AppColors.emerald.withValues(alpha: 0.16),
-    blurRadius: 18,
-    spreadRadius: -6,
-    offset: const Offset(0, 10),
-  ),
-];
+/// Soft brand glow beneath vendor cards (kept from the original Home).
+List<BoxShadow> _cardGlow(BuildContext context) => [
+      BoxShadow(
+        color: context.colors.brand.withValues(alpha: 0.16),
+        blurRadius: 18,
+        spreadRadius: -6,
+        offset: const Offset(0, 10),
+      ),
+    ];
 
 enum _HomeMode { foodDelivery, errand }
 
@@ -78,49 +87,64 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> {
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: _HomeHeader(
-              greeting: _greeting(),
-              nickname: nickname,
-              balance: balance,
-              searchHint: isFood
-                  ? 'Search meals, vendors, errands'
-                  : 'Search errands, hostels, vendors',
-              onTopUp: () => AppNavShellScope.of(context)?.go(_kWalletTabIndex),
-              onAvatarTap: () =>
-                  AppNavShellScope.of(context)?.go(_kProfileTabIndex),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: _ModeToggle(
-              mode: _mode,
-              onChanged: (m) => setState(() => _mode = m),
-            ),
-          ),
-          if (isFood) ...[
-            const SliverToBoxAdapter(child: _PromoBannerCarousel()),
-            SliverToBoxAdapter(
-              child: _SectionHeader(
-                title: 'Vendors around you',
-                action: 'See all',
-                onAction: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const AllVendorsScreen()),
+      body: Stack(
+        children: [
+          CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: _HomeHeader(
+                  greeting: _greeting(),
+                  nickname: nickname,
+                  balance: balance,
+                  searchHint: isFood
+                      ? 'Search meals, vendors, errands'
+                      : 'Search errands, hostels, vendors',
+                  onTopUp: () =>
+                      AppNavShellScope.of(context)?.go(_kWalletTabIndex),
+                  onAvatarTap: () =>
+                      AppNavShellScope.of(context)?.go(_kProfileTabIndex),
                 ),
               ),
-            ),
-            const SliverToBoxAdapter(child: _VendorList()),
-          ] else ...[
-            const SliverToBoxAdapter(child: _ErrandSection()),
-          ],
-          const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.xl)),
+              SliverToBoxAdapter(
+                child: _ModeToggle(
+                  mode: _mode,
+                  onChanged: (m) => setState(() => _mode = m),
+                ),
+              ),
+              if (isFood) ...[
+                const SliverToBoxAdapter(child: _PromoBannerCarousel()),
+                SliverToBoxAdapter(
+                  child: _SectionHeader(
+                    title: 'Vendors around you',
+                    action: 'See all',
+                    onAction: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                          builder: (_) => const AllVendorsScreen()),
+                    ),
+                  ),
+                ),
+                const SliverToBoxAdapter(child: _VendorList()),
+              ] else ...[
+                const SliverToBoxAdapter(child: _ErrandSection()),
+              ],
+              // Room for the floating glass nav bar (and the cart button).
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: AppSpacing.navClearanceOf(context) + AppSpacing.xl,
+                ),
+              ),
+            ],
+          ),
+          // Post-testing fixes, Section 13: a persistent, badge-carrying cart
+          // button visible from Home whenever the cart is non-empty. Lifted
+          // so it clears the glass nav bar.
+          Positioned(
+            right: AppSpacing.md,
+            bottom: AppSpacing.navClearanceOf(context) + 12,
+            child: const _HomeCartButton(),
+          ),
         ],
       ),
-      // Post-testing fixes, Section 13: a persistent, badge-carrying cart
-      // button visible from Home whenever the cart is non-empty — there
-      // used to be no way to reach the cart from Home at all.
-      floatingActionButton: const _HomeCartButton(),
     );
   }
 }
@@ -133,25 +157,18 @@ class _HomeCartButton extends ConsumerWidget {
     final cart = ref.watch(cartProvider);
     if (cart.isEmpty || cart.vendor == null) return const SizedBox.shrink();
 
-    return Badge(
-      label: Text('${cart.itemCount}'),
-      backgroundColor: AppColors.orange,
-      child: FloatingActionButton(
-        heroTag: 'home_cart_fab',
-        backgroundColor: AppColors.orange,
-        foregroundColor: AppColors.pureWhite,
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => const CartScreen(),
-          ),
+    return PromoCartButton(
+      count: cart.itemCount,
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => const CartScreen(),
         ),
-        child: const Icon(Icons.shopping_cart_outlined),
       ),
     );
   }
 }
 
-/// The header's bell, badged with the unread count and opening the inbox.
+/// The header's bell: shows a dot when something is unread, opens the inbox.
 class _NotificationBell extends ConsumerWidget {
   const _NotificationBell();
 
@@ -159,21 +176,13 @@ class _NotificationBell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final unread = ref.watch(unreadNotificationCountProvider);
 
-    final bell = _GlassCircle(
-      child: const Icon(Icons.notifications_none_rounded,
-          color: AppColors.pureWhite, size: 22),
+    return HeaderGlassButton(
+      icon: AppIcons.bell,
+      semanticLabel: 'Notifications',
+      showDot: unread > 0,
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const NotificationsScreen()),
       ),
-    );
-
-    if (unread == 0) return bell;
-
-    return Badge(
-      label: Text('${unread > 9 ? '9+' : unread}'),
-      backgroundColor: AppColors.orange,
-      textColor: AppColors.pureWhite,
-      child: bell,
     );
   }
 }
@@ -199,21 +208,14 @@ class _HomeHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    const white = AppColors.pureWhite;
+    final c = context.colors;
 
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDark
-              ? [AppColors.darkEmerald, AppColors.darkCanvas]
-              : const [AppColors.emerald, AppColors.splashGradientMid],
-        ),
+        gradient: c.homeHeaderGradient,
+        border: Border(bottom: BorderSide(color: c.headerBorder)),
         borderRadius: const BorderRadius.vertical(
-          bottom: Radius.circular(AppRadius.sheet),
+          bottom: Radius.circular(AppRadius.header),
         ),
       ),
       padding: const EdgeInsets.fromLTRB(
@@ -234,90 +236,37 @@ class _HomeHeader extends StatelessWidget {
                   children: [
                     Text(
                       greeting,
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(color: white.withValues(alpha: 0.85)),
+                      style: AppTypography.body(c)
+                          .copyWith(color: c.headerTextSecondary),
                     ),
                     Text(
                       nickname,
-                      style: theme.textTheme.headlineSmall
-                          ?.copyWith(color: white, height: 1.1),
+                      style: AppTypography.greetingName(c.headerText)
+                          .copyWith(height: 1.1),
                     ),
                   ],
                 ),
               ),
               const _NotificationBell(),
               const SizedBox(width: AppSpacing.sm),
-              // Avatar — emerald in dark mode, white in light. Tapping
-              // routes to the Profile tab.
-              Material(
-                color: isDark ? AppColors.emerald : white,
-                shape: const CircleBorder(),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: onAvatarTap,
-                  child: SizedBox(
-                    width: 40,
-                    height: 40,
-                    child: Center(
-                      child: Text(
-                        nickname.trim().isNotEmpty
-                            ? nickname.trim()[0].toUpperCase()
-                            : 'U',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color:
-                              isDark ? AppColors.pureWhite : AppColors.emerald,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+              // Tapping the avatar routes to the Profile tab.
+              HeaderAvatar(
+                initial: nickname.trim().isNotEmpty
+                    ? nickname.trim()[0].toUpperCase()
+                    : 'U',
+                onTap: onAvatarTap,
               ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-          // Wallet balance card (glass)
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.md,
-              vertical: AppSpacing.md - 2,
-            ),
-            decoration: BoxDecoration(
-              color: white.withValues(alpha: isDark ? 0.08 : 0.16),
-              borderRadius: BorderRadius.circular(AppRadius.control),
-              border: Border.all(color: white.withValues(alpha: 0.18)),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'WALLET BALANCE',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: white.withValues(alpha: 0.75),
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        balance != null
-                            ? '₦${balance!.toStringAsFixed(2)}'
-                            : '₦--',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          color: white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                _TopUpButton(onTap: onTopUp),
-              ],
-            ),
+          // Wallet balance + Top up (glass panel)
+          HeaderWalletPanel(
+            label: 'WALLET BALANCE',
+            balance: balance,
+            onTopUp: onTopUp,
           ),
           const SizedBox(height: AppSpacing.md),
-          // Search bar — dark surface in dark mode, white in light
+          // Search bar
           GestureDetector(
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const SearchScreen()),
@@ -325,29 +274,20 @@ class _HomeHeader extends StatelessWidget {
             child: Container(
               height: AppSpacing.controlHeight - 8,
               decoration: BoxDecoration(
-                color: isDark ? AppColors.darkCard : white,
-                borderRadius: BorderRadius.circular(AppRadius.control),
-                border:
-                    isDark ? Border.all(color: AppColors.darkHairline) : null,
+                color: c.searchFill,
+                borderRadius: BorderRadius.circular(AppRadius.input),
               ),
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
               child: Row(
                 children: [
-                  Icon(Icons.search,
-                      color: isDark
-                          ? AppColors.darkInkSecondary
-                          : AppColors.mediumGrey,
-                      size: 20),
+                  Icon(AppIcons.search, color: c.headerSearchInk, size: 20),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
                       searchHint,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: isDark
-                            ? AppColors.darkInkSecondary
-                            : AppColors.mediumGrey,
-                      ),
+                      style: AppTypography.body(c)
+                          .copyWith(color: c.headerSearchInk),
                     ),
                   ),
                 ],
@@ -355,73 +295,6 @@ class _HomeHeader extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _GlassCircle extends StatelessWidget {
-  const _GlassCircle({required this.child, required this.onTap});
-  final Widget child;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 40,
-        height: 40,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: AppColors.pureWhite.withValues(alpha: 0.16),
-          shape: BoxShape.circle,
-          border:
-              Border.all(color: AppColors.pureWhite.withValues(alpha: 0.18)),
-        ),
-        child: child,
-      ),
-    );
-  }
-}
-
-class _TopUpButton extends StatelessWidget {
-  const _TopUpButton({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    // Emerald fill in dark mode (pops against the deep-green header),
-    // white in light mode. Dark ink reads on both.
-    final bg = isDark ? AppColors.emerald : AppColors.pureWhite;
-    const fg = AppColors.matteBlack;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: AppSpacing.sm,
-        ),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.add, size: 16, color: fg),
-            const SizedBox(width: 4),
-            Text(
-              'Top up',
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: fg,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -438,6 +311,7 @@ class _SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = context.colors;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.screenGutter,
@@ -455,7 +329,7 @@ class _SectionHeader extends StatelessWidget {
               child: Text(
                 action!,
                 style: theme.textTheme.labelMedium
-                    ?.copyWith(color: theme.colorScheme.primary),
+                    ?.copyWith(color: c.brandText),
               ),
             ),
         ],
@@ -474,7 +348,6 @@ class _ModeToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.screenGutter,
@@ -482,91 +355,10 @@ class _ModeToggle extends StatelessWidget {
         AppSpacing.screenGutter,
         0,
       ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(AppRadius.control),
-        ),
-        padding: const EdgeInsets.all(4),
-        child: Row(
-          children: [
-            _ToggleTab(
-              label: 'Food Delivery',
-              icon: Icons.restaurant_outlined,
-              selected: mode == _HomeMode.foodDelivery,
-              onTap: () => onChanged(_HomeMode.foodDelivery),
-            ),
-            _ToggleTab(
-              label: 'Errand',
-              icon: Icons.explore_outlined,
-              selected: mode == _HomeMode.errand,
-              onTap: () => onChanged(_HomeMode.errand),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ToggleTab extends StatelessWidget {
-  const _ToggleTab({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: selected ? theme.colorScheme.surface : Colors.transparent,
-            borderRadius: BorderRadius.circular(AppRadius.control - 4),
-            boxShadow: selected
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.06),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    )
-                  ]
-                : null,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                selected && label == 'Errand' ? Icons.check_circle : icon,
-                size: 16,
-                color: selected
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: selected
-                      ? theme.colorScheme.onSurface
-                      : theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                ),
-              ),
-            ],
-          ),
-        ),
+      child: AppSegmentedTabs(
+        labels: const ['Food Delivery', 'Errand'],
+        index: mode.index,
+        onChanged: (i) => onChanged(_HomeMode.values[i]),
       ),
     );
   }
@@ -663,17 +455,16 @@ class _VendorMetaRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = onDark
-        ? AppColors.pureWhite.withValues(alpha: 0.85)
-        : theme.colorScheme.onSurface.withValues(alpha: 0.6);
+    final c = context.colors;
+    final color = onDark ? c.headerTextSecondary : c.textSecondary;
     return Row(
       children: [
         Icon(Icons.star_rounded,
-            size: 15, color: onDark ? AppColors.pureWhite : AppColors.orange),
+            size: 15, color: onDark ? c.headerText : c.statusAmber),
         const SizedBox(width: 3),
-        Text('4.9  ·  15–20 min  ·  ₦300',
-            style: theme.textTheme.labelSmall?.copyWith(color: color)),
+        Text('4.9  ·  15–20 min  ·  ${Money.format(300)}',
+            style: AppTypography.tabular(
+                Theme.of(context).textTheme.labelSmall!.copyWith(color: color))),
       ],
     );
   }
@@ -696,7 +487,7 @@ class _UniflexVendorCard extends StatelessWidget {
           color: theme.cardTheme.color,
           borderRadius: BorderRadius.circular(AppRadius.card),
           border: Border.all(color: theme.dividerColor),
-          boxShadow: _cardGlow,
+          boxShadow: _cardGlow(context),
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
@@ -716,12 +507,10 @@ class _UniflexVendorCard extends StatelessWidget {
                   ),
                 ),
                 Positioned(
-                  top: AppSpacing.sm,
-                  left: AppSpacing.sm,
-                  child: _Badge(
-                    label: (vendor.badgeLabel ?? 'Major').toUpperCase(),
-                    background: AppColors.orange,
-                    foreground: AppColors.pureWhite,
+                  top: 12,
+                  left: 12,
+                  child: DarkGlassChip(
+                    (vendor.badgeLabel ?? 'Major').toUpperCase(),
                   ),
                 ),
               ],
@@ -744,14 +533,14 @@ class _UniflexVendorCard extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 4),
-                            const Icon(Icons.verified,
-                                size: 16, color: AppColors.emerald),
+                            Icon(Icons.verified,
+                                size: 16, color: theme.colorScheme.primary),
                             const SizedBox(width: AppSpacing.sm),
                             _Badge(
                               label: 'OPEN',
-                              background:
-                                  AppColors.emerald.withValues(alpha: 0.15),
-                              foreground: AppColors.emerald,
+                              background: context.colors.brand
+                                  .withValues(alpha: 0.15),
+                              foreground: context.colors.brandText,
                             ),
                           ],
                         ),
@@ -760,10 +549,7 @@ class _UniflexVendorCard extends StatelessWidget {
                           vendor.description.isNotEmpty
                               ? vendor.description
                               : 'Rice bowls · Grills · Small chops',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.6),
-                          ),
+                          style: theme.textTheme.bodySmall,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -773,19 +559,14 @@ class _UniflexVendorCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.emerald,
-                      foregroundColor: AppColors.pureWhite,
-                      minimumSize: const Size(0, 44),
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-                    ),
+                  AppButton(
+                    label: 'Order',
+                    size: AppButtonSize.small,
+                    expand: false,
                     onPressed: () => Navigator.of(context).push(
                       MaterialPageRoute(
                           builder: (_) => CatalogScreen(vendor: vendor)),
                     ),
-                    child: const Text('Order'),
                   ),
                 ],
               ),
@@ -815,7 +596,7 @@ class _PartnerVendorCard extends StatelessWidget {
           color: theme.cardTheme.color,
           borderRadius: BorderRadius.circular(AppRadius.card),
           border: Border.all(color: theme.dividerColor),
-          boxShadow: _cardGlow,
+          boxShadow: _cardGlow(context),
         ),
         padding: const EdgeInsets.all(AppSpacing.sm + 2),
         child: Row(
@@ -842,9 +623,7 @@ class _PartnerVendorCard extends StatelessWidget {
                     vendor.description.isNotEmpty
                         ? vendor.description
                         : 'Swallow · Soups · Local',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
+                    style: theme.textTheme.bodySmall,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -853,8 +632,8 @@ class _PartnerVendorCard extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.chevron_right,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.4)),
+            Icon(AppIcons.chevronRight,
+                size: AppIconSize.small, color: context.colors.textTertiary),
           ],
         ),
       ),
@@ -923,16 +702,8 @@ class _ErrandSection extends ConsumerWidget {
             Center(
               child: Column(
                 children: [
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      color: AppColors.emerald.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.explore_outlined,
-                        size: 36, color: AppColors.emerald),
-                  ),
+                  Icon(Icons.explore_outlined,
+                      size: 40, color: context.colors.textSecondary),
                   const SizedBox(height: AppSpacing.md),
                   Text(
                     'No active errands',
@@ -941,9 +712,7 @@ class _ErrandSection extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     'Need something done? Send a rider.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
+                    style: theme.textTheme.bodySmall,
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: AppSpacing.xl),
@@ -959,18 +728,9 @@ class _ErrandSection extends ConsumerWidget {
             ],
             const SizedBox(height: AppSpacing.md),
           ],
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.emerald,
-              foregroundColor: AppColors.pureWhite,
-              minimumSize:
-                  const Size(double.infinity, AppSpacing.controlHeight),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppRadius.control),
-              ),
-            ),
-            icon: const Icon(Icons.add, size: 20),
-            label: const Text('Create errand'),
+          AppButton(
+            icon: AppIcons.add,
+            label: 'Create errand',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => const CreateErrandScreen(),
@@ -994,38 +754,14 @@ class _ErrandOrderCard extends ConsumerStatefulWidget {
 class _ErrandOrderCardState extends ConsumerState<_ErrandOrderCard> {
   bool _isCancelling = false;
 
-  Color _statusColor(OrderStatus s) => switch (s) {
-        OrderStatus.placed => AppColors.info,
-        OrderStatus.beingSourced => AppColors.warning,
-        OrderStatus.outForDelivery => AppColors.orange,
-        _ => AppColors.info,
-      };
-
-  String _statusLabel(OrderStatus s) => switch (s) {
-        OrderStatus.placed => 'Errand placed',
-        OrderStatus.beingSourced => 'Rider assigned',
-        OrderStatus.outForDelivery => 'On the way',
-        _ => s.label,
-      };
-
   Future<void> _cancel() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Cancel errand?'),
-        content: const Text('Are you sure you want to cancel this errand?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Keep errand'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Cancel errand',
-                style: TextStyle(color: AppColors.error)),
-          ),
-        ],
-      ),
+    final confirmed = await AppDialog.show(
+      context,
+      title: 'Cancel errand?',
+      body: 'Are you sure you want to cancel this errand?',
+      secondaryLabel: 'Keep errand',
+      confirmLabel: 'Cancel errand',
+      destructive: true,
     );
     if (confirmed != true || !mounted) return;
 
@@ -1049,7 +785,7 @@ class _ErrandOrderCardState extends ConsumerState<_ErrandOrderCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final order = widget.order;
-    final statusColor = _statusColor(order.status);
+    final status = StatusPresenter.order(order.status, isErrand: true);
     final canCancel = order.riderId == null;
 
     return InkWell(
@@ -1068,16 +804,8 @@ class _ErrandOrderCardState extends ConsumerState<_ErrandOrderCard> {
         padding: const EdgeInsets.all(AppSpacing.md),
         child: Row(
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.emerald.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(AppRadius.control - 2),
-              ),
-              child: const Icon(Icons.explore_outlined,
-                  size: 22, color: AppColors.emerald),
-            ),
+            Icon(Icons.explore_outlined,
+                size: AppIconSize.regular, color: theme.colorScheme.onSurfaceVariant),
             const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
@@ -1090,21 +818,7 @@ class _ErrandOrderCardState extends ConsumerState<_ErrandOrderCard> {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.sm, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
-                    ),
-                    child: Text(
-                      _statusLabel(order.status),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: statusColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
+                  AppStatusLabel(tone: status.tone, text: status.label),
                 ],
               ),
             ),
@@ -1119,13 +833,13 @@ class _ErrandOrderCardState extends ConsumerState<_ErrandOrderCard> {
                     )
                   : IconButton(
                       icon: const Icon(Icons.cancel_outlined),
-                      color: AppColors.error,
+                      color: context.colors.dangerText,
                       tooltip: 'Cancel errand',
                       onPressed: _cancel,
                     )
             else
-              Icon(Icons.chevron_right,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.4)),
+              Icon(AppIcons.chevronRight,
+                  size: AppIconSize.small, color: context.colors.textTertiary),
           ],
         ),
       ),

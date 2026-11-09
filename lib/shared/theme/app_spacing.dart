@@ -66,6 +66,9 @@ abstract final class AppRadius {
   /// Bottom sheets (top corners).
   static const double sheet = 28;
 
+  /// Bottom corners of the green Home header.
+  static const double header = 36;
+
   static const double segmentedTrack = 14;
   static const double segment = 11;
   static const double iconButton = 12;

@@ -72,9 +72,8 @@ class _Placeholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     return Container(
-      color: isDark ? AppColors.darkSurface : AppColors.softGrey,
+      color: context.colors.surfaceRaised,
       alignment: Alignment.center,
       child: Icon(
         icon,

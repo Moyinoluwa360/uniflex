@@ -18,28 +18,28 @@ screenshot, so it needs extra care in Pack 2.
 Navigation is `Navigator.push(MaterialPageRoute)`; no named routes. Shell tabs are in an `IndexedStack`.
 
 ### Student (`lib/student/`)
-| Screen | File | Seen |
-|---|---|---|
-| Home | `home/student_home_screen.dart` (1134 lines) | SEEN |
-| Search / All vendors / Ad popup / Ad carousel | `home/search_screen.dart`, `all_vendors_screen.dart`, `ad_popup.dart`, `ad_carousel.dart` | |
-| Orders tabs (Cart / Preparing=Active / Completed) | `orders/orders_screen.dart` | SEEN |
-| Uniflex vendor page (catalog) | `ordering/catalog_screen.dart` | SEEN |
-| Food Packs | `ordering/pack_builder_screen.dart` | SEEN |
-| Your Cart (vendor-grouped) | `ordering/cart_screen.dart` | SEEN |
-| Checkout | `ordering/checkout_screen.dart` | |
-| Pay delivery fee (+ PIN sheet) | `ordering/commitment_fee_screen.dart`, `shared/widgets/pin/pin_entry_sheet.dart` | SEEN |
-| Order confirmation | `ordering/order_confirmation_screen.dart` | |
-| Track Order / Errand tracking | `tracking/order_tracking_screen.dart` (1467 lines), `errand_tracking_screen.dart` | SEEN (Track Order) |
-| Wallet | `wallet/wallet_screen.dart` | SEEN |
-| Saving Plan | `wallet/saving_plan_screen.dart` | SEEN |
-| Paystack checkout (WebView) | `wallet/paystack_checkout_*.dart` | |
-| Profile | `profile/student_profile_screen.dart` | SEEN |
-| Membership card / Badges / Preferences / Refer / Scheduled orders | `profile/*.dart` | |
-| Notifications | `notifications/notifications_screen.dart` | SEEN |
-| Gifts (send / list / received) | `gifts/*.dart` | |
-| Group checkout | `group_checkout/*.dart` | |
-| Errand create / confirmation | `errand/*.dart` | |
-| Support options / chat | `support/*.dart` | |
+| Screen | File | Seen | Migrated |
+|---|---|---|---|
+| Home | `home/student_home_screen.dart` (1134 lines) | SEEN | A ✅ |
+| Search / All vendors / Ad popup / Ad carousel | `home/search_screen.dart`, `all_vendors_screen.dart`, `ad_popup.dart`, `ad_carousel.dart` | | A (ad carousel + popup ✅; search / all vendors pending C) |
+| Orders tabs (Cart / Preparing=Active / Completed) | `orders/orders_screen.dart` | SEEN |  |
+| Uniflex vendor page (catalog) | `ordering/catalog_screen.dart` | SEEN |  |
+| Food Packs | `ordering/pack_builder_screen.dart` | SEEN |  |
+| Your Cart (vendor-grouped) | `ordering/cart_screen.dart` | SEEN |  |
+| Checkout | `ordering/checkout_screen.dart` | |  |
+| Pay delivery fee (+ PIN sheet) | `ordering/commitment_fee_screen.dart`, `shared/widgets/pin/pin_entry_sheet.dart` | SEEN |  |
+| Order confirmation | `ordering/order_confirmation_screen.dart` | |  |
+| Track Order / Errand tracking | `tracking/order_tracking_screen.dart` (1467 lines), `errand_tracking_screen.dart` | SEEN (Track Order) |  |
+| Wallet | `wallet/wallet_screen.dart` | SEEN |  |
+| Saving Plan | `wallet/saving_plan_screen.dart` | SEEN |  |
+| Paystack checkout (WebView) | `wallet/paystack_checkout_*.dart` | |  |
+| Profile | `profile/student_profile_screen.dart` | SEEN |  |
+| Membership card / Badges / Preferences / Refer / Scheduled orders | `profile/*.dart` | |  |
+| Notifications | `notifications/notifications_screen.dart` | SEEN |  |
+| Gifts (send / list / received) | `gifts/*.dart` | |  |
+| Group checkout | `group_checkout/*.dart` | |  |
+| Errand create / confirmation | `errand/*.dart` | |  |
+| Support options / chat | `support/*.dart` | |  |
 
 ### Rider (`lib/rider/`)
 Dashboard `dashboard/rider_dashboard_screen.dart` · Job pool `pool/job_pool_screen.dart` · Active jobs `jobs/active_jobs_screen.dart` · Food job `jobs/food_job_screen.dart` (1184) · Errand job `jobs/errand_job_screen.dart` (741) · Delivery complete `jobs/delivery_complete_screen.dart` · History `history/delivery_history_screen.dart`, `rider_history_detail_screen.dart` · Profile `profile/rider_profile_screen.dart`. None seen.

@@ -54,6 +54,7 @@ class _StudentShellState extends ConsumerState<StudentShell> {
   Widget build(BuildContext context) {
     return const CartNoticeListener(
       child: AppBottomNavShell(
+        glass: true,
         tabs: [
           AppNavTab(
             label: 'Home',
