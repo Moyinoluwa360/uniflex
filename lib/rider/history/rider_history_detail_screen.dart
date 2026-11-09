@@ -70,14 +70,18 @@ class RiderHistoryDetailView extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
-            color: (cancelled ? AppColors.error : AppColors.emerald)
+            color: (cancelled
+                    ? context.colors.dangerText
+                    : context.colors.brandText)
                 .withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(AppRadius.card),
           ),
           child: Row(
             children: [
               Icon(cancelled ? Icons.cancel_outlined : Icons.check_circle,
-                  color: cancelled ? AppColors.error : AppColors.emerald),
+                  color: cancelled
+                      ? context.colors.dangerText
+                      : context.colors.brandText),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
@@ -88,7 +92,9 @@ class RiderHistoryDetailView extends StatelessWidget {
                       : 'Delivered',
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w700,
-                    color: cancelled ? AppColors.error : AppColors.emerald,
+                    color: cancelled
+                        ? context.colors.dangerText
+                        : context.colors.brandText,
                   ),
                 ),
               ),

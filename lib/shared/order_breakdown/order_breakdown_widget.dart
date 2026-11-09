@@ -106,7 +106,7 @@ class _OrderBreakdownViewState extends State<OrderBreakdownView> {
             leading: buildAccordionLeadingIcon(
               context: context,
               icon: Icons.storefront_outlined,
-              color: AppColors.emerald,
+              color: context.colors.brandText,
             ),
             title: vendors[i].vendorName,
             subtitle: '${vendors[i].itemCount} item'
@@ -157,8 +157,8 @@ class _VendorBody extends StatelessWidget {
     if (showHeader) {
       children.add(Row(
         children: [
-          const Icon(Icons.storefront_outlined,
-              size: 18, color: AppColors.emerald),
+          Icon(Icons.storefront_outlined,
+              size: 18, color: context.colors.brandText),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
@@ -194,7 +194,7 @@ class _VendorBody extends StatelessWidget {
         leading: buildAccordionLeadingIcon(
           context: context,
           icon: Icons.inventory_2_outlined,
-          color: AppColors.orange,
+          color: context.colors.statusAmber,
         ),
         title: showPrices ? pack.title : pack.titleNoPrice,
         subtitle: '$n item${n == 1 ? '' : 's'}',

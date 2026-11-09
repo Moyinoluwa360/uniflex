@@ -58,6 +58,7 @@ abstract final class AppIcons {
   static const IconData cart = Icons.shopping_cart_outlined;
   static const IconData bell = Icons.notifications_none_outlined;
   static const IconData gift = Icons.card_giftcard_outlined;
+  static const IconData image = Icons.image_outlined;
   static const IconData send = Icons.send_outlined;
   static const IconData award = Icons.workspace_premium_outlined;
   static const IconData trophy = Icons.emoji_events_outlined;

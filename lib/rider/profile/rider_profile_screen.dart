@@ -5,7 +5,7 @@ import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
-import '../../shared/widgets/buttons/primary_button.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 
 class RiderProfileScreen extends ConsumerWidget {
   const RiderProfileScreen({super.key});
@@ -38,7 +38,7 @@ class RiderProfileScreen extends ConsumerWidget {
                     child: Text(
                       initials,
                       style: theme.textTheme.headlineMedium?.copyWith(
-                        color: AppColors.pureWhite,
+                        color: context.colors.onBrand,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -90,7 +90,7 @@ class RiderProfileScreen extends ConsumerWidget {
               const SizedBox(height: AppSpacing.xl),
 
               // ── Logout ───────────────────────────────────────────────
-              PrimaryButton(
+              AppButton(
                 label: 'Log Out',
                 icon: Icons.logout,
                 onPressed: () => ref.read(authServiceProvider).signOut(),

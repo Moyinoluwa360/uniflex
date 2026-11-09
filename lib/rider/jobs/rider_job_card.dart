@@ -25,7 +25,8 @@ class RiderJobCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
-    final accent = job.isFood ? AppColors.emerald : AppColors.accentViolet;
+    final accent =
+        job.isFood ? context.colors.brandText : context.colors.textSecondary;
 
     final subtitle = job.isFood
         ? (job.vendorNames.isEmpty
@@ -86,13 +87,13 @@ class RiderJobCard extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: AppSpacing.sm, vertical: 3),
                       decoration: BoxDecoration(
-                        color: AppColors.accentViolet.withValues(alpha: 0.12),
+                        color: context.colors.surfaceRaised,
                         borderRadius: BorderRadius.circular(AppRadius.pill),
                       ),
                       child: Text(
                         'GIFT',
                         style: theme.textTheme.labelSmall?.copyWith(
-                          color: AppColors.accentViolet,
+                          color: context.colors.textSecondary,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -111,7 +112,8 @@ class RiderJobCard extends StatelessWidget {
                           : 'Cancelled',
                       key: const ValueKey('cancelled-label'),
                       style: theme.textTheme.labelSmall?.copyWith(
-                          color: AppColors.error, fontWeight: FontWeight.w600),
+                          color: context.colors.dangerText,
+                          fontWeight: FontWeight.w600),
                     )
                   else
                     const Icon(Icons.chevron_right, size: 20),

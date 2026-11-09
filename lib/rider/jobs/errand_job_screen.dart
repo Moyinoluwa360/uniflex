@@ -12,6 +12,8 @@ import '../services/rider_service.dart';
 import 'delivery_complete_screen.dart';
 import 'rider_job.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
+import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/theme/app_icons.dart';
 
 class ErrandJobScreen extends ConsumerStatefulWidget {
   /// Open in preview mode (from the pool — errand not yet accepted).
@@ -120,25 +122,10 @@ class _ErrandJobScreenState extends ConsumerState<ErrandJobScreen> {
               AppSpacing.screenGutter,
               AppSpacing.lg,
             ),
-            child: SizedBox(
-              width: double.infinity,
-              height: AppSpacing.controlHeight,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.accentViolet,
-                ),
-                onPressed: _isAccepting ? null : _accept,
-                child: _isAccepting
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.pureWhite,
-                        ),
-                      )
-                    : const Text('Accept Job'),
-              ),
+            child: AppButton(
+              label: 'Accept Job',
+              isLoading: _isAccepting,
+              onPressed: _isAccepting ? null : _accept,
             ),
           ),
         ],
@@ -177,9 +164,12 @@ class _ErrandJobScreenState extends ConsumerState<ErrandJobScreen> {
                     Text('This errand is no longer active.',
                         style: theme.textTheme.titleSmall),
                     const SizedBox(height: AppSpacing.lg),
-                    OutlinedButton(
+                    AppButton(
+                      label: 'Go back',
+                      variant: AppButtonVariant.secondary,
+                      size: AppButtonSize.small,
+                      expand: false,
                       onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Go back'),
                     ),
                   ],
                 ),
@@ -242,12 +232,12 @@ class _ErrandJobScreenState extends ConsumerState<ErrandJobScreen> {
                 child: SizedBox(
                   width: double.infinity,
                   height: AppSpacing.controlHeight,
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.accentViolet,
-                    ),
+                  child: AppButton(
+                    label: 'Enter Delivery PIN',
+                    variant: AppButtonVariant.primary,
+                    size: AppButtonSize.small,
+                    expand: false,
                     onPressed: _showDeliveryPinSheet,
-                    child: const Text('Enter Delivery PIN'),
                   ),
                 ),
               ),
@@ -271,13 +261,13 @@ class _ErrandBadgeChip extends StatelessWidget {
         padding:
             const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 3),
         decoration: BoxDecoration(
-          color: AppColors.accentViolet.withValues(alpha: 0.12),
+          color: context.colors.surfaceRaised,
           borderRadius: BorderRadius.circular(AppRadius.pill),
         ),
         child: Text(
           'ERRAND',
           style: theme.textTheme.labelSmall?.copyWith(
-            color: AppColors.accentViolet,
+            color: context.colors.textSecondary,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -302,10 +292,9 @@ class _ErrandStatusStepper extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: AppColors.accentViolet.withValues(alpha: 0.06),
+        color: context.colors.surfaceRaised,
         borderRadius: BorderRadius.circular(AppRadius.card),
-        border:
-            Border.all(color: AppColors.accentViolet.withValues(alpha: 0.2)),
+        border: Border.all(color: context.colors.border),
       ),
       child: Row(
         children: List.generate(steps.length * 2 - 1, (i) {
@@ -316,7 +305,7 @@ class _ErrandStatusStepper extends StatelessWidget {
               child: Container(
                 height: 2,
                 color: isActive
-                    ? AppColors.accentViolet
+                    ? context.colors.brand
                     : theme.colorScheme.outline.withValues(alpha: 0.2),
               ),
             );
@@ -333,21 +322,21 @@ class _ErrandStatusStepper extends StatelessWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: isDone || isCurrent
-                      ? AppColors.accentViolet
+                      ? context.colors.brand
                       : theme.colorScheme.outline.withValues(alpha: 0.2),
                 ),
                 child: Center(
                   child: isDone
-                      ? const Icon(Icons.check,
-                          size: 14, color: AppColors.pureWhite)
+                      ? Icon(Icons.check,
+                          size: 14, color: context.colors.onBrand)
                       : isCurrent
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 8,
                               height: 8,
                               child: DecoratedBox(
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: AppColors.pureWhite,
+                                  color: context.colors.onBrand,
                                 ),
                               ),
                             )
@@ -359,7 +348,7 @@ class _ErrandStatusStepper extends StatelessWidget {
                 steps[stepIndex],
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: isDone || isCurrent
-                      ? AppColors.accentViolet
+                      ? context.colors.brand
                       : theme.colorScheme.onSurface.withValues(alpha: 0.4),
                   fontWeight: isCurrent ? FontWeight.w700 : FontWeight.normal,
                   fontSize: 10,
@@ -400,13 +389,13 @@ class _ErrandDetailCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.sm, vertical: 3),
             decoration: BoxDecoration(
-              color: AppColors.accentViolet.withValues(alpha: 0.1),
+              color: context.colors.surfaceRaised,
               borderRadius: BorderRadius.circular(AppRadius.pill),
             ),
             child: Text(
               category,
               style: theme.textTheme.labelSmall?.copyWith(
-                color: AppColors.accentViolet,
+                color: context.colors.textSecondary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -496,13 +485,13 @@ class _ActiveCustomerCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.person_outline,
-                  size: 16, color: AppColors.accentViolet),
+              Icon(Icons.person_outline,
+                  size: 16, color: context.colors.textSecondary),
               const SizedBox(width: AppSpacing.sm),
               Text(
                 'Customer',
                 style: theme.textTheme.labelMedium?.copyWith(
-                  color: AppColors.accentViolet,
+                  color: context.colors.textSecondary,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -520,23 +509,22 @@ class _ActiveCustomerCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: AppButton(
+                    label: 'Call',
+                    variant: AppButtonVariant.secondary,
+                    size: AppButtonSize.small,
+                    icon: AppIcons.phone,
                     onPressed: () => _callPhone(context, phone),
-                    icon: const Icon(Icons.phone_outlined, size: 16),
-                    label: const Text('Call'),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: AppButton(
+                    label: 'WhatsApp',
+                    variant: AppButtonVariant.secondary,
+                    size: AppButtonSize.small,
+                    icon: AppIcons.chat,
                     onPressed: () => _openWhatsApp(context, phone),
-                    icon: const Icon(Icons.chat_outlined, size: 16),
-                    label: const Text('WhatsApp'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF25D366),
-                      side:
-                          const BorderSide(color: Color(0xFF25D366), width: 1),
-                    ),
                   ),
                 ),
               ],
@@ -716,23 +704,10 @@ class _ErrandDeliveryPinSheetState
             },
           ),
           const SizedBox(height: AppSpacing.lg),
-          SizedBox(
-            width: double.infinity,
-            height: AppSpacing.controlHeight,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.accentViolet,
-              ),
-              onPressed: _isConfirming ? null : _confirm,
-              child: _isConfirming
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppColors.pureWhite),
-                    )
-                  : const Text('Confirm delivery'),
-            ),
+          AppButton(
+            label: 'Confirm delivery',
+            isLoading: _isConfirming,
+            onPressed: _isConfirming ? null : _confirm,
           ),
         ],
       ),

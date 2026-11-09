@@ -140,7 +140,9 @@ class AppColors extends ThemeExtension<AppColors> {
   final Color searchFill;
 
   LinearGradient get homeHeaderGradient => isDark
-      ? _css(165, const [Color(0xFF0E4A37), Color(0xFF0A2B21), Color(0xFF0A1410)],
+      ? _css(
+          165,
+          const [Color(0xFF0E4A37), Color(0xFF0A2B21), Color(0xFF0A1410)],
           const [0, 0.58, 1])
       : _css(165, const [Color(0xFF08855F), Color(0xFF05694B)], const [0, 1]);
 
@@ -171,7 +173,8 @@ class AppColors extends ThemeExtension<AppColors> {
 
   /// CSS-style `linear-gradient(<deg>deg, ...)`: 0° = up, 90° = right,
   /// 180° = down.
-  static LinearGradient _css(double deg, List<Color> colors, List<double> stops) {
+  static LinearGradient _css(
+      double deg, List<Color> colors, List<double> stops) {
     final a = deg * math.pi / 180;
     final dx = math.sin(a);
     final dy = -math.cos(a);
@@ -195,6 +198,10 @@ class AppColors extends ThemeExtension<AppColors> {
   /// The one orange allowed outside promos and the cart: the Home bell's
   /// unread dot.
   static const Color notifyDot = Color(0xFFF97316);
+
+  /// WhatsApp brand green (the "Message on WhatsApp" affordance; third-party
+  /// brand colour, same in both themes).
+  static const Color whatsapp = Color(0xFF25D366);
 
   /// Ink that always sits ON an image/ad/dark surface (white).
   static const Color onMedia = Color(0xFFFFFFFF);

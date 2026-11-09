@@ -6,7 +6,9 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
 import '../../theme/app_colors.dart';
+import '../../theme/app_icons.dart';
 import '../../theme/app_spacing.dart';
+import '../../../shared/widgets/buttons/app_button.dart';
 
 /// Shared image-upload widget used by every admin form that accepts a photo
 /// (menu items, vendors, advertisements).
@@ -204,12 +206,12 @@ class _ImageUploadFieldState extends State<ImageUploadField> {
             height: 148,
             width: double.infinity,
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest,
+              color: context.colors.surfaceRaised,
               borderRadius: BorderRadius.circular(AppRadius.card),
               border: Border.all(
                 color: _errorMessage != null
-                    ? AppColors.error
-                    : theme.dividerColor,
+                    ? context.colors.dangerText
+                    : context.colors.border,
               ),
             ),
             clipBehavior: Clip.antiAlias,
@@ -230,11 +232,11 @@ class _ImageUploadFieldState extends State<ImageUploadField> {
 
                 // Upload progress overlay
                 if (_isUploading)
-                  ColoredBox(
-                    color: Colors.black.withValues(alpha: 0.45),
-                    child: const Center(
+                  const ColoredBox(
+                    color: AppColors.barrier,
+                    child: Center(
                       child: CircularProgressIndicator(
-                        color: Colors.white,
+                        color: AppColors.onMedia,
                         strokeWidth: 3,
                       ),
                     ),
@@ -249,24 +251,21 @@ class _ImageUploadFieldState extends State<ImageUploadField> {
           const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
-              const Icon(Icons.error_outline, size: 16, color: AppColors.error),
+              Icon(AppIcons.error, size: 16, color: context.colors.dangerText),
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
                   _errorMessage!,
                   style: theme.textTheme.labelSmall
-                      ?.copyWith(color: AppColors.error),
+                      ?.copyWith(color: context.colors.dangerText),
                 ),
               ),
-              TextButton(
+              AppButton(
+                label: 'Retry',
+                variant: AppButtonVariant.text,
+                size: AppButtonSize.small,
+                expand: false,
                 onPressed: _retryUpload,
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.sm,
-                  ),
-                  minimumSize: Size.zero,
-                ),
-                child: const Text('Retry'),
               ),
             ],
           ),
@@ -276,19 +275,22 @@ class _ImageUploadFieldState extends State<ImageUploadField> {
         const SizedBox(height: AppSpacing.sm),
         Row(
           children: [
-            OutlinedButton.icon(
+            AppButton(
+              label: hasImage ? 'Change photo' : 'Choose photo',
+              variant: AppButtonVariant.secondary,
+              size: AppButtonSize.small,
+              expand: false,
+              icon: AppIcons.image,
               onPressed: _isUploading ? null : _pick,
-              icon: const Icon(Icons.image_outlined, size: 18),
-              label: Text(hasImage ? 'Change photo' : 'Choose photo'),
             ),
             if (hasImage) ...[
               const SizedBox(width: AppSpacing.sm),
-              TextButton(
+              AppButton(
+                label: 'Remove',
+                variant: AppButtonVariant.quietDanger,
+                size: AppButtonSize.small,
+                expand: false,
                 onPressed: _isUploading ? null : _remove,
-                child: const Text(
-                  'Remove',
-                  style: TextStyle(color: AppColors.error),
-                ),
               ),
             ],
           ],
@@ -319,16 +321,15 @@ class _Placeholder extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Icon(
-          Icons.add_photo_alternate_outlined,
+          AppIcons.image,
           size: 32,
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
+          color: context.colors.textTertiary,
         ),
         const SizedBox(height: 4),
         Text(
           'Tap to add photo',
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
-          ),
+          style: theme.textTheme.labelSmall
+              ?.copyWith(color: context.colors.textTertiary),
         ),
       ],
     );

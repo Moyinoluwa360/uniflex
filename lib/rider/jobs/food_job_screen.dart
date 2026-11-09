@@ -14,6 +14,8 @@ import '../services/rider_service.dart';
 import 'delivery_complete_screen.dart';
 import 'rider_job.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
+import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/theme/app_icons.dart';
 
 class FoodJobScreen extends ConsumerStatefulWidget {
   /// Open in preview mode (from the pool — not yet accepted).
@@ -267,22 +269,10 @@ class _FoodJobScreenState extends ConsumerState<FoodJobScreen> {
               AppSpacing.screenGutter,
               AppSpacing.lg,
             ),
-            child: SizedBox(
-              width: double.infinity,
-              height: AppSpacing.controlHeight,
-              child: FilledButton(
-                onPressed: _isAccepting ? null : _accept,
-                child: _isAccepting
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.pureWhite,
-                        ),
-                      )
-                    : const Text('Accept Job'),
-              ),
+            child: AppButton(
+              label: 'Accept Job',
+              isLoading: _isAccepting,
+              onPressed: _isAccepting ? null : _accept,
             ),
           ),
         ],
@@ -313,7 +303,13 @@ class _NotFoundView extends StatelessWidget {
             Text('This job is no longer available.',
                 style: theme.textTheme.titleSmall, textAlign: TextAlign.center),
             const SizedBox(height: AppSpacing.lg),
-            OutlinedButton(onPressed: onBack, child: const Text('Go back')),
+            AppButton(
+              label: 'Go back',
+              variant: AppButtonVariant.secondary,
+              size: AppButtonSize.small,
+              expand: false,
+              onPressed: onBack,
+            ),
           ],
         ),
       ),
@@ -333,13 +329,13 @@ class _FoodBadgeChip extends StatelessWidget {
         padding:
             const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 3),
         decoration: BoxDecoration(
-          color: AppColors.emerald.withValues(alpha: 0.12),
+          color: context.colors.surfaceRaised,
           borderRadius: BorderRadius.circular(AppRadius.pill),
         ),
         child: Text(
           'FOOD',
           style: theme.textTheme.labelSmall?.copyWith(
-            color: AppColors.emerald,
+            color: context.colors.brandText,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -377,9 +373,9 @@ class _StatusStepper extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: AppColors.emerald.withValues(alpha: 0.06),
+        color: context.colors.surfaceRaised,
         borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.emerald.withValues(alpha: 0.2)),
+        border: Border.all(color: context.colors.border),
       ),
       child: Row(
         children: List.generate(_steps.length * 2 - 1, (i) {
@@ -391,7 +387,7 @@ class _StatusStepper extends StatelessWidget {
               child: Container(
                 height: 2,
                 color: isActive
-                    ? AppColors.emerald
+                    ? context.colors.brandText
                     : theme.colorScheme.outline.withValues(alpha: 0.2),
               ),
             );
@@ -408,21 +404,21 @@ class _StatusStepper extends StatelessWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: isDone || isCurrent
-                      ? AppColors.emerald
+                      ? context.colors.brandText
                       : theme.colorScheme.outline.withValues(alpha: 0.2),
                 ),
                 child: Center(
                   child: isDone
-                      ? const Icon(Icons.check,
-                          size: 14, color: AppColors.pureWhite)
+                      ? Icon(Icons.check,
+                          size: 14, color: context.colors.onBrand)
                       : isCurrent
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 8,
                               height: 8,
                               child: DecoratedBox(
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: AppColors.pureWhite,
+                                  color: context.colors.onBrand,
                                 ),
                               ),
                             )
@@ -436,7 +432,7 @@ class _StatusStepper extends StatelessWidget {
                   _steps[stepIndex],
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: isDone || isCurrent
-                        ? AppColors.emerald
+                        ? context.colors.brandText
                         : theme.colorScheme.onSurface.withValues(alpha: 0.4),
                     fontWeight: isCurrent ? FontWeight.w700 : FontWeight.normal,
                     fontSize: 10,
@@ -575,13 +571,13 @@ class _ContactCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.person_outline,
-                  size: 16, color: AppColors.emerald),
+              Icon(Icons.person_outline,
+                  size: 16, color: context.colors.brandText),
               const SizedBox(width: AppSpacing.sm),
               Text(
                 label,
                 style: theme.textTheme.labelMedium?.copyWith(
-                  color: AppColors.emerald,
+                  color: context.colors.brandText,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -636,23 +632,22 @@ class _ContactCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: AppButton(
+                    label: 'Call',
+                    variant: AppButtonVariant.secondary,
+                    size: AppButtonSize.small,
+                    icon: AppIcons.phone,
                     onPressed: () => _callPhone(context, phone),
-                    icon: const Icon(Icons.phone_outlined, size: 16),
-                    label: const Text('Call'),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: AppButton(
+                    label: 'WhatsApp',
+                    variant: AppButtonVariant.secondary,
+                    size: AppButtonSize.small,
+                    icon: AppIcons.chat,
                     onPressed: () => _openWhatsApp(context, phone),
-                    icon: const Icon(Icons.chat_outlined, size: 16),
-                    label: const Text('WhatsApp'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF25D366),
-                      side:
-                          const BorderSide(color: Color(0xFF25D366), width: 1),
-                    ),
                   ),
                 ),
               ],
@@ -766,9 +761,12 @@ class _BottomActionBar extends StatelessWidget {
         DeliveryGroupStatus.riderAccepted => SizedBox(
             width: double.infinity,
             height: AppSpacing.controlHeight,
-            child: FilledButton(
+            child: AppButton(
+              label: 'Enter Final Price',
+              variant: AppButtonVariant.primary,
+              size: AppButtonSize.small,
+              expand: false,
               onPressed: onEnterPrice,
-              child: const Text('Enter Final Price'),
             ),
           ),
         DeliveryGroupStatus.awaitingFinalPayment => Column(
@@ -777,21 +775,20 @@ class _BottomActionBar extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(AppSpacing.md),
                 decoration: BoxDecoration(
-                  color: AppColors.warning.withValues(alpha: 0.08),
+                  color: context.colors.surfaceRaised,
                   borderRadius: BorderRadius.circular(AppRadius.card),
-                  border: Border.all(
-                      color: AppColors.warning.withValues(alpha: 0.3)),
+                  border: Border.all(color: context.colors.surfaceRaised),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.hourglass_empty,
-                        color: AppColors.warning, size: 20),
+                    Icon(Icons.hourglass_empty,
+                        color: context.colors.statusAmber, size: 20),
                     const SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: Text(
                         'Waiting for customer payment...',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: AppColors.warning,
+                          color: context.colors.statusAmber,
                         ),
                       ),
                     ),
@@ -799,36 +796,42 @@ class _BottomActionBar extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
-              TextButton(
+              AppButton(
+                label: 'Correct Price',
+                variant: AppButtonVariant.text,
+                size: AppButtonSize.small,
+                expand: false,
                 onPressed: onCorrectPrice,
-                child: const Text('Correct Price'),
               ),
             ],
           ),
         DeliveryGroupStatus.outForDelivery => SizedBox(
             width: double.infinity,
             height: AppSpacing.controlHeight,
-            child: FilledButton(
+            child: AppButton(
+              label: 'Enter Delivery PIN',
+              variant: AppButtonVariant.primary,
+              size: AppButtonSize.small,
+              expand: false,
               onPressed: onEnterPin,
-              child: const Text('Enter Delivery PIN'),
             ),
           ),
         DeliveryGroupStatus.completed => Container(
             padding: const EdgeInsets.all(AppSpacing.md),
             decoration: BoxDecoration(
-              color: AppColors.emerald.withValues(alpha: 0.08),
+              color: context.colors.surfaceRaised,
               borderRadius: BorderRadius.circular(AppRadius.card),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.check_circle_outline,
-                    color: AppColors.emerald),
+                Icon(Icons.check_circle_outline,
+                    color: context.colors.brandText),
                 const SizedBox(width: AppSpacing.sm),
                 Text(
                   'Delivery completed',
                   style: theme.textTheme.labelLarge?.copyWith(
-                    color: AppColors.emerald,
+                    color: context.colors.brandText,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -838,18 +841,18 @@ class _BottomActionBar extends StatelessWidget {
         DeliveryGroupStatus.cancelled => Container(
             padding: const EdgeInsets.all(AppSpacing.md),
             decoration: BoxDecoration(
-              color: AppColors.error.withValues(alpha: 0.08),
+              color: context.colors.surfaceRaised,
               borderRadius: BorderRadius.circular(AppRadius.card),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.cancel_outlined, color: AppColors.error),
+                Icon(Icons.cancel_outlined, color: context.colors.dangerText),
                 const SizedBox(width: AppSpacing.sm),
                 Text(
                   'Order cancelled',
                   style: theme.textTheme.labelLarge?.copyWith(
-                    color: AppColors.error,
+                    color: context.colors.dangerText,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -882,11 +885,11 @@ class _CancelledByStudentView extends StatelessWidget {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: AppColors.error.withValues(alpha: 0.08),
+                color: context.colors.surfaceRaised,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.cancel_outlined,
-                  color: AppColors.error, size: 36),
+              child: Icon(Icons.cancel_outlined,
+                  color: context.colors.dangerText, size: 36),
             ),
             const SizedBox(height: AppSpacing.md),
             Text(
@@ -903,9 +906,12 @@ class _CancelledByStudentView extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSpacing.lg),
-            OutlinedButton(
+            AppButton(
+              label: 'Back to jobs',
+              variant: AppButtonVariant.secondary,
+              size: AppButtonSize.small,
+              expand: false,
               onPressed: onBack,
-              child: const Text('Back to jobs'),
             ),
           ],
         ),
@@ -968,13 +974,19 @@ class _EnterPriceSheetState extends ConsumerState<_EnterPriceSheet> {
           'Send ₦${amount.toStringAsFixed(0)} to ${widget.customerName}?\n\nThey will be asked to pay.',
         ),
         actions: [
-          TextButton(
+          AppButton(
+            label: 'Cancel',
+            variant: AppButtonVariant.text,
+            size: AppButtonSize.small,
+            expand: false,
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
           ),
-          FilledButton(
+          AppButton(
+            label: 'Send',
+            variant: AppButtonVariant.primary,
+            size: AppButtonSize.small,
+            expand: false,
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Send'),
           ),
         ],
       ),
@@ -1041,20 +1053,10 @@ class _EnterPriceSheetState extends ConsumerState<_EnterPriceSheet> {
             autofocus: true,
           ),
           const SizedBox(height: AppSpacing.lg),
-          SizedBox(
-            width: double.infinity,
-            height: AppSpacing.controlHeight,
-            child: FilledButton(
-              onPressed: _isSending ? null : _send,
-              child: _isSending
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppColors.pureWhite),
-                    )
-                  : const Text('Send to customer'),
-            ),
+          AppButton(
+            label: 'Send to customer',
+            isLoading: _isSending,
+            onPressed: _isSending ? null : _send,
           ),
         ],
       ),
@@ -1162,20 +1164,10 @@ class _DeliveryPinSheetState extends ConsumerState<_DeliveryPinSheet> {
             },
           ),
           const SizedBox(height: AppSpacing.lg),
-          SizedBox(
-            width: double.infinity,
-            height: AppSpacing.controlHeight,
-            child: FilledButton(
-              onPressed: _isConfirming ? null : _confirm,
-              child: _isConfirming
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppColors.pureWhite),
-                    )
-                  : const Text('Confirm delivery'),
-            ),
+          AppButton(
+            label: 'Confirm delivery',
+            isLoading: _isConfirming,
+            onPressed: _isConfirming ? null : _confirm,
           ),
         ],
       ),

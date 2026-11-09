@@ -71,7 +71,7 @@ class _RiderDashboardScreenState extends ConsumerState<RiderDashboardScreen> {
             backgroundColor: theme.colorScheme.primary,
             actions: [
               IconButton(
-                icon: const Icon(Icons.refresh, color: AppColors.pureWhite),
+                icon: Icon(Icons.refresh, color: context.colors.onBrand),
                 tooltip: 'Refresh',
                 onPressed: () => ref.invalidate(riderStatsProvider),
               ),
@@ -90,14 +90,14 @@ class _RiderDashboardScreenState extends ConsumerState<RiderDashboardScreen> {
                   Text(
                     'Dashboard',
                     style: theme.textTheme.titleLarge?.copyWith(
-                      color: AppColors.pureWhite,
+                      color: context.colors.onBrand,
                     ),
                   ),
                   if (profile?.fullName != null)
                     Text(
                       profile!.fullName!,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppColors.pureWhite.withValues(alpha: 0.8),
+                        color: context.colors.onBrand.withValues(alpha: 0.8),
                       ),
                     ),
                 ],
@@ -130,7 +130,7 @@ class _RiderDashboardScreenState extends ConsumerState<RiderDashboardScreen> {
                           label: 'Active jobs',
                           value: '${activeFood + activeErrands}',
                           icon: Icons.delivery_dining,
-                          color: AppColors.orange,
+                          color: context.colors.statusAmber,
                           onTap: () => _openActive(activeFood, activeErrands),
                         ),
                       ),
@@ -140,7 +140,7 @@ class _RiderDashboardScreenState extends ConsumerState<RiderDashboardScreen> {
                           label: 'Today',
                           value: '$todayCount',
                           icon: Icons.check_circle_outline,
-                          color: AppColors.emerald,
+                          color: context.colors.brandText,
                         ),
                       ),
                       const SizedBox(width: AppSpacing.cardGap),
@@ -178,7 +178,8 @@ class _OnlineToggleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = isOnline ? AppColors.emerald : theme.colorScheme.outline;
+    final color =
+        isOnline ? context.colors.brandText : theme.colorScheme.outline;
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -229,7 +230,7 @@ class _OnlineToggleCard extends StatelessWidget {
               : Switch(
                   value: isOnline,
                   onChanged: (_) => onToggle(),
-                  activeThumbColor: AppColors.emerald,
+                  activeThumbColor: context.colors.brand,
                 ),
         ],
       ),

@@ -169,15 +169,15 @@ class ActiveJobsChooser extends StatelessWidget {
             ListTile(
               key: const ValueKey('chooser-food'),
               leading:
-                  const Icon(Icons.delivery_dining, color: AppColors.emerald),
+                  Icon(Icons.delivery_dining, color: context.colors.brandText),
               title: const Text('Active food deliveries'),
               trailing: Text('$food'),
               onTap: () => onPick(RiderJobKind.food),
             ),
             ListTile(
               key: const ValueKey('chooser-errands'),
-              leading: const Icon(Icons.directions_run,
-                  color: AppColors.accentViolet),
+              leading: Icon(Icons.directions_run,
+                  color: context.colors.textSecondary),
               title: const Text('Active errands'),
               trailing: Text('$errands'),
               onTap: () => onPick(RiderJobKind.errand),

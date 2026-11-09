@@ -31,8 +31,8 @@ class JobPoolScreen extends ConsumerWidget {
                 Container(
                   width: 8,
                   height: 8,
-                  decoration: const BoxDecoration(
-                    color: AppColors.emerald,
+                  decoration: BoxDecoration(
+                    color: context.colors.brandText,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -41,7 +41,7 @@ class JobPoolScreen extends ConsumerWidget {
                     style: Theme.of(context)
                         .textTheme
                         .labelSmall
-                        ?.copyWith(color: AppColors.emerald)),
+                        ?.copyWith(color: context.colors.brandText)),
               ],
             ),
           ),

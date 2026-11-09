@@ -7,6 +7,7 @@ import '../../shared/utils/local_time.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../services/rider_providers.dart';
 import 'rider_job.dart';
+import '../../shared/widgets/buttons/app_button.dart';
 
 /// Shown after the rider's delivery PIN is accepted (food and errands), in
 /// place of the job screen simply vanishing. The time is the server's single
@@ -69,12 +70,12 @@ class DeliveryCompleteView extends StatelessWidget {
             width: 88,
             height: 88,
             decoration: BoxDecoration(
-              color: AppColors.emerald.withValues(alpha: 0.12),
+              color: context.colors.surfaceRaised,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.check_circle,
-                key: ValueKey('delivery-complete-icon'),
-                color: AppColors.emerald,
+            child: Icon(Icons.check_circle,
+                key: const ValueKey('delivery-complete-icon'),
+                color: context.colors.brandText,
                 size: 56),
           ),
           const SizedBox(height: AppSpacing.lg),
@@ -96,9 +97,12 @@ class DeliveryCompleteView extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             height: AppSpacing.controlHeight,
-            child: FilledButton(
+            child: AppButton(
+              label: 'Done',
+              variant: AppButtonVariant.primary,
+              size: AppButtonSize.small,
+              expand: false,
               onPressed: onDone,
-              child: const Text('Done'),
             ),
           ),
         ],

@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
-import '../buttons/primary_button.dart';
 import '../inputs/app_text_field.dart';
+import '../../../shared/widgets/buttons/app_button.dart';
 
 /// Bottom sheet for sending a one-off message to an order's customer.
 ///
@@ -150,7 +149,7 @@ class _MessageCustomerSheetState extends State<_MessageCustomerSheet> {
             },
           ),
           const SizedBox(height: AppSpacing.md),
-          PrimaryButton(
+          AppButton(
             label: 'Send',
             icon: Icons.send_outlined,
             isLoading: _isSending,
@@ -158,11 +157,13 @@ class _MessageCustomerSheetState extends State<_MessageCustomerSheet> {
           ),
           const SizedBox(height: AppSpacing.sm),
           Center(
-            child: TextButton(
+            child: AppButton(
+              label: 'Cancel',
+              variant: AppButtonVariant.text,
+              size: AppButtonSize.small,
+              expand: false,
               onPressed:
                   _isSending ? null : () => Navigator.of(context).pop(false),
-              child: const Text('Cancel',
-                  style: TextStyle(color: AppColors.mediumGrey)),
             ),
           ),
         ],

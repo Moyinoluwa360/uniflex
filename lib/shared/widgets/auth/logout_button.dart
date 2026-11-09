@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/auth/auth_providers.dart';
-import '../buttons/secondary_button.dart';
+import '../../../shared/widgets/buttons/app_button.dart';
 
 /// Signs the current user out. [AuthGate] watches auth state, so once
 /// [AuthService.signOut] completes it reacts on its own and swaps the
@@ -38,7 +38,8 @@ class _LogoutButtonState extends ConsumerState<LogoutButton> {
 
   @override
   Widget build(BuildContext context) {
-    return SecondaryButton(
+    return AppButton(
+      variant: AppButtonVariant.secondary,
       label: _isLoading ? 'Logging out…' : 'Log out',
       icon: Icons.logout,
       onPressed: _isLoading ? null : _signOut,
