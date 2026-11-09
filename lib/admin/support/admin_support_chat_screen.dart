@@ -10,6 +10,7 @@ import '../../shared/services/support/support_chat_service.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/async/retry_section.dart';
+import '../../shared/widgets/chat/chat_scroll.dart';
 import '../../shared/widgets/chat/support_order_chip.dart';
 import '../orders/admin_order_details_screen.dart';
 import '../services/profile_basics.dart';
@@ -29,17 +30,15 @@ class AdminSupportChatScreen extends ConsumerStatefulWidget {
       _AdminSupportChatScreenState();
 }
 
-class _AdminSupportChatScreenState
-    extends ConsumerState<AdminSupportChatScreen> {
+class _AdminSupportChatScreenState extends ConsumerState<AdminSupportChatScreen>
+    with ChatScrollMixin<AdminSupportChatScreen> {
   final _controller = TextEditingController();
-  final _scrollController = ScrollController();
   bool _isSending = false;
   String? _error;
 
   @override
   void dispose() {
     _controller.dispose();
-    _scrollController.dispose();
     super.dispose();
   }
 
@@ -59,7 +58,7 @@ class _AdminSupportChatScreenState
             conversationId: widget.conversation.id,
           );
       _controller.clear();
-      _scrollToBottom();
+      scrollToNewest();
     } on SupportException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (_) {
@@ -100,21 +99,6 @@ class _AdminSupportChatScreenState
     }
   }
 
-  /// Newest message at the bottom (WhatsApp order). Runs after the next
-  /// frame and again one frame later, once the list extent is final.
-  void _scrollToBottom() {
-    void jump() {
-      if (_scrollController.hasClients) {
-        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-      }
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      jump();
-      WidgetsBinding.instance.addPostFrameCallback((_) => jump());
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -122,12 +106,14 @@ class _AdminSupportChatScreenState
     final conv = widget.conversation;
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: _StudentHeader(
         studentId: conv.studentId,
         isResolved: conv.isResolved,
         onResolve: conv.isOpen ? _confirmResolve : null,
       ),
-      body: Column(
+      body: chatBody(
+          child: Column(
         children: [
           // ── Resolved banner ─────────────────────────────────────────
           if (conv.isResolved)
@@ -152,8 +138,8 @@ class _AdminSupportChatScreenState
             child: _AdminMessageList(
               conversationId: conv.id,
               currentUserId: myId,
-              scrollController: _scrollController,
-              onScrollToBottom: _scrollToBottom,
+              scrollController: chatScroll,
+              onNewMessages: (initial) => onChatMessages(initial: initial),
               onLoaded: () {
                 // Mark read when conversation is opened.
                 ref.read(supportChatServiceProvider).markRead(conv.id);
@@ -191,8 +177,7 @@ class _AdminSupportChatScreenState
             ),
 
           // ── Input ────────────────────────────────────────────────────
-          SafeArea(
-            top: false,
+          ChatBottomInset(
             child: Container(
               decoration: BoxDecoration(
                 color: theme.colorScheme.surface,
@@ -269,7 +254,7 @@ class _AdminSupportChatScreenState
             ),
           ),
         ],
-      ),
+      )),
     );
   }
 }
@@ -354,14 +339,16 @@ class _AdminMessageList extends ConsumerStatefulWidget {
     required this.conversationId,
     required this.currentUserId,
     required this.scrollController,
-    required this.onScrollToBottom,
+    required this.onNewMessages,
     required this.onLoaded,
   });
 
   final String conversationId;
   final String currentUserId;
   final ScrollController scrollController;
-  final VoidCallback onScrollToBottom;
+
+  /// `initial` is true on the first load, false when more messages arrive.
+  final void Function(bool initial) onNewMessages;
   final VoidCallback onLoaded;
 
   @override
@@ -389,11 +376,11 @@ class _AdminMessageListState extends ConsumerState<_AdminMessageList> {
         if (!_calledOnLoaded) {
           _calledOnLoaded = true;
           Future.microtask(widget.onLoaded);
-          Future.microtask(widget.onScrollToBottom);
+          Future.microtask(() => widget.onNewMessages(true));
         }
 
         if (_prev != null && msgs.length > _prev!.length) {
-          widget.onScrollToBottom();
+          widget.onNewMessages(false);
         }
         _prev = msgs;
 
@@ -410,6 +397,7 @@ class _AdminMessageListState extends ConsumerState<_AdminMessageList> {
 
         return ListView.builder(
           controller: widget.scrollController,
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md,
             vertical: AppSpacing.sm,

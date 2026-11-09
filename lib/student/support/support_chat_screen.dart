@@ -10,6 +10,7 @@ import '../../shared/theme/app_spacing.dart';
 import '../../shared/theme/app_typography.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../../shared/widgets/notice/app_inline_notice.dart';
+import '../../shared/widgets/chat/chat_scroll.dart';
 import '../../shared/widgets/chat/support_order_chip.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 
@@ -47,9 +48,9 @@ class SupportChatScreen extends ConsumerStatefulWidget {
   ConsumerState<SupportChatScreen> createState() => _SupportChatScreenState();
 }
 
-class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
+class _SupportChatScreenState extends ConsumerState<SupportChatScreen>
+    with ChatScrollMixin<SupportChatScreen> {
   final _controller = TextEditingController();
-  final _scrollController = ScrollController();
   bool _isSending = false;
   String? _error;
   String? _attachedOrderId;
@@ -69,7 +70,6 @@ class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
   @override
   void dispose() {
     _controller.dispose();
-    _scrollController.dispose();
     super.dispose();
   }
 
@@ -101,7 +101,7 @@ class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
           _attachedGroupLabel = null;
         });
       }
-      _scrollToBottom();
+      scrollToNewest();
     } on SupportException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (_) {
@@ -113,22 +113,6 @@ class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
     }
   }
 
-  /// Newest message is at the bottom (WhatsApp order). Scrolls after the
-  /// next frame, and again one frame later, because a long list's extent
-  /// is only final once the last items have been laid out.
-  void _scrollToBottom() {
-    void jump() {
-      if (_scrollController.hasClients) {
-        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-      }
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      jump();
-      WidgetsBinding.instance.addPostFrameCallback((_) => jump());
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -137,6 +121,7 @@ class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
     final userId = ref.watch(currentProfileProvider).valueOrNull?.id ?? '';
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: const Text('Help & Support'),
         actions: const [
@@ -147,7 +132,8 @@ class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
           ),
         ],
       ),
-      body: Column(
+      body: chatBody(
+          child: Column(
         children: [
           // ── Status bar (resolved) ─────────────────────────────────────
           convAsync
@@ -195,8 +181,8 @@ class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
                 return _MessageList(
                   conversationId: conv.id,
                   currentUserId: userId,
-                  scrollController: _scrollController,
-                  onScrollToBottom: _scrollToBottom,
+                  scrollController: chatScroll,
+                  onNewMessages: (initial) => onChatMessages(initial: initial),
                 );
               },
             ),
@@ -246,7 +232,7 @@ class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
             onSend: _send,
           ),
         ],
-      ),
+      )),
     );
   }
 }
@@ -293,13 +279,15 @@ class _MessageList extends ConsumerStatefulWidget {
     required this.conversationId,
     required this.currentUserId,
     required this.scrollController,
-    required this.onScrollToBottom,
+    required this.onNewMessages,
   });
 
   final String conversationId;
   final String currentUserId;
   final ScrollController scrollController;
-  final VoidCallback onScrollToBottom;
+
+  /// `initial` is true on the first load, false when more messages arrive.
+  final void Function(bool initial) onNewMessages;
 
   @override
   ConsumerState<_MessageList> createState() => _MessageListState();
@@ -323,7 +311,7 @@ class _MessageListState extends ConsumerState<_MessageList> {
       data: (msgs) {
         // Scroll to bottom on initial load and when new messages arrive.
         if (msgs.isNotEmpty && (_prev == null || msgs.length > _prev!.length)) {
-          widget.onScrollToBottom();
+          widget.onNewMessages(_prev == null);
         }
         _prev = msgs;
 
@@ -333,6 +321,7 @@ class _MessageListState extends ConsumerState<_MessageList> {
 
         return ListView.builder(
           controller: widget.scrollController,
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md,
             vertical: AppSpacing.sm,
@@ -515,8 +504,7 @@ class _InputBar extends StatelessWidget {
     final theme = Theme.of(context);
     final c = context.colors;
 
-    return SafeArea(
-      top: false,
+    return ChatBottomInset(
       child: Container(
         decoration: BoxDecoration(
           color: c.surface,
