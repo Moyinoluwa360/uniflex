@@ -106,8 +106,9 @@ class ProfileService {
   /// to need no proof of the old one, so a stolen session could silently
   /// replace the PIN and then spend the wallet.
   Future<void> setTransactionPin(String pin, {String? currentPin}) async {
+    dynamic result;
     try {
-      await _client.rpc('set_transaction_pin', params: {
+      result = await _client.rpc('set_transaction_pin', params: {
         'p_pin': pin,
         if (currentPin != null) 'p_current_pin': currentPin,
       });
@@ -120,6 +121,19 @@ class ProfileService {
             'Server configuration error. Please contact support.');
       }
       throw ProfileException(e.message);
+    }
+    // Pack 2: a wrong / locked current PIN is RETURNED (so the server's
+    // failed-attempt counter is kept), not raised.
+    final error = result is Map ? result['error'] : null;
+    if (error == 'INVALID_CURRENT_PIN') {
+      throw ProfileException('That is not your current PIN.');
+    }
+    if (error == 'PIN_LOCKED') {
+      throw ProfileException(
+          'Too many wrong attempts — PIN is locked for 15 minutes.');
+    }
+    if (error is String && error.isNotEmpty) {
+      throw ProfileException('Could not change your PIN. Please try again.');
     }
   }
 }

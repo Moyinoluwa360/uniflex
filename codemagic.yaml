@@ -21,6 +21,16 @@ workflows:
         script: |
           echo "$ENV_FILE_CONTENTS" > $CM_BUILD_DIR/.env
 
+      # Pack 2: .env is bundled INSIDE the app, so it may only hold public
+      # values (Supabase URL + anon/publishable key, Paystack public key,
+      # Firebase client config). Stop the build if a server secret slipped in.
+      - name: Refuse server secrets in the bundled .env
+        script: |
+          if grep -Eiq '^(SUPABASE_SERVICE_ROLE_KEY|SUPABASE_SECRET_KEY|TERMII_API_KEY|PAYSTACK_SECRET_KEY|FIREBASE_SERVICE_ACCOUNT)|sb_secret_|sk_(live|test)_' "$CM_BUILD_DIR/.env"; then
+            echo "ERROR: .env contains a server-side secret. Remove it from ENV_FILE_CONTENTS (Codemagic > env_file group) and rotate it."
+            exit 1
+          fi
+
       - name: Flutter pub get
         script: flutter pub get
 
