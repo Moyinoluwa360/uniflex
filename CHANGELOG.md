@@ -7,14 +7,14 @@ All notable changes to this project are documented here, phase by phase.
 Audit table: `docs/wallet-funding-audit.md`.
 
 **Security (money)** — `supabase/pack1_wallet_funding_fixes.sql` + `_test.sql`
-(12/12 in a rolled-back dry run on live; **not yet applied**):
+(**applied to live 2026-11-12**, test 12/12 on live, rolled back):
 - `credit_wallet` was executable by anon and authenticated on live (anyone
   could credit any wallet). Now service role only. Also rejects amounts ≤ 0
   and turns a concurrent duplicate into `DUPLICATE_REFERENCE`.
 - `_refund_order` was directly callable by app users (self-refund of a
   delivered order). Now internal only (`update_order_status` still uses it).
 
-**Edge Functions** (code changed; **redeploy needed**):
+**Edge Functions** (**deployed 2026-11-12**; bad-signature smoke test → 401):
 - `paystack-webhook`: the payer-email fallback was a LIKE pattern; now an
   exact, escaped, unambiguous match.
 - `create-virtual-account`: bank chosen from the key's mode (`test-bank` for
@@ -31,7 +31,7 @@ the bundled key is `pk_test_…`.
 Map and design: `docs/vendor-ordering-styles.md`.
 
 **Database** (`supabase/pack1_vendor_ordering_style.sql` + `_test.sql`, 39/39
-in a rolled-back dry run on live; **not yet applied** — owner go-ahead needed)
+**applied to live 2026-11-12**, test 39/39 on live, rolled back)
 - `vendors.ordering_style` (`pack_based` default, `fixed_menu`; check
   constraint). Existing vendors back-filled as pack-based, nothing else changed.
 - Admin-only (trigger + existing RLS); a change is refused while the vendor

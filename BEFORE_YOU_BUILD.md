@@ -169,3 +169,31 @@ register a token after login).
    total). Tap → Orders tab.
 5. Cancel an order as the student → admins get "Order cancelled … by the
    customer". Cancel one as admin A → admin B is told, admin A is not.
+
+## 10. Pack 1 — check on TestFlight (SQL + functions already live)
+
+1. **Nav gap:** on Home, Orders, Wallet, Profile the glass bar's bottom edge
+   sits 20 pt above the screen edge (compare with WhatsApp), in dark and light;
+   it never covers the home indicator and the last item of every tab scrolls
+   fully above it. To change the gap: `AppSpacing.navBottomGap` (one number).
+2. **Border:** look closely at the bar's top edge in dark and in light — it
+   should look exactly like the other three sides.
+3. **Hidden balance:** a fresh open shows `₦ ••••` on Home and Wallet (fund a
+   large balance first: still four dots). The eye on Home shows it on both;
+   hiding it on Wallet hides Home too. Log out and in → hidden again.
+4. **Taps:** press and hold list rows (Profile, accordions, notifications):
+   a soft rounded highlight, no square, no ripple.
+5. **Change Transaction PIN:** scroll Profile to the bottom, tap the row ten
+   times quickly → one sheet; a spinner shows at once on a slow network.
+6. **Fixed-menu vendor:** Admin → Vendors → Add → Ordering style "Fixed menu"
+   (pack price disappears) → save → Menu → Add item (name, category e.g.
+   "Rice", price) ×3 in two categories. As a student: the vendor page shows one
+   dropdown per category, `+` → `− 1 +`, `+` greys out at 20; cart rows have
+   steppers and no pack wording; pay the delivery fee; the rider job and the
+   student/admin order show `2× Item` lines, no packs. Try switching the
+   vendor back to Pack-based while that order is active → refused.
+7. **Pack-based vendor:** order from Uniflex exactly as before (packs, spoons,
+   drinks, others).
+8. **Card top-up (test mode):** Fund Wallet ₦500 → card 4084 0840 8408 4081,
+   CVV 408, any future expiry, PIN 0000, OTP 123456 → balance +₦500 once.
+
