@@ -50,10 +50,23 @@ class _AdminShellState extends ConsumerState<AdminShell> {
   void _onPendingNavigation() {
     if (!mounted) return;
     final nav = NotificationService.consumePendingNavigation();
-    if (nav?['type'] == 'support') {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const AdminSupportInboxScreen()),
-      );
+    switch (nav?['type']) {
+      case 'support':
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const AdminSupportInboxScreen()),
+        );
+      case 'admin_new_order':
+      case 'admin_order_cancelled':
+        // Orders live on tab 0 for kitchen staff (their only tab) and on
+        // tab 1 for super admins.
+        final isKitchenStaff =
+            ref.read(currentProfileProvider).valueOrNull?.isKitchenStaff ??
+                false;
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        ref.read(shellTabRequestProvider.notifier).state =
+            isKitchenStaff ? 0 : 1;
+      default:
+        break;
     }
   }
 

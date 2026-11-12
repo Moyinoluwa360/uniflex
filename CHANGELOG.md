@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented here, phase by phase.
 
+## Push: iOS fix + rider/admin alerts (2026-11-12)
+
+**Fixed**
+- iOS never asked for notification permission: `GoogleService-Info.plist` was
+  in the repo but not in the Xcode project, so it was never bundled and
+  `Firebase.initializeApp()` failed silently. Added to `project.pbxproj`.
+- (Console, not code) the APNs key in Firebase was Sandbox-only, so Apple
+  rejected TestFlight pushes (`BadEnvironmentKeyInToken`). Replaced with a
+  Sandbox & Production key.
+
+**Added** (`supabase/push_staff_alerts.sql`, applied to live; test 18/18)
+- Riders: "New delivery job" / "New errand job" when a paid job enters the
+  pool — every active rider who is online. Tap → Jobs tab.
+- Admins (super admin + kitchen staff): "New order" for each paid checkout
+  (food delivery once per checkout, gift, errand, pickup) and "Order cancelled"
+  (whole checkout, or one shop in it) — not sent to the admin who cancelled.
+  Tap → Orders.
+- Rider app now handles push taps (`rider_shell.dart`): customer paid → that
+  job; cancelled → Home.
+
 ## UI Polish 3 — login + create-account look (2026-11-09)
 
 **Presentation only.** Every field, label/hint string, validator, keyboard type,

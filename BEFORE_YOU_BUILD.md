@@ -154,3 +154,18 @@ Do this order: run `supabase/push_devices.sql` → deploy `push-notification` an
 5. iPhone only: if step 1 shows a row but nothing arrives, check Firebase →
    Project settings → Cloud Messaging → the APNs key (p8) is uploaded for
    `com.uniflex.uniflex`; and the App ID has the Push Notifications capability.
+   The key must be **Sandbox & Production** — a Sandbox-only key fails on
+   TestFlight with `BadEnvironmentKeyInToken`.
+
+## 9. Rider + admin alerts (push_staff_alerts.sql — already applied)
+
+Needs the NEW build on the rider/admin phones (old Android builds never
+register a token after login).
+1. Rider phone: log in as the rider, switch **online**. From a student
+   account place a food delivery → rider gets "New delivery job"; tap → Jobs tab.
+2. Same with an errand → "New errand job" with pickup → drop-off.
+3. Switch the rider **offline**, place another order → no push.
+4. Admin phone: every paid order → "New order" (name · type · shops · ₦ food
+   total). Tap → Orders tab.
+5. Cancel an order as the student → admins get "Order cancelled … by the
+   customer". Cancel one as admin A → admin B is told, admin A is not.
