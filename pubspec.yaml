@@ -46,9 +46,6 @@ dependencies:
   # Opens Google Maps (navigation) and tel: links (call customer) from the
   # active delivery screen without embedding a map widget.
   url_launcher: ^6.3.0
-  # Single position fetch during active delivery to enrich the Maps deep-link
-  # with a current-location origin. Never used in the background.
-  geolocator: ^13.0.2
 
   # Phase 6 — Notifications, Sharing
   # Firebase core + cloud messaging for push notifications.

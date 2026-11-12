@@ -201,6 +201,11 @@ class _AppTextFieldState extends State<AppTextField> {
       controller: _controller,
       focusNode: _node,
       obscureText: w.obscureText,
+      // Pack 2: PINs and passwords must not be learned / suggested by the
+      // keyboard.
+      enableSuggestions: !w.obscureText,
+      autocorrect: !w.obscureText,
+      enableIMEPersonalizedLearning: !w.obscureText,
       keyboardType: w.keyboardType,
       enabled: w.enabled,
       onChanged: w.onChanged,

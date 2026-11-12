@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -13,6 +14,10 @@ import 'shared/services/notifications/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Pack 2: debugPrint still writes to the device log in release builds
+  // (readable over USB / logcat). Errors there can carry ids or server text,
+  // so a release build prints nothing.
+  if (kReleaseMode) debugPrint = (String? message, {int? wrapWidth}) {};
   await EnvConfig.load();
 
   // Restores any persisted session synchronously once this completes —

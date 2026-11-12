@@ -64,9 +64,17 @@ class _PaystackCheckoutPageState extends State<PaystackCheckoutPage> {
       )
       ..setNavigationDelegate(
         NavigationDelegate(
+          // Pack 2: only Paystack's own HTTPS pages (and the card's bank /
+          // 3-D Secure pages, also HTTPS) may load; anything else is refused.
+          onNavigationRequest: (req) => isAllowedCheckoutUrl(req.url)
+              ? NavigationDecision.navigate
+              : NavigationDecision.prevent,
           onWebResourceError: (err) {
+            // A failing image or tracker inside the page is not a failure.
+            if (!mounted || err.isForMainFrame == false) return;
             setState(() {
-              _error = 'Failed to load payment page (${err.description})';
+              _error = 'Could not load the payment page. '
+                  'Check your connection and try again.';
             });
           },
         ),
@@ -166,8 +174,7 @@ class _PaystackCheckoutPageState extends State<PaystackCheckoutPage> {
   }
 
   /// Escapes a string for safe embedding in a single-quoted JS literal.
-  String _escapeJs(String s) =>
-      s.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
+  String _escapeJs(String s) => escapeJsLiteral(s);
 
   @override
   Widget build(BuildContext context) {
@@ -216,4 +223,24 @@ class _PaystackCheckoutPageState extends State<PaystackCheckoutPage> {
           : WebViewWidget(controller: _controller),
     );
   }
+}
+
+/// Escapes [s] for a single-quoted JavaScript string inside an inline
+/// `<script>`: backslash, quote, line breaks and `<` (so `</script>` can't
+/// end the script early).
+String escapeJsLiteral(String s) => s
+    .replaceAll('\\', r'\\')
+    .replaceAll("'", r"\'")
+    .replaceAll('\n', r'\n')
+    .replaceAll('\r', r'\r')
+    .replaceAll('<', r'\x3c')
+    .replaceAll('\u2028', r'\u2028')
+    .replaceAll('\u2029', r'\u2029');
+
+/// Pages the Paystack checkout WebView may open: the inline page itself
+/// (`about:blank` / `data:`), and HTTPS only.
+bool isAllowedCheckoutUrl(String url) {
+  if (url == 'about:blank' || url.startsWith('data:')) return true;
+  final uri = Uri.tryParse(url);
+  return uri != null && uri.scheme == 'https' && uri.host.isNotEmpty;
 }
