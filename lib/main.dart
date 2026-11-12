@@ -1,10 +1,11 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
+import 'student/ordering/cart_provider.dart' show clearSavedCart;
+import 'user_session_scope.dart';
 import 'shared/config/env_config.dart';
 import 'shared/services/connectivity/connectivity_service.dart';
 import 'shared/services/notifications/notification_service.dart';
@@ -36,5 +37,11 @@ Future<void> main() async {
 
   await ConnectivityService.instance.init();
 
-  runApp(const ProviderScope(child: UniflexApp()));
+  final auth = Supabase.instance.client.auth;
+  runApp(UserSessionScope(
+    initialUserId: auth.currentUser?.id,
+    userIdChanges: auth.onAuthStateChange.map((s) => s.session?.user.id),
+    onUserChanged: clearSavedCart,
+    child: const UniflexApp(),
+  ));
 }

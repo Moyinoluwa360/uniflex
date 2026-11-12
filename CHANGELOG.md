@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here, phase by phase.
 
+## Fix: previous account's balance shown after switching accounts (2026-11-12)
+
+Found on the phone: log out of one student, sign up / log in as another
+without closing the app → the new account showed the old account's wallet
+balance. Display only (the server always served the right wallet), but every
+cached per-user list had the same flaw (orders, notifications, support chat,
+gifts, saving plan, stats, rider jobs/history).
+- `lib/user_session_scope.dart`: the app's provider scope is rebuilt whenever
+  a signed-in user signs out or another account signs in — the same clean
+  slate as a cold start. Nobody → user (login, sign-up, password reset) does
+  not rebuild, so those screens are not interrupted. Theme choice is kept.
+- The saved cart is deleted at that moment too (`clearSavedCart`), so the
+  next account never inherits it.
+- Test: `test/pack1/user_session_scope_test.dart`.
+
 ## Pack 1 / Part 4 — wallet funding fixes and tests (2026-11-12)
 
 Audit table: `docs/wallet-funding-audit.md`.

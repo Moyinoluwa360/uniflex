@@ -179,6 +179,15 @@ class CartState {
 
 const _cartExpiry = Duration(hours: 1);
 
+/// Deletes the saved cart from this phone. Called when a signed-in user signs
+/// out or another account signs in, so the next account never inherits the
+/// previous person's cart (see `UserSessionScope`).
+Future<void> clearSavedCart() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.remove(_cartKey);
+  await prefs.remove(_legacyCartKey);
+}
+
 /// Bumped each time an item is added to an EMPTY cart (the start of a new
 /// cart). The student shell listens and shows the one-time notice
 /// "Your cart will be cleared 1 hour after your last change." — once per
