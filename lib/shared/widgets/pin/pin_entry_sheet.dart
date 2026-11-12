@@ -8,6 +8,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_icons.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_typography.dart';
+import '../../utils/app_error_mapper.dart';
 import '../buttons/app_button.dart';
 import '../inputs/app_text_field.dart';
 import '../sheets/app_sheet.dart';
@@ -171,8 +172,8 @@ Future<bool> showSetPinSheet(BuildContext context, WidgetRef ref) async {
           } catch (e) {
             setState(() {
               isSaving = false;
-              error =
-                  'Could not save PIN: ${e.toString().replaceAll('Exception: ', '')}';
+              // Pack 2: never show raw server text.
+              error = 'Could not save PIN. ${AppErrorMapper.map(e)}';
             });
           }
         }
