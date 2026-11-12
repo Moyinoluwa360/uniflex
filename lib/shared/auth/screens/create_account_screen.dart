@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../config/legal_links.dart';
 import '../../services/auth/auth_providers.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
@@ -257,6 +258,31 @@ class _SignupDetailsStepState extends State<SignupDetailsStep> {
         secondary: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Pack 2: the store rules want the policies reachable at sign-up.
+            Wrap(
+              key: const ValueKey('signup-legal'),
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text('By continuing you agree to the ',
+                    style: AppTypography.caption(c)),
+                AppButton(
+                  label: 'Terms',
+                  variant: AppButtonVariant.text,
+                  size: AppButtonSize.small,
+                  expand: false,
+                  onPressed: () => LegalLinks.open(LegalLinks.terms),
+                ),
+                Text(' and ', style: AppTypography.caption(c)),
+                AppButton(
+                  label: 'Privacy Policy',
+                  variant: AppButtonVariant.text,
+                  size: AppButtonSize.small,
+                  expand: false,
+                  onPressed: () => LegalLinks.open(LegalLinks.privacyPolicy),
+                ),
+              ],
+            ),
             Wrap(
               alignment: WrapAlignment.center,
               crossAxisAlignment: WrapCrossAlignment.center,

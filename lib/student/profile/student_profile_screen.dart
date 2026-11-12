@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/config/legal_links.dart';
 import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/support/support_chat_service.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
@@ -11,11 +12,13 @@ import '../../shared/widgets/buttons/app_button.dart';
 import '../../shared/widgets/format/money.dart';
 import '../../shared/widgets/lists/app_list_group.dart';
 import '../../shared/widgets/pin/pin_entry_sheet.dart';
+import '../../shared/utils/app_error_mapper.dart';
 import '../../shared/widgets/text/app_section_label.dart';
 import '../../shared/widgets/tier/tier_header.dart';
 import '../services/student_providers.dart';
 import '../support/support_options_screen.dart';
 import 'badges_screen.dart';
+import 'delete_account_screen.dart';
 import '../gifts/gifts_screen.dart';
 import 'membership_card_screen.dart';
 import 'preferences_screen.dart';
@@ -37,7 +40,7 @@ class StudentProfileScreen extends ConsumerWidget {
     return Scaffold(
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => Center(child: Text(AppErrorMapper.map(e))),
         data: (profile) {
           if (profile == null) {
             return const Center(child: Text('Profile not found.'));
@@ -218,6 +221,39 @@ class StudentProfileScreen extends ConsumerWidget {
                               _push(context, const PreferencesScreen()),
                         ),
                         const _ChangePinRow(),
+                      ],
+                    ),
+
+                    const SizedBox(height: AppSpacing.md),
+
+                    // ── Legal + account deletion (Pack 2: store rules) ──
+                    const AppSectionLabel('Privacy'),
+                    const SizedBox(height: AppSpacing.sm),
+                    AppListGroup(
+                      children: [
+                        AppListRow(
+                          key: const ValueKey('privacy-policy-row'),
+                          leadingIcon: AppIcons.lock,
+                          title: 'Privacy Policy',
+                          trailing: Icon(AppIcons.openExternal,
+                              size: AppIconSize.small, color: c.textTertiary),
+                          onTap: () => LegalLinks.open(LegalLinks.privacyPolicy),
+                        ),
+                        AppListRow(
+                          key: const ValueKey('terms-row'),
+                          leadingIcon: AppIcons.receipt,
+                          title: 'Terms of Service',
+                          trailing: Icon(AppIcons.openExternal,
+                              size: AppIconSize.small, color: c.textTertiary),
+                          onTap: () => LegalLinks.open(LegalLinks.terms),
+                        ),
+                        AppListRow(
+                          key: const ValueKey('delete-account-row'),
+                          leadingIcon: AppIcons.delete,
+                          title: 'Delete account',
+                          onTap: () =>
+                              _push(context, const DeleteAccountScreen()),
+                        ),
                       ],
                     ),
 

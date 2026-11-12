@@ -136,4 +136,39 @@ class ProfileService {
       throw ProfileException('Could not change your PIN. Please try again.');
     }
   }
+
+  /// Pack 2 — deletes the signed-in student's account on the server
+  /// (`delete_my_account`): personal data removed, login made unusable,
+  /// order / wallet records kept anonymised, any balance forfeited.
+  /// Returns the forfeited amount. Throws [ProfileException] with a
+  /// friendly message when the server refuses.
+  Future<double> deleteMyAccount(String pin) async {
+    final dynamic result;
+    try {
+      result = await _client.rpc('delete_my_account', params: {'p_pin': pin});
+    } on PostgrestException {
+      throw ProfileException(
+          'Could not delete your account. Please try again.');
+    }
+    final error = result is Map ? result['error'] : null;
+    if (error is String && error.isNotEmpty) {
+      throw ProfileException(deleteAccountErrorText(error));
+    }
+    final forfeited = result is Map ? result['forfeited'] : null;
+    return forfeited is num ? forfeited.toDouble() : 0;
+  }
 }
+
+/// Friendly text for a `delete_my_account` refusal code.
+String deleteAccountErrorText(String code) => switch (code) {
+      'ACTIVE_ORDERS' =>
+        'You have an order, errand or gift still in progress. Wait until it '
+            'is delivered or cancelled, then try again.',
+      'STAFF_ACCOUNT' =>
+        'Rider and admin accounts are removed by Uniflex. Please contact support.',
+      'INVALID_PIN' => 'Incorrect PIN. Please try again.',
+      'PIN_LOCKED' => 'Too many wrong attempts — PIN is locked for 15 minutes.',
+      'PIN_NOT_SET' => 'Set your transaction PIN first (Profile → Change '
+          'Transaction PIN), then try again.',
+      _ => 'Could not delete your account. Please try again.',
+    };
