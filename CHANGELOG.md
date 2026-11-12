@@ -2,6 +2,36 @@
 
 All notable changes to this project are documented here, phase by phase.
 
+## Pack 2 — security audit, bug audit, store requirements (2026-11-12)
+
+Branch `review-prep`. Full findings: `docs/security-audit.md`; store status:
+`docs/store-requirements.md`; answers to paste: `docs/store-submission-answers.md`;
+owner steps: `docs/launch-checklist.md`.
+
+- **Database (applied to live 2026-11-12, all suites green on live):**
+  `pack2_security_hardening.sql` — students can no longer insert order rows directly
+  (forged "paid" orders, tier inflation); the old no-PIN `checkout_group_order` is
+  dropped and group-order RPCs revoked; internal helpers (`_insert_order_items` …),
+  `verify_transaction_pin`, birthday rewards and `can_notify_order` are server-only;
+  final payments and change-PIN now count wrong PINs (returned `{"error": …}`);
+  referral codes / amounts admin-only; search hides deleted items.
+  `pack2_account_deletion.sql` — `delete_my_account(pin)`.
+  `pack2_retire_legacy_referral_codes.sql` — 12 legacy self-codes cleared (backed up).
+  Rollback: `pack2_security_hardening_ROLLBACK.sql`.
+- **App:** Profile → Privacy (Privacy Policy, Terms, **Delete account**); sign-up
+  links Terms + Privacy Policy; PIN errors from final payments / change-PIN shown;
+  "Saving Plan" shown as "Spending budget"; no raw exception text anywhere; kitchen
+  queue filters on the server, admin history lists capped at 500; Paystack WebView
+  HTTPS-only; release builds print no logs; PIN/password fields don't feed the keyboard.
+- **Platform:** `geolocator` and all location / photo / storage permissions removed;
+  Android backups off; iOS privacy manifest added; iPhone-only; Codemagic refuses a
+  `.env` with a server secret; in-range dependency updates.
+- **Found and needs the owner:** the 8 Nov Android release build contained the
+  `sb_secret_` key — rotate it; legacy service-role key; Paystack key mode; Auth
+  sign-ups off. See the launch checklist.
+- **Tests:** `flutter analyze` clean; 782 Dart tests pass (751 before); SQL 33 + 13 + 4
+  new checks, plus Pack 1/4A/4C/5/push suites re-run green on live.
+
 ## Fix: theme forgotten, stale balance, money formatting (2026-11-12)
 
 - **Theme choice forgotten:** Preferences → Appearance lived in memory only,

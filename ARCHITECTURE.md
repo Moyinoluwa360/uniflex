@@ -1518,3 +1518,43 @@ looked frozen on screen. Nothing in the app unfocused fields (no
   chat, saving plan, wallet top-up) now uses `AppTextField`, which accepts the
   same decoration/style/keyboard options so nothing looks different. A test
   fails if a raw field reappears outside `app_text_field.dart`.
+
+
+## Security model (Pack 2, 2026-11-12)
+
+- **Roles:** `profiles.role` (`student` / `rider` / `admin`, plus `admin_tier`) is the
+  only source of authorisation, read by `is_admin()`, `is_super_admin()`, `is_rider()`.
+  The `guard_profile_privileged_columns` trigger blocks clients from changing role,
+  tier, points, spending, phone / verification, referral fields; trusted SECURITY
+  DEFINER functions set `uniflex.trusted_write` for their own writes. There is no
+  profile INSERT or UPDATE policy: profiles are created by the `signup` Edge Function
+  (admin API) / `complete_student_onboarding`, riders by `admin-create-rider`.
+  `user_metadata` is never used for decisions.
+- **RLS approach:** RLS on every table. Clients **read** their own rows through
+  policies (`auth.uid()`); every **write** that matters goes through a SECURITY DEFINER
+  function with `set search_path`, a role check inside, and `EXECUTE` revoked from
+  `anon` (and from `authenticated` for helpers whose name starts with `_`). Unpaid
+  orders / groups are hidden by RESTRICTIVE policies. Riders read jobs only through
+  `rider_*` functions and `rider_job_signals`.
+- **Money flow:** wallet top-ups are credited only by the service role
+  (`verify-paystack-payment` after `transaction/verify`, or `paystack-webhook` after an
+  HMAC-SHA512 check of the raw body) through `credit_wallet` with a unique reference.
+  Every debit (`create_paid_*`, `pay_final_amount`, `pay_group_final_amount`) locks the
+  wallet row, checks the balance in the same transaction and writes a
+  `wallet_transactions` row; prices, delivery fees and service charge are computed on the
+  server from `products` / `delivery_locations` / settings; an idempotency key stops
+  double charges. Balance must equal the sum of the ledger (forfeits on account
+  deletion are a ledger row, source `account_deleted`).
+- **Transaction PIN:** bcrypt hash in `transaction_pins` (`crypt` + `gen_salt('bf')`),
+  set only by `set_transaction_pin` / sign-up, never readable. Checked only by
+  `_check_transaction_pin` (server-only): 5 wrong tries → 15-minute lock. Callers
+  **return** `{"error": "INVALID_PIN" | "PIN_LOCKED" | "PIN_NOT_SET"}` instead of
+  raising, so the counter is not rolled back; the app turns that into a message with
+  `throwIfRpcError` (`lib/shared/utils/rpc_result.dart`).
+- **Account deletion:** `delete_my_account(pin)` (students only) — see
+  `supabase/pack2_account_deletion.sql` for what is deleted, kept and why the auth row
+  is scrubbed instead of deleted (cascades would remove financial records).
+- **Secrets:** the app bundles `.env` — public values only (Supabase URL + anon /
+  publishable key, Paystack public key, Firebase client config). Server secrets live in
+  Edge Function secrets, the vault (`push_secret_key`) and the local, git-ignored
+  `.env.tooling`. Codemagic and `test/pack2/security_test.dart` refuse a bundled secret.
