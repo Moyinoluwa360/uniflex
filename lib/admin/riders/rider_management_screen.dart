@@ -9,6 +9,7 @@ import '../../shared/widgets/buttons/app_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../services/admin_providers.dart';
 import '../services/admin_service.dart';
+import '../../shared/utils/app_error_mapper.dart';
 
 /// Admin: add / remove / activate Rider accounts (post-testing fixes,
 /// Section 7). Invite-only — there is still no public Rider signup path;
@@ -107,7 +108,7 @@ destructive: true,
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not update rider: $e')),
+          SnackBar(content: Text('Could not update rider. ${AppErrorMapper.map(e)}')),
         );
       }
     }

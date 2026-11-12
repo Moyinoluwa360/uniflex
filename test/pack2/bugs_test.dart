@@ -33,4 +33,35 @@ void main() {
     final pin = _read('lib/shared/widgets/pin/pin_entry_sheet.dart');
     expect(pin.contains('e.toString()'), isFalse);
   });
+
+  test('B-03b no screen interpolates a raw exception into visible text', () {
+    final raw = RegExp(r"""Text\('[^'\n]*\$e'|'[^'\n]*: \$e'|\(\$e\)'""");
+    final hits = <String>[];
+    for (final f in Directory('lib').listSync(recursive: true)) {
+      if (f is! File || !f.path.endsWith('.dart')) continue;
+      final lines = f.readAsLinesSync();
+      for (var i = 0; i < lines.length; i++) {
+        if (lines[i].contains('debugPrint')) continue;
+        if (raw.hasMatch(lines[i])) hits.add('${f.path}:${i + 1}');
+      }
+    }
+    expect(hits, isEmpty);
+  });
+
+  test('C-ios iPhone-only build (no iPad screenshots / layout review)', () {
+    final pbx = _read('ios/Runner.xcodeproj/project.pbxproj');
+    expect(pbx.contains('TARGETED_DEVICE_FAMILY = "1,2"'), isFalse);
+    expect(RegExp('TARGETED_DEVICE_FAMILY = 1;').allMatches(pbx).length, 3);
+  });
+
+  test('C-play the budget is never called a "saving plan" on screen', () {
+    for (final f in [
+      'lib/student/wallet/saving_plan_screen.dart',
+      'lib/student/wallet/wallet_screen.dart',
+      'lib/student/ordering/commitment_fee_screen.dart',
+    ]) {
+      expect(RegExp(r"'[^'\n]*[Ss]aving [Pp]lan[^'\n]*'").hasMatch(_read(f)), isFalse,
+          reason: f);
+    }
+  });
 }

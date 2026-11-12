@@ -12,6 +12,7 @@ import '../../shared/widgets/buttons/app_button.dart';
 import '../../shared/widgets/cards/app_card.dart';
 import '../services/student_providers.dart';
 import 'group_checkout_screen.dart';
+import '../../shared/utils/app_error_mapper.dart';
 
 /// Creates a group order session and shows the shareable group ID to
 /// send to friends. Friends join by entering the ID in their own app.
@@ -38,7 +39,7 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not create group: $e')),
+          SnackBar(content: Text('Could not create group. ${AppErrorMapper.map(e)}')),
         );
       }
     } finally {

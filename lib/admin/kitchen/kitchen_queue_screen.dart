@@ -12,6 +12,7 @@ import '../services/admin_providers.dart';
 import '../services/admin_service.dart';
 import '../../shared/theme/app_icons.dart';
 import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/utils/app_error_mapper.dart';
 
 /// The kitchen queue — live view of all Uniflex-source orders currently
 /// in the kitchen stages (placed / preparing / ready). Updates via
@@ -295,7 +296,7 @@ class _KitchenOrderCardState extends ConsumerState<_KitchenOrderCard> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update: $e')),
+          SnackBar(content: Text('Failed to update. ${AppErrorMapper.map(e)}')),
         );
       }
     } finally {

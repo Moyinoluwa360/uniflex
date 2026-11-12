@@ -9,6 +9,7 @@ import '../services/admin_providers.dart';
 import 'vendor_form_screen.dart';
 import 'vendor_products_screen.dart';
 import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/utils/app_error_mapper.dart';
 
 /// Manage partner vendors: list all vendors, add/edit, and manage each
 /// vendor's product menu. The Uniflex vendor itself is excluded — its menu
@@ -110,7 +111,7 @@ destructive: true,
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Delete failed: $e')),
+          SnackBar(content: Text('Delete failed. ${AppErrorMapper.map(e)}')),
         );
       }
     }

@@ -172,7 +172,7 @@ class _CommitmentFeeScreenState extends ConsumerState<CommitmentFeeScreen> {
       if (r.planOverBudget) {
         messenger.showSnackBar(const SnackBar(
           content: Text(
-              'Heads up: this order has put you over your saving plan budget for the current period.'),
+              'Heads up: this order has put you over your spending budget for the current period.'),
           behavior: SnackBarBehavior.floating,
           duration: Duration(seconds: 5),
         ));
