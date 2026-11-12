@@ -14,6 +14,7 @@ import '../services/admin_providers.dart';
 import 'menu_section.dart';
 import 'product_form_screen.dart';
 import '../../shared/theme/app_icons.dart';
+import '../../shared/widgets/format/money.dart';
 
 /// THE menu-management screen (Pack 4C). Uniflex's own menu and every
 /// partner vendor's menu are this one widget — they only differ by
@@ -510,7 +511,7 @@ class MenuItemTile extends StatelessWidget {
                 children: [
                   Text(product.name, style: theme.textTheme.labelLarge),
                   Text(
-                    '₦${product.basePrice.toStringAsFixed(0)}'
+                    '${Money.format(product.basePrice)}'
                     '${product.isAvailable ? '' : ' · Hidden'}',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.primary,

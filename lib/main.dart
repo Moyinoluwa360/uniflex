@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
 import 'student/ordering/cart_provider.dart' show clearSavedCart;
+import 'shared/theme/theme_mode_provider.dart';
 import 'user_session_scope.dart';
 import 'shared/config/env_config.dart';
 import 'shared/services/connectivity/connectivity_service.dart';
@@ -36,6 +37,7 @@ Future<void> main() async {
   }
 
   await ConnectivityService.instance.init();
+  await ThemeModeStore.load();
 
   final auth = Supabase.instance.client.auth;
   runApp(UserSessionScope(

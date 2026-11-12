@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../shared/services/notifications/notification_service.dart';
+import '../shared/services/wallet/wallet_providers.dart';
 import '../shared/state/balance_visibility.dart';
 import '../shared/widgets/navigation/app_bottom_nav_shell.dart';
 import 'home/student_home_screen.dart';
@@ -9,6 +10,7 @@ import 'notifications/notification_router.dart';
 import 'ordering/cart_notice_listener.dart';
 import 'orders/orders_screen.dart';
 import 'profile/student_profile_screen.dart';
+import 'services/student_providers.dart';
 import 'wallet/wallet_screen.dart';
 
 /// Root of the Student experience. No screen in here should import from
@@ -29,9 +31,23 @@ class StudentShell extends ConsumerStatefulWidget {
 }
 
 class _StudentShellState extends ConsumerState<StudentShell> {
+  AppLifecycleListener? _lifecycle;
+
+  /// Coming back to the app: reload the money figures. A bank transfer is
+  /// credited by the server (webhook) while the app may be in the
+  /// background; without this the old balance stayed until a manual
+  /// pull-to-refresh.
+  void _refreshOnResume() {
+    ref.invalidate(walletBalanceProvider);
+    ref.invalidate(walletInfoProvider);
+    ref.invalidate(walletTransactionsProvider);
+    ref.invalidate(studentStatsProvider);
+  }
+
   @override
   void initState() {
     super.initState();
+    _lifecycle = AppLifecycleListener(onResume: _refreshOnResume);
     // Balance starts hidden for every signed-in session (Pack 1 / 1.3).
     BalanceVisibility.reset();
     NotificationService.pendingNavigation.addListener(_onPendingNavigation);
@@ -42,6 +58,7 @@ class _StudentShellState extends ConsumerState<StudentShell> {
 
   @override
   void dispose() {
+    _lifecycle?.dispose();
     NotificationService.pendingNavigation.removeListener(_onPendingNavigation);
     // Logout (or a role switch) disposes the shell: hide the balance again.
     BalanceVisibility.reset();

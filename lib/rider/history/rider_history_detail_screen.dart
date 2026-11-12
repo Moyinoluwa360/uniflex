@@ -9,6 +9,7 @@ import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../jobs/rider_job.dart';
 import '../services/rider_providers.dart';
+import '../../shared/widgets/format/money.dart';
 
 /// Read-only details of a finished job: order ID, times, the shared item
 /// breakdown, customer name and location. Phone and email are NOT shown once
@@ -111,8 +112,7 @@ class RiderHistoryDetailView extends StatelessWidget {
         if (cancelled && d.cancelledAt != null)
           _Line(label: 'Cancelled', value: formatLocalDateTime(d.cancelledAt!)),
         if (d.kind == RiderJobKind.food && d.amount != null)
-          _Line(
-              label: 'Items total', value: '₦${d.amount!.toStringAsFixed(0)}'),
+          _Line(label: 'Items total', value: Money.format(d.amount!)),
         if (d.kind == RiderJobKind.errand) ...[
           if (d.category != null) _Line(label: 'Category', value: d.category!),
           if (d.itemDescription != null)

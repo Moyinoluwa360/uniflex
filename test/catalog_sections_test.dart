@@ -59,6 +59,12 @@ Widget _buildApp({
   );
 }
 
+/// Opens one of the (closed by default) Drinks / Others dropdowns.
+Future<void> _open(WidgetTester tester, String title) async {
+  await tester.tap(find.text(title));
+  await tester.pumpAndSettle();
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────
 
 void main() {
@@ -90,8 +96,10 @@ void main() {
 
     // Food section shows the card link (not inline products).
     expect(find.text('Order Food (Packs)'), findsOneWidget);
-    // Drink and other products render inline.
+    // Drinks and Others are dropdowns (closed at first); open each.
+    await _open(tester, 'Drinks');
     expect(find.text('Zobo'), findsOneWidget);
+    await _open(tester, 'Others');
     expect(find.text('Shawarma'), findsOneWidget);
   });
 
@@ -113,7 +121,9 @@ void main() {
     expect(find.text('Drinks'), findsOneWidget);
     expect(find.text('Others'), findsOneWidget);
 
+    await _open(tester, 'Drinks');
     expect(find.text('No drinks available right now.'), findsOneWidget);
+    await _open(tester, 'Others');
     expect(find.text('No other items available right now.'), findsOneWidget);
   });
 
@@ -131,9 +141,11 @@ void main() {
     expect(find.text('Others'), findsOneWidget);
 
     // Mystery Item renders under Others (not hidden).
+    await _open(tester, 'Others');
     expect(find.text('Mystery Item'), findsOneWidget);
     // Food and Drinks are empty.
     expect(find.text('No food items available right now.'), findsOneWidget);
+    await _open(tester, 'Drinks');
     expect(find.text('No drinks available right now.'), findsOneWidget);
   });
 }

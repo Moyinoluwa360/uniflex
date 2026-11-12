@@ -15,6 +15,7 @@ import '../services/profile_basics.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../../shared/theme/app_icons.dart';
 import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/format/money.dart';
 
 // ── Detail data models ────────────────────────────────────────────────────────
 
@@ -667,7 +668,7 @@ class _FeeRow extends StatelessWidget {
             child: Text(label, style: theme.textTheme.bodyMedium),
           ),
           Text(
-            '₦${amount.toStringAsFixed(0)}',
+            Money.format(amount),
             style: theme.textTheme.bodyMedium?.copyWith(
               fontWeight: FontWeight.w700,
             ),

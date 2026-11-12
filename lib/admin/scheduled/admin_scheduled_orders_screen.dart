@@ -8,6 +8,7 @@ import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/async/retry_section.dart';
 import '../services/admin_providers.dart';
 import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/format/money.dart';
 
 /// Admin view of all upcoming scheduled orders, ordered by scheduled_for
 /// with a live countdown to each. Backed by Supabase Realtime so counts
@@ -270,7 +271,7 @@ class _ScheduledOrderCardState extends State<_ScheduledOrderCard> {
             Row(
               children: [
                 Text(
-                  '₦${order.totalAmount.toStringAsFixed(0)}',
+                  Money.format(order.totalAmount),
                   style: theme.textTheme.titleSmall?.copyWith(
                     color: context.colors.brandText,
                     fontWeight: FontWeight.w700,

@@ -9,6 +9,7 @@ import '../../shared/widgets/async/retry_section.dart';
 import '../services/admin_providers.dart';
 import 'errand_category_form_screen.dart';
 import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/widgets/format/money.dart';
 
 /// Admin management of Errand service categories — add/edit/remove the
 /// categories the Student-facing Errand flow reads dynamically.
@@ -97,15 +98,15 @@ class ErrandCategoriesScreen extends ConsumerWidget {
     ErrandCategoryData category,
   ) async {
     final confirmed = await AppDialog.show(
-context,
-title: 'Delete category?',
-body: 'Remove "${category.title}"? Past requests keep their record — '
+      context,
+      title: 'Delete category?',
+      body: 'Remove "${category.title}"? Past requests keep their record — '
           'if any exist for this category, deleting will fail; deactivate '
           'it instead.',
-secondaryLabel: 'Cancel',
-confirmLabel: 'Delete',
-destructive: true,
-);
+      secondaryLabel: 'Cancel',
+      confirmLabel: 'Delete',
+      destructive: true,
+    );
     if (confirmed != true) return;
     try {
       await ref.read(adminServiceProvider).deleteErrandCategory(category.id);
@@ -165,7 +166,7 @@ class _CategoryCard extends StatelessWidget {
                 children: [
                   Text(category.title, style: theme.textTheme.labelLarge),
                   Text(
-                    '${category.subtitle} · ₦${category.flatFee.toStringAsFixed(0)}',
+                    '${category.subtitle} · ${Money.format(category.flatFee)}',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),

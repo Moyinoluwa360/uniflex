@@ -4,6 +4,8 @@
 /// nowhere else. Never contains delivery / commitment / service fees.
 library;
 
+import '../widgets/format/money.dart';
+
 class BreakdownLine {
   const BreakdownLine({
     required this.name,
@@ -46,7 +48,7 @@ class BreakdownPack {
   final List<BreakdownLine> items;
 
   /// "Pack 1 · ₦200"
-  String get title => 'Pack $index · ₦${price.toStringAsFixed(0)}';
+  String get title => 'Pack $index · ${Money.format(price)}';
 
   /// "Pack 1" — what a gift recipient sees (no price anywhere).
   String get titleNoPrice => 'Pack $index';

@@ -132,7 +132,7 @@ void main() {
         expect(tops, [...tops]..sort());
 
         // Amounts are secondary and >= 14.
-        expect(_size(tester, find.text('₦1500')), greaterThanOrEqualTo(14));
+        expect(_size(tester, find.text('₦1,500')), greaterThanOrEqualTo(14));
         // Drinks weigh the same as food items.
         double lineSize(String n) => tester
             .widgetList<Text>(rich)

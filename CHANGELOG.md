@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here, phase by phase.
 
+## Fix: theme forgotten, stale balance, money formatting (2026-11-12)
+
+- **Theme choice forgotten:** Preferences → Appearance lived in memory only,
+  so whenever iOS closed the app in the background it came back on "System
+  default". Now saved on the phone (`ThemeModeStore`) and loaded before the
+  first frame.
+- **Balance not refreshing:** coming back to the app now reloads the balance,
+  wallet details, transactions and stats (a bank transfer is credited while
+  the app may be in the background). Wallet pull-to-refresh now also updates
+  the Home header balance.
+- **Money shown without commas / rounded:** 10 places (order breakdown seen by
+  students, riders and admins; admin order details, scheduled orders, menu,
+  delivery locations, errand categories; rider history) built `₦` strings by
+  hand — `₦12500`, and `₦1,200.50` showed as `₦1201`. All use `Money.format`.
+- Tests: theme persistence; the 3 long-failing `catalog_sections` tests
+  updated for the collapsed Drinks/Others dropdowns — the suite is fully green.
+
 ## Fix: previous account's balance shown after switching accounts (2026-11-12)
 
 Found on the phone: log out of one student, sign up / log in as another

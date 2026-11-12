@@ -48,7 +48,7 @@ class UserSessionScope extends StatefulWidget {
 class _UserSessionScopeState extends State<UserSessionScope> {
   late String? _userId = widget.initialUserId;
   int _generation = 0;
-  ThemeMode _themeMode = ThemeMode.system;
+  ThemeMode _themeMode = ThemeModeStore.initial;
   ProviderContainer? _container;
   StreamSubscription<String?>? _sub;
 

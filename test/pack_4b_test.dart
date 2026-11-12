@@ -178,8 +178,8 @@ void main() {
 
     testWidgets('subtitle shows item count and vendor amount', (tester) async {
       await tester.pumpWidget(_host(OrderBreakdownView(data: data)));
-      expect(find.text('2 items · ₦1000'), findsOneWidget); // Chop Bar
-      expect(find.text('1 item · ₦1000'), findsNWidgets(2));
+      expect(find.text('2 items · ₦1,000'), findsOneWidget); // Chop Bar
+      expect(find.text('1 item · ₦1,000'), findsNWidgets(2));
     });
 
     testWidgets('opening a vendor shows the same layout inside',

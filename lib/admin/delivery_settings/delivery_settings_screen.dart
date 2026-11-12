@@ -9,6 +9,7 @@ import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/app_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../../student/ordering/order_repository.dart';
+import '../../shared/widgets/format/money.dart';
 
 /// Admin provider for ALL delivery locations (including inactive ones).
 final adminDeliveryLocationsProvider =
@@ -84,13 +85,13 @@ class DeliverySettingsScreen extends ConsumerWidget {
   Future<void> _confirmDelete(
       BuildContext context, WidgetRef ref, DeliveryLocation loc) async {
     final confirmed = await AppDialog.show(
-context,
-title: 'Delete location?',
-body: 'Remove "${loc.name}"? This cannot be undone.',
-secondaryLabel: 'Cancel',
-confirmLabel: 'Delete',
-destructive: true,
-);
+      context,
+      title: 'Delete location?',
+      body: 'Remove "${loc.name}"? This cannot be undone.',
+      secondaryLabel: 'Cancel',
+      confirmLabel: 'Delete',
+      destructive: true,
+    );
 
     if (confirmed != true) return;
 
@@ -167,7 +168,7 @@ class _LocationTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '₦${location.price.toStringAsFixed(0)} base fee',
+                  '${Money.format(location.price)} base fee',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),

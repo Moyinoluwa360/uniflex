@@ -275,6 +275,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: () async {
+          // Home's header balance too, so both screens agree.
+          ref.invalidate(walletBalanceProvider);
           ref.invalidate(walletInfoProvider);
           ref.invalidate(walletTransactionsProvider);
         },

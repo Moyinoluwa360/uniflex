@@ -8,6 +8,7 @@ import '../widgets/accordions/app_accordion_card.dart';
 import '../widgets/async/retry_section.dart';
 import 'order_breakdown_models.dart';
 import 'order_breakdown_provider.dart';
+import '../widgets/format/money.dart';
 
 /// THE order breakdown (Pack 4B). One widget, used by the rider pool
 /// preview, the rider's active job, Admin order details and the student's
@@ -106,7 +107,7 @@ class _OrderBreakdownViewState extends State<OrderBreakdownView> {
             title: vendors[i].vendorName,
             subtitle: '${vendors[i].itemCount} item'
                 '${vendors[i].itemCount == 1 ? '' : 's'}'
-                '${widget.showPrices ? ' · ₦${vendors[i].vendorTotal.toStringAsFixed(0)}' : ''}',
+                '${widget.showPrices ? ' · ${Money.format(vendors[i].vendorTotal)}' : ''}',
             isExpanded: _open.contains('v$i'),
             onTap: () => _toggle('v$i'),
             child: Padding(
@@ -244,7 +245,7 @@ class _VendorBody extends StatelessWidget {
             child: Text('Vendor total', style: AppTypography.meta(c)),
           ),
           Text(
-            '₦${vendor.vendorTotal.toStringAsFixed(0)}',
+            Money.format(vendor.vendorTotal),
             key: ValueKey('vendor-total-$vendorKey'),
             style: AppTypography.tabular(
                 AppTypography.body(c).copyWith(fontWeight: FontWeight.w700)),
@@ -346,7 +347,7 @@ class _LineRow extends StatelessWidget {
           if (amount != null) ...[
             const SizedBox(width: AppSpacing.sm),
             Text(
-              '₦${amount!.toStringAsFixed(0)}',
+              Money.format(amount!),
               style: AppTypography.tabular(AppTypography.meta(c)),
             ),
           ],

@@ -15,6 +15,10 @@ class UniflexApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
+    // Keep the choice across app restarts.
+    ref.listen<ThemeMode>(themeModeProvider, (_, mode) {
+      ThemeModeStore.save(mode);
+    });
 
     return MaterialApp(
       title: 'Uniflex',
