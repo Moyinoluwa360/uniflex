@@ -1,3 +1,34 @@
+/// How a vendor takes food orders (`vendors.ordering_style`, Pack 1 / Part 3).
+/// Only an admin sets it; the server enforces the rules for each style.
+enum VendorOrderingStyle {
+  /// Customers build packs: how many packs, spoons and toppings. Every vendor
+  /// that existed before Pack 1 is this.
+  packBased('pack_based', 'Pack-based',
+      'Customers build packs: how many packs, spoons and toppings'),
+
+  /// Every meal is fixed and priced as listed; customers just choose
+  /// quantities. No packs, no spoons.
+  fixedMenu('fixed_menu', 'Fixed menu',
+      'Every meal is fixed and priced as listed; customers just choose quantities');
+
+  const VendorOrderingStyle(this.value, this.label, this.helper);
+
+  /// Value stored in the database.
+  final String value;
+  final String label;
+
+  /// One line shown under the admin's choice.
+  final String helper;
+
+  /// Unknown / missing (an older row or an older saved cart) = pack-based.
+  static VendorOrderingStyle parse(Object? raw) =>
+      raw == fixedMenu.value ? fixedMenu : packBased;
+}
+
+/// Most of one item a student can order from a fixed-menu vendor. The server
+/// enforces the same number (`_fixed_menu_max_qty()`).
+const int kFixedMenuMaxQty = 20;
+
 /// A vendor row from the `vendors` table.
 /// Uniflex is the primary vendor (isFeatured true, badgeLabel 'Major');
 /// all other rows are partner vendors.
@@ -15,6 +46,7 @@ class Vendor {
     this.packPrice = 200,
     this.campusDeliveryFee = 200,
     this.hostelDeliveryFee = 300,
+    this.orderingStyle = VendorOrderingStyle.packBased,
   });
 
   factory Vendor.fromMap(Map<String, dynamic> map) {
@@ -33,6 +65,7 @@ class Vendor {
           (map['campus_delivery_fee'] as num?)?.toDouble() ?? 200,
       hostelDeliveryFee:
           (map['hostel_delivery_fee'] as num?)?.toDouble() ?? 300,
+      orderingStyle: VendorOrderingStyle.parse(map['ordering_style']),
     );
   }
 
@@ -63,6 +96,11 @@ class Vendor {
   final double campusDeliveryFee;
   final double hostelDeliveryFee;
 
+  /// Pack-based (default) or fixed menu. See [VendorOrderingStyle].
+  final VendorOrderingStyle orderingStyle;
+
+  bool get isFixedMenu => orderingStyle == VendorOrderingStyle.fixedMenu;
+
   /// Fee for a given `delivery_type`, mirroring `_delivery_fee()` in
   /// supabase/phase9_security_hardening.sql. The server recomputes this
   /// independently and rejects a mismatched total, so the two must agree.
@@ -90,5 +128,6 @@ class Vendor {
         'pack_price': packPrice,
         'campus_delivery_fee': campusDeliveryFee,
         'hostel_delivery_fee': hostelDeliveryFee,
+        'ordering_style': orderingStyle.value,
       };
 }

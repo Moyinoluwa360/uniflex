@@ -248,6 +248,7 @@ class AdminService {
     String? location,
     String? contact,
     double? packPrice,
+    String? orderingStyle,
   }) async {
     final map = <String, dynamic>{
       'name': name,
@@ -258,6 +259,9 @@ class AdminService {
       'location': location,
       'contact': contact,
       if (packPrice != null) 'pack_price': packPrice,
+      // Admin only (server trigger); refused while the vendor has active
+      // orders (VENDOR_HAS_ACTIVE_ORDERS). Omitted = leave unchanged.
+      if (orderingStyle != null) 'ordering_style': orderingStyle,
     };
     if (id != null) {
       await _client.from('vendors').update(map).eq('id', id);

@@ -7,7 +7,10 @@ import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/app_button.dart';
 import '../../shared/widgets/image_upload/image_upload_field.dart';
+import '../../shared/theme/app_typography.dart';
+import '../../shared/utils/app_error_mapper.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
+import '../../shared/widgets/tabs/app_segmented_tabs.dart';
 import '../services/admin_providers.dart';
 
 /// Form for adding or editing a partner vendor.
@@ -30,6 +33,7 @@ class _VendorFormScreenState extends ConsumerState<VendorFormScreen> {
   late final TextEditingController _contactCtrl;
   late final TextEditingController _packPriceCtrl;
   late bool _isActive;
+  late VendorOrderingStyle _style;
   String? _imageUrl;
   bool _isSaving = false;
 
@@ -44,6 +48,7 @@ class _VendorFormScreenState extends ConsumerState<VendorFormScreen> {
     _packPriceCtrl =
         TextEditingController(text: (v?.packPrice ?? 200).toStringAsFixed(0));
     _isActive = v?.isActive ?? true;
+    _style = v?.orderingStyle ?? VendorOrderingStyle.packBased;
     _imageUrl = v?.imageUrl;
   }
 
@@ -76,12 +81,18 @@ class _VendorFormScreenState extends ConsumerState<VendorFormScreen> {
                 ? null
                 : _contactCtrl.text.trim(),
             packPrice: double.tryParse(_packPriceCtrl.text.trim()) ?? 200,
+            // Sent on create, and on edit only when it actually changed (the
+            // server blocks a change while the vendor has active orders).
+            orderingStyle: (widget.vendor == null ||
+                    widget.vendor!.orderingStyle != _style)
+                ? _style.value
+                : null,
           );
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Save failed: $e')),
+          SnackBar(content: Text('Save failed: ${AppErrorMapper.map(e)}')),
         );
         setState(() => _isSaving = false);
       }
@@ -151,19 +162,51 @@ class _VendorFormScreenState extends ConsumerState<VendorFormScreen> {
 
               const SizedBox(height: AppSpacing.md),
 
-              // ── Pack price (Section 11) ───────────────────────────────
-              AppTextField(
-                controller: _packPriceCtrl,
-                hint: 'Pack price (₦) — charged per pack at checkout',
-                keyboardType: TextInputType.number,
-                validator: (v) {
-                  final price = double.tryParse(v?.trim() ?? '');
-                  if (price == null || price < 0) return 'Enter a valid price';
-                  return null;
-                },
+              // ── Ordering style (Pack 1 / Part 3) ──────────────────────
+              Text('Ordering style', style: theme.textTheme.labelLarge),
+              const SizedBox(height: AppSpacing.sm),
+              AppSegmentedTabs(
+                key: const ValueKey('ordering-style'),
+                labels: [
+                  for (final s in VendorOrderingStyle.values) s.label,
+                ],
+                index: VendorOrderingStyle.values.indexOf(_style),
+                onChanged: (i) =>
+                    setState(() => _style = VendorOrderingStyle.values[i]),
               ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                _style.helper,
+                key: const ValueKey('ordering-style-helper'),
+                style: AppTypography.meta(context.colors),
+              ),
+              if (isEditing && widget.vendor!.orderingStyle != _style) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'Students with this vendor in their cart will be asked to '
+                  'add the items again. Not possible while orders are active.',
+                  style: AppTypography.meta(context.colors),
+                ),
+              ],
 
               const SizedBox(height: AppSpacing.md),
+
+              // ── Pack price (Section 11) — pack-based vendors only ─────
+              if (_style == VendorOrderingStyle.packBased) ...[
+                AppTextField(
+                  controller: _packPriceCtrl,
+                  hint: 'Pack price (₦) — charged per pack at checkout',
+                  keyboardType: TextInputType.number,
+                  validator: (v) {
+                    final price = double.tryParse(v?.trim() ?? '');
+                    if (price == null || price < 0) {
+                      return 'Enter a valid price';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: AppSpacing.md),
+              ],
 
               // ── Active toggle ─────────────────────────────────────────
               Row(

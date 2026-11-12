@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -176,8 +177,13 @@ class SupabaseOrderPaymentRepository implements OrderPaymentRepository {
           },
       ];
 
+  /// The exact leg map sent to `create_paid_delivery_order` (for tests).
+  @visibleForTesting
+  static Map<String, dynamic> legForTest(DraftVendor v) => _leg(v);
+
   static Map<String, dynamic> _leg(DraftVendor v) => {
         'vendor_id': v.vendorId,
+        'ordering_style': v.orderingStyle,
         'items': _items(v),
         'packs': _packs(v),
       };

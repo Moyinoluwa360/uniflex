@@ -22,11 +22,17 @@ import 'cart_screen.dart';
 import 'pack_builder_screen.dart';
 import 'product_repository.dart';
 
-/// Vendor menu — three sections: Food (pack-first flow), Drinks, Others.
+/// Vendor menu.
 ///
-/// Food items route through [PackBuilderScreen] where the student picks
-/// pack count first, then fills each pack. Drinks and Others are added
-/// directly via inline steppers.
+/// Pack-based vendors (unchanged): three sections — Food (pack-first flow),
+/// Drinks, Others. Food items route through [PackBuilderScreen] where the
+/// student picks pack count first, then fills each pack. Drinks and Others
+/// are added directly via inline steppers.
+///
+/// Fixed-menu vendors (Pack 1 / Part 3): no pack card and no pack screen.
+/// Each of the vendor's categories is a dropdown (the same accordion Drinks
+/// and Others use) whose items have an inline add → `− 1 +` stepper, at most
+/// [kFixedMenuMaxQty] of one item.
 class CatalogScreen extends ConsumerStatefulWidget {
   const CatalogScreen({super.key, required this.vendor});
 
@@ -98,6 +104,44 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                   ],
                 ),
               ),
+            );
+          }
+
+          if (vendor.isFixedMenu) {
+            final groups = groupByCategory(products);
+            return ListView(
+              key: const ValueKey('fixed-menu'),
+              padding: const EdgeInsets.only(top: AppSpacing.sm, bottom: 96),
+              children: [
+                for (final e in groups.entries)
+                  AppAccordionCard(
+                    key: ValueKey('category-${e.key}'),
+                    leading: buildAccordionLeadingIcon(
+                      context: context,
+                      icon: AppIcons.food,
+                    ),
+                    title: e.key,
+                    subtitle:
+                        '${e.value.length} item${e.value.length == 1 ? '' : 's'}',
+                    isExpanded: _expandedSection == 'cat:${e.key}',
+                    onTap: () => setState(() {
+                      _expandedSection = _expandedSection == 'cat:${e.key}'
+                          ? null
+                          : 'cat:${e.key}';
+                    }),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final p in e.value)
+                          _ProductTile(
+                            product: p,
+                            vendor: vendor,
+                            maxQuantity: kFixedMenuMaxQty,
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
             );
           }
 
@@ -309,10 +353,18 @@ class _FoodSectionCard extends ConsumerWidget {
 
 /// Product tile with inline add/stepper — used for Drinks and Others.
 class _ProductTile extends ConsumerWidget {
-  const _ProductTile({required this.product, required this.vendor});
+  const _ProductTile({
+    required this.product,
+    required this.vendor,
+    this.maxQuantity,
+  });
 
   final Product product;
   final Vendor vendor;
+
+  /// Fixed-menu vendors: `+` is disabled at this quantity (the server
+  /// enforces the same limit). Null = no limit here (pack-based, as before).
+  final int? maxQuantity;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -399,20 +451,22 @@ class _ProductTile extends ConsumerWidget {
                           .updateQuantity(flat, quantity - 1);
                     }
                   },
-                  onPlus: () {
-                    final cart = ref.read(cartProvider);
-                    int flat = 0;
-                    for (final e in cart.groups.entries) {
-                      if (e.key == vendor.id) {
-                        flat += localIdx;
-                        break;
-                      }
-                      flat += e.value.items.length;
-                    }
-                    ref
-                        .read(cartProvider.notifier)
-                        .updateQuantity(flat, quantity + 1);
-                  },
+                  onPlus: (maxQuantity != null && quantity >= maxQuantity!)
+                      ? null
+                      : () {
+                          final cart = ref.read(cartProvider);
+                          int flat = 0;
+                          for (final e in cart.groups.entries) {
+                            if (e.key == vendor.id) {
+                              flat += localIdx;
+                              break;
+                            }
+                            flat += e.value.items.length;
+                          }
+                          ref
+                              .read(cartProvider.notifier)
+                              .updateQuantity(flat, quantity + 1);
+                        },
                 ),
         ],
       ),

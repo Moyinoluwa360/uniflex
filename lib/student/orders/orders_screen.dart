@@ -12,6 +12,7 @@ import '../../shared/widgets/buttons/app_button.dart';
 import '../../shared/widgets/cards/app_card.dart';
 import '../../shared/widgets/cards/order_summary_card.dart';
 import '../../shared/widgets/cart/cart_widgets.dart';
+import '../../shared/models/vendor.dart';
 import '../../shared/widgets/format/money.dart';
 import '../../shared/widgets/status/status_presentation.dart';
 import '../../shared/widgets/tabs/app_segmented_tabs.dart';
@@ -202,6 +203,25 @@ class _CartTab extends ConsumerWidget {
                         Divider(height: 1, thickness: 1, color: c.border),
                       Builder(builder: (context) {
                         final item = cart.items[i];
+                        final fixed = cart.groups[item.product.vendorId]?.vendor
+                                .isFixedMenu ??
+                            false;
+                        if (fixed) {
+                          // Fixed-menu line: plain item row with a stepper
+                          // (0 removes it; at most kFixedMenuMaxQty).
+                          final notifier = ref.read(cartProvider.notifier);
+                          return CartItemRow(
+                            title: item.product.name,
+                            unitLine: '${Money.format(item.unitTotal)} each',
+                            lineTotal: item.lineTotal,
+                            quantity: item.quantity,
+                            onMinus: () =>
+                                notifier.updateQuantity(i, item.quantity - 1),
+                            onPlus: () =>
+                                notifier.updateQuantity(i, item.quantity + 1),
+                            plusEnabled: item.quantity < kFixedMenuMaxQty,
+                          );
+                        }
                         return CartItemRow(
                           title: '${item.quantity}× ${item.product.name}',
                           options: item.optionsSummary,

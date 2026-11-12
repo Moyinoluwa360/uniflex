@@ -447,7 +447,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 child: Column(
                   children: [
                     SummaryRow(
-                      label: 'Food + packs',
+                      // No pack wording when every vendor is fixed-menu;
+                      // pack-based carts read exactly as before.
+                      label: vendorGroups.every((g) => g.vendor.isFixedMenu)
+                          ? 'Food'
+                          : 'Food + packs',
                       value: Money.format(cart.subtotal + cart.totalPackFee),
                       bold: false,
                     ),

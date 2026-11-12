@@ -10,6 +10,7 @@ import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/app_button.dart';
 import '../../shared/widgets/cards/app_card.dart';
 import '../../shared/widgets/cart/cart_widgets.dart';
+import '../../shared/models/vendor.dart';
 import '../../shared/widgets/format/money.dart';
 import '../../shared/widgets/media/app_image.dart';
 import 'cart_provider.dart';
@@ -279,6 +280,8 @@ class _VendorItemList extends ConsumerWidget {
           final item = entry.value;
           return _CartItemTile(
             item: item,
+            // Fixed-menu vendors: at most kFixedMenuMaxQty of one item.
+            maxQuantity: group.vendor.isFixedMenu ? kFixedMenuMaxQty : null,
             padding:
                 EdgeInsets.symmetric(horizontal: side, vertical: AppSpacing.sm),
             onRemoveOrUpdate: (qty) => onItemUpdate(localIdx, qty),
@@ -294,8 +297,10 @@ class _CartItemTile extends StatelessWidget {
     required this.item,
     required this.onRemoveOrUpdate,
     required this.padding,
+    this.maxQuantity,
   });
 
+  final int? maxQuantity;
   final dynamic item; // CartItem
   final ValueChanged<int> onRemoveOrUpdate;
   final EdgeInsetsGeometry padding;
@@ -320,6 +325,7 @@ class _CartItemTile extends StatelessWidget {
       quantity: item.quantity as int,
       onMinus: () => onRemoveOrUpdate(item.quantity - 1),
       onPlus: () => onRemoveOrUpdate(item.quantity + 1),
+      plusEnabled: maxQuantity == null || (item.quantity as int) < maxQuantity!,
       lineTotal: item.lineTotal as num,
     );
   }

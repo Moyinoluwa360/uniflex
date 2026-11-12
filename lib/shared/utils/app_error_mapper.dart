@@ -72,6 +72,27 @@ class AppErrorMapper {
     if (raw.contains('PACK_OVER_CAPACITY') || raw.contains('PACK_MISMATCH')) {
       return 'There is a problem with your packs. Please rebuild them and try again.';
     }
+    if (raw.contains('VENDOR_STYLE_CHANGED') ||
+        raw.contains('PACKS_NOT_ALLOWED')) {
+      return 'This vendor changed how it takes orders. Remove its items from '
+          'your cart and add them again.';
+    }
+    if (raw.contains('QUANTITY_TOO_HIGH')) {
+      return 'You can order at most 20 of one item from this vendor.';
+    }
+    if (raw.contains('VENDOR_HAS_ACTIVE_ORDERS')) {
+      return 'This vendor has orders in progress. Change the ordering style '
+          'once they are completed or cancelled.';
+    }
+    if (raw.contains('CATEGORY_REQUIRED')) {
+      return 'Enter a category (up to 40 characters).';
+    }
+    if (raw.contains('INVALID_PRICE')) {
+      return 'Enter a price above ₦0 and up to ₦500,000.';
+    }
+    if (raw.contains('NAME_REQUIRED')) {
+      return 'Enter a name.';
+    }
     if (raw.contains('PICKUP_UNIFLEX_ONLY')) {
       return 'Pickup is only available for Uniflex orders.';
     }

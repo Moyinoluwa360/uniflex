@@ -15,5 +15,6 @@ class VendorProductsScreen extends StatelessWidget {
   Widget build(BuildContext context) => VendorMenuManager(
         vendorId: vendor.id,
         title: '${vendor.name} — Menu',
+        fixedMenu: vendor.isFixedMenu,
       );
 }

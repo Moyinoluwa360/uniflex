@@ -29,10 +29,15 @@ class VendorMenuManager extends ConsumerWidget {
     super.key,
     required this.vendorId,
     required this.title,
+    this.fixedMenu = false,
   });
 
   final String vendorId;
   final String title;
+
+  /// A fixed-menu vendor (Pack 1 / Part 3): items grouped by the admin's own
+  /// categories, one "+ Add item", no pack price and no pack sections.
+  final bool fixedMenu;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -42,11 +47,12 @@ class VendorMenuManager extends ConsumerWidget {
       appBar: UniflexAppBar(
         title: title,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.inventory_2_outlined),
-            tooltip: 'Pack price',
-            onPressed: () => _editPackPrice(context, ref),
-          ),
+          if (!fixedMenu)
+            IconButton(
+              icon: const Icon(Icons.inventory_2_outlined),
+              tooltip: 'Pack price',
+              onPressed: () => _editPackPrice(context, ref),
+            ),
         ],
       ),
       body: productsAsync.when(
@@ -55,29 +61,49 @@ class VendorMenuManager extends ConsumerWidget {
           message: 'Could not load the menu.',
           onRetry: () => ref.invalidate(adminVendorProductsProvider(vendorId)),
         ),
-        data: (products) => _MenuBody(
-          products: products,
-          onAdd: (s) => _openForm(context, ref, null, s),
-          onEdit: (p) => _openForm(context, ref, p, MenuSection.of(p)),
-          onDelete: (p) => _confirmDelete(context, ref, p),
-          onToggle: (p, v) => _toggle(context, ref, p, v),
-        ),
+        data: (products) => fixedMenu
+            ? FixedMenuBody(
+                products: products,
+                onAdd: () => _openForm(context, ref, null, MenuSection.meals,
+                    categories: _categories(products)),
+                onEdit: (p) => _openForm(context, ref, p, MenuSection.meals,
+                    categories: _categories(products)),
+                onDelete: (p) => _confirmDelete(context, ref, p),
+                onToggle: (p, v) => _toggle(context, ref, p, v),
+              )
+            : _MenuBody(
+                products: products,
+                onAdd: (s) => _openForm(context, ref, null, s),
+                onEdit: (p) => _openForm(context, ref, p, MenuSection.of(p)),
+                onDelete: (p) => _confirmDelete(context, ref, p),
+                onToggle: (p, v) => _toggle(context, ref, p, v),
+              ),
       ),
     );
   }
+
+  static List<String> _categories(List<Product> products) => (products
+      .map((p) => p.category.trim())
+      .where((c) => c.isNotEmpty)
+      .toSet()
+      .toList()
+    ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase())));
 
   Future<void> _openForm(
     BuildContext context,
     WidgetRef ref,
     Product? product,
-    MenuSection section,
-  ) async {
+    MenuSection section, {
+    List<String> categories = const [],
+  }) async {
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => ProductFormScreen(
           vendorId: vendorId,
           product: product,
           initialSection: section,
+          fixedMenu: fixedMenu,
+          categorySuggestions: categories,
         ),
       ),
     );
@@ -90,14 +116,14 @@ class VendorMenuManager extends ConsumerWidget {
     Product product,
   ) async {
     final confirmed = await AppDialog.show(
-context,
-title: 'Remove item?',
-body: 'Remove "${product.name}" from the menu? Students will no longer '
-            'see it. Past orders are not affected.',
-secondaryLabel: 'Cancel',
-confirmLabel: 'Remove',
-destructive: true,
-);
+      context,
+      title: 'Remove item?',
+      body: 'Remove "${product.name}" from the menu? Students will no longer '
+          'see it. Past orders are not affected.',
+      secondaryLabel: 'Cancel',
+      confirmLabel: 'Remove',
+      destructive: true,
+    );
     if (confirmed != true) return;
     try {
       await ref.read(adminServiceProvider).deleteProduct(product.id);
@@ -295,6 +321,92 @@ class _MenuBody extends StatelessWidget {
                 onDelete: () => onDelete(p),
                 onToggle: (v) => onToggle(p, v),
               ),
+          const SizedBox(height: AppSpacing.md),
+        ],
+      ],
+    );
+  }
+}
+
+/// A fixed-menu vendor's menu: one "+ Add item", then the items grouped by
+/// their category (alphabetical, as students see them).
+class FixedMenuBody extends StatelessWidget {
+  const FixedMenuBody({
+    super.key,
+    required this.products,
+    required this.onAdd,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onToggle,
+  });
+
+  final List<Product> products;
+  final VoidCallback onAdd;
+  final void Function(Product) onEdit;
+  final void Function(Product) onDelete;
+  final void Function(Product, bool) onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final groups = groupByCategory(products);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenGutter,
+        AppSpacing.md,
+        AppSpacing.screenGutter,
+        AppSpacing.xl,
+      ),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Fixed menu (${products.length})',
+                style: theme.textTheme.titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ),
+            AppButton(
+              key: const ValueKey('add-fixed-item'),
+              label: 'Add item',
+              variant: AppButtonVariant.text,
+              size: AppButtonSize.small,
+              expand: false,
+              icon: AppIcons.add,
+              onPressed: onAdd,
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          'Every item is a complete meal with its own price. Students pick '
+          'quantities; there are no packs.',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: AppSpacing.md),
+        if (products.isEmpty)
+          Text('Nothing here yet.',
+              key: const ValueKey('empty-fixed'),
+              style: theme.textTheme.bodySmall),
+        for (final e in groups.entries) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+            child: Text(
+              '${e.key} (${e.value.length})',
+              key: ValueKey('category-${e.key}'),
+              style: theme.textTheme.titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
+          for (final p in e.value)
+            MenuItemTile(
+              key: ValueKey('item-${p.id}'),
+              product: p,
+              onEdit: () => onEdit(p),
+              onDelete: () => onDelete(p),
+              onToggle: (v) => onToggle(p, v),
+            ),
           const SizedBox(height: AppSpacing.md),
         ],
       ],

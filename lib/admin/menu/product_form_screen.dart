@@ -7,6 +7,7 @@ import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/app_button.dart';
 import '../../shared/widgets/image_upload/image_upload_field.dart';
+import '../../shared/widgets/inputs/app_form_parts.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../../shared/utils/app_error_mapper.dart';
 import '../services/admin_providers.dart';
@@ -25,7 +26,16 @@ class ProductFormScreen extends ConsumerStatefulWidget {
     required this.vendorId,
     this.product,
     this.initialSection,
+    this.fixedMenu = false,
+    this.categorySuggestions = const [],
   });
+
+  /// Fixed-menu vendor (Pack 1 / Part 3): asks for a category instead of a
+  /// section; no meal / protein / pack fields.
+  final bool fixedMenu;
+
+  /// The vendor's existing categories, offered as one-tap chips.
+  final List<String> categorySuggestions;
 
   final String vendorId;
   final Product? product;
@@ -43,6 +53,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _descCtrl;
   late final TextEditingController _priceCtrl;
+  late final TextEditingController _categoryCtrl;
   late MenuSection _menuSection;
   late bool _isAvailable;
   String? _imageUrl; // current URL — updated by ImageUploadField
@@ -56,6 +67,8 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     _descCtrl = TextEditingController(text: p?.description ?? '');
     _priceCtrl = TextEditingController(
         text: p != null ? p.basePrice.toStringAsFixed(0) : '');
+    _categoryCtrl = TextEditingController(
+        text: widget.fixedMenu ? (p?.category ?? '') : '');
     _menuSection = p != null
         ? MenuSection.of(p)
         : (widget.initialSection ?? MenuSection.meals);
@@ -68,6 +81,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     _nameCtrl.dispose();
     _descCtrl.dispose();
     _priceCtrl.dispose();
+    _categoryCtrl.dispose();
     super.dispose();
   }
 
@@ -81,14 +95,20 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
             vendorId: widget.vendorId,
             name: _nameCtrl.text.trim(),
             description: _descCtrl.text.trim(),
-            // `category` is the legacy free-text column; keep it readable.
-            category: _menuSection.label,
+            // Pack-based: `category` is the legacy free-text column; keep it
+            // readable. Fixed menu: it IS the grouping students see.
+            category: widget.fixedMenu
+                ? _categoryCtrl.text.trim()
+                : _menuSection.label,
             basePrice: double.parse(_priceCtrl.text.trim()),
             imageUrl: _imageUrl,
             isAvailable: _isAvailable,
-            requiresPack: _menuSection.requiresPack,
-            section: _menuSection.section,
-            foodSubsection: _menuSection.foodSubsection,
+            // Fixed menu: a plain priced item (the server stores it the same
+            // way whatever is sent).
+            requiresPack: widget.fixedMenu ? false : _menuSection.requiresPack,
+            section: widget.fixedMenu ? 'food' : _menuSection.section,
+            foodSubsection:
+                widget.fixedMenu ? 'meal' : _menuSection.foodSubsection,
           );
 
       if (mounted) Navigator.of(context).pop(true);
@@ -136,6 +156,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
 
               // ── Name ─────────────────────────────────────────────────
               AppTextField(
+                key: const ValueKey('form-name'),
                 controller: _nameCtrl,
                 hint: 'Item name',
                 validator: (v) =>
@@ -153,10 +174,39 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
 
               const SizedBox(height: AppSpacing.md),
 
+              // ── Category (fixed menu) ─────────────────────────────────
+              if (widget.fixedMenu) ...[
+                AppTextField(
+                  key: const ValueKey('form-category'),
+                  controller: _categoryCtrl,
+                  hint: 'Category (e.g. Rice, Swallow, Drinks)',
+                  validator: (v) {
+                    final t = v?.trim() ?? '';
+                    if (t.isEmpty) return 'Enter a category';
+                    if (t.length > 40) return 'Keep it under 40 characters';
+                    return null;
+                  },
+                ),
+                if (widget.categorySuggestions.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Wrap(
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.sm,
+                    children: [
+                      for (final cat in widget.categorySuggestions)
+                        AppChoiceChip(
+                          label: cat,
+                          selected: _categoryCtrl.text.trim() == cat,
+                          onTap: () => setState(() => _categoryCtrl.text = cat),
+                        ),
+                    ],
+                  ),
+                ],
+              ]
               // ── Section ───────────────────────────────────────────────
               // Adding: fixed to the section whose "+ Add" was tapped.
               // Editing: a picker, so a wrongly-filed item can be moved.
-              if (!isEditing)
+              else if (!isEditing)
                 Container(
                   key: const ValueKey('form-section-label'),
                   width: double.infinity,
@@ -202,14 +252,20 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
 
               // ── Price ─────────────────────────────────────────────────
               AppTextField(
+                key: const ValueKey('form-price'),
                 controller: _priceCtrl,
-                hint: 'Base price (₦)',
+                hint: widget.fixedMenu
+                    ? 'Price per portion (₦)'
+                    : 'Base price (₦)',
                 keyboardType: TextInputType.number,
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) return 'Enter a price';
                   final price = double.tryParse(v.trim());
                   if (price == null || price <= 0) {
                     return 'Enter a valid price';
+                  }
+                  if (widget.fixedMenu && price > 500000) {
+                    return 'Price must be ₦500,000 or less';
                   }
                   return null;
                 },

@@ -2,6 +2,36 @@
 
 All notable changes to this project are documented here, phase by phase.
 
+## Pack 1 / Part 3 — fixed-menu vendor ordering style (2026-11-12)
+
+Map and design: `docs/vendor-ordering-styles.md`.
+
+**Database** (`supabase/pack1_vendor_ordering_style.sql` + `_test.sql`, 39/39
+in a rolled-back dry run on live; **not yet applied** — owner go-ahead needed)
+- `vendors.ordering_style` (`pack_based` default, `fixed_menu`; check
+  constraint). Existing vendors back-filled as pack-based, nothing else changed.
+- Admin-only (trigger + existing RLS); a change is refused while the vendor
+  has an order that is not completed / cancelled.
+- `_check_leg_style` in `create_paid_delivery_order` (so gifts too) and
+  `create_paid_pickup_order`: fixed-menu legs may not have packs and at most
+  20 of one item; a cart built for the other style → `VENDOR_STYLE_CHANGED`.
+  Fixed-menu menu items: name + category required, price > 0 and ≤ ₦500,000,
+  stored as plain items. No pack rows can ever attach to a fixed-menu order.
+
+**App**
+- Admin: "Ordering style" segmented control (Pack-based | Fixed menu) with a
+  helper line on the vendor form; pack price only for pack-based. Fixed-menu
+  menus are grouped by the admin's categories with one "+ Add item"; the item
+  form asks for a category (with chips of existing ones) instead of a section.
+- Student: a fixed-menu vendor page lists each category as a dropdown with
+  `+` → `− n +` (max 20, 0 removes). No pack card, no pack screen. Both cart
+  UIs show fixed-menu lines as plain rows with a stepper (capped at 20);
+  checkout says "Food" (not "Food + packs") when every vendor is fixed-menu.
+  Pack-based vendors are unchanged.
+- The checkout RPC leg now carries the cart's `ordering_style`.
+- Order views (student, rider, admin, tracking) already render vendor legs
+  without packs as plain `2× Item` lines — no change needed.
+
 ## Pack 1 / Part 1 — nav gap and border, hidden balance, tap fixes (2026-11-12)
 
 **Presentation only.** No service, SQL, payment, PIN or status logic changed.

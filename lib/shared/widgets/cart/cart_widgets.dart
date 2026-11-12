@@ -113,6 +113,7 @@ class CartItemRow extends StatelessWidget {
     this.onMinus,
     this.onPlus,
     this.onRemove,
+    this.plusEnabled = true,
     this.padding = const EdgeInsets.symmetric(
       horizontal: AppSpacing.screenGutter,
       vertical: AppSpacing.sm,
@@ -132,6 +133,10 @@ class CartItemRow extends StatelessWidget {
   final VoidCallback? onMinus;
   final VoidCallback? onPlus;
   final VoidCallback? onRemove;
+
+  /// False greys out `+` (e.g. a fixed-menu item at its maximum) while the
+  /// stepper stays visible.
+  final bool plusEnabled;
   final EdgeInsetsGeometry padding;
 
   @override
@@ -175,7 +180,7 @@ class CartItemRow extends StatelessWidget {
                       QuantityStepper(
                         quantity: quantity!,
                         onMinus: onMinus!,
-                        onPlus: onPlus!,
+                        onPlus: plusEnabled ? onPlus! : null,
                       ),
                       const SizedBox(width: AppSpacing.sm),
                       Expanded(

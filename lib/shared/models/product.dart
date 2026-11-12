@@ -87,3 +87,17 @@ class Product {
         'food_subsection': foodSubsection,
       };
 }
+
+/// Products grouped by their (trimmed) category, categories A→Z, items in the
+/// order given. An empty category is shown as "Menu". Shared by the admin
+/// manager and the student vendor page so both group identically.
+Map<String, List<Product>> groupByCategory(List<Product> products) {
+  final out = <String, List<Product>>{};
+  for (final p in products) {
+    final key = p.category.trim().isEmpty ? 'Menu' : p.category.trim();
+    (out[key] ??= []).add(p);
+  }
+  final keys = out.keys.toList()
+    ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+  return {for (final k in keys) k: out[k]!};
+}

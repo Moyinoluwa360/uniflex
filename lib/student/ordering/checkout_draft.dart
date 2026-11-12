@@ -38,6 +38,7 @@ class DraftVendor {
     required this.items,
     required this.packs,
     required this.packFee,
+    this.orderingStyle = 'pack_based',
   });
 
   final String vendorId;
@@ -50,6 +51,11 @@ class DraftVendor {
 
   /// Display only (packs × vendor pack price). Never sent.
   final double packFee;
+
+  /// The vendor's style when this cart was built (`pack_based` /
+  /// `fixed_menu`). Sent so the server can refuse a cart built for the
+  /// other style after an admin switched it (VENDOR_STYLE_CHANGED).
+  final String orderingStyle;
 
   int get packCount => packs.length;
   double get foodAmount =>
@@ -107,6 +113,7 @@ class CheckoutDraft {
             },
         ],
         packFee: g.packFee,
+        orderingStyle: g.vendor.orderingStyle.value,
       ));
     }
     final trimmedDetails = locationDetails?.trim();
@@ -174,7 +181,13 @@ CheckoutQuote quoteFor(CheckoutDraft draft, double serviceCharge) {
   if (draft.isPickup) {
     final food = draft.foodAmount;
     return CheckoutQuote(
-      lines: [QuoteLine('Food + packs', food)],
+      lines: [
+        QuoteLine(
+            draft.vendors.every((v) => v.orderingStyle == 'fixed_menu')
+                ? 'Food'
+                : 'Food + packs',
+            food)
+      ],
       serviceCharge: 0,
       total: food,
     );
