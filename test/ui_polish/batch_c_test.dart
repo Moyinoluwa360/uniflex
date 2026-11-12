@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:uniflex/shared/state/balance_visibility.dart';
 import 'package:uniflex/shared/widgets/cart/cart_widgets.dart';
 import 'package:uniflex/shared/widgets/chat/support_order_chip.dart';
 import 'package:uniflex/shared/widgets/tier/tier_header.dart';
@@ -11,6 +12,8 @@ import 'ui_harness.dart';
 
 void main() {
   group('WalletCard', () {
+    setUp(() => BalanceVisibility.visible.value = true);
+    tearDown(BalanceVisibility.reset);
     forEachVariant('shows balance, Fund Wallet and the account number',
         (tester, dark, scale) async {
       await pumpUi(
@@ -48,9 +51,6 @@ void main() {
       expect(find.byKey(const ValueKey('balance-shown')), findsNothing);
       expect(find.text('1234567890'), findsOneWidget);
 
-      // The icon button is tap-guarded against double taps (wall-clock).
-      await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 500)));
       await tester.tap(find.byKey(const ValueKey('balance-eye')));
       await tester.pump();
       expect(find.byKey(const ValueKey('balance-shown')), findsOneWidget);

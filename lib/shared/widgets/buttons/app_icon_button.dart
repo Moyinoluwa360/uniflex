@@ -55,6 +55,7 @@ class _AppIconButtonState extends State<AppIconButton> {
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
+                  customBorder: RoundedRectangleBorder(borderRadius: radius),
                   onTap: cb == null ? null : () => _guard.run(cb),
                   child: Center(
                     child: Icon(

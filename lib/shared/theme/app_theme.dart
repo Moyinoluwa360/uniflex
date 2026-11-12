@@ -54,7 +54,8 @@ abstract final class AppTheme {
       inversePrimary: c.brandText,
     );
 
-    RoundedRectangleBorder shape(double r, {BorderSide side = BorderSide.none}) =>
+    RoundedRectangleBorder shape(double r,
+            {BorderSide side = BorderSide.none}) =>
         RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(r),
           side: side,
@@ -82,7 +83,12 @@ abstract final class AppTheme {
       primaryTextTheme: textTheme,
       fontFamily: AppTypography.fontFamily,
       dividerColor: c.border,
-      splashFactory: InkSparkle.splashFactory,
+      // Minimal tap effect everywhere: no ripple wave, a soft pressed
+      // overlay only (Pack 1 / 1.4). Shape comes from each tappable.
+      splashFactory: NoSplash.splashFactory,
+      splashColor: Colors.transparent,
+      highlightColor: c.pressOverlay,
+      hoverColor: Colors.transparent,
       appBarTheme: AppBarTheme(
         backgroundColor: c.background,
         foregroundColor: c.textPrimary,
@@ -214,7 +220,8 @@ abstract final class AppTheme {
         actionTextColor: c.brandText,
         behavior: SnackBarBehavior.floating,
         elevation: 0,
-        shape: shape(AppRadius.control, side: BorderSide(color: c.borderStrong)),
+        shape:
+            shape(AppRadius.control, side: BorderSide(color: c.borderStrong)),
       ),
       tabBarTheme: TabBarThemeData(
         labelColor: c.textPrimary,
@@ -233,6 +240,10 @@ abstract final class AppTheme {
         titleTextStyle: AppTypography.body(c),
         subtitleTextStyle: AppTypography.caption(c),
         minVerticalPadding: 8,
+        // Pressed highlight follows a rounded shape, never a hard square.
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.control),
+        ),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: c.surface,
@@ -256,7 +267,8 @@ abstract final class AppTheme {
       ),
       checkboxTheme: CheckboxThemeData(
         fillColor: WidgetStateProperty.resolveWith(
-          (s) => s.contains(WidgetState.selected) ? c.brand : Colors.transparent,
+          (s) =>
+              s.contains(WidgetState.selected) ? c.brand : Colors.transparent,
         ),
         checkColor: WidgetStatePropertyAll(c.onBrand),
         side: BorderSide(color: c.borderStrong, width: 1.5),
@@ -276,7 +288,8 @@ abstract final class AppTheme {
         color: c.surface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        shape: shape(AppRadius.control, side: BorderSide(color: c.borderStrong)),
+        shape:
+            shape(AppRadius.control, side: BorderSide(color: c.borderStrong)),
         textStyle: AppTypography.body(c),
       ),
       badgeTheme: BadgeThemeData(

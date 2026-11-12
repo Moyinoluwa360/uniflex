@@ -228,6 +228,7 @@ class _AdminSupportChatScreenState extends ConsumerState<AdminSupportChatScreen>
                       shape: const CircleBorder(),
                       clipBehavior: Clip.antiAlias,
                       child: InkWell(
+                        customBorder: const CircleBorder(),
                         onTap: _isSending ? null : _send,
                         child: SizedBox(
                           width: 44,

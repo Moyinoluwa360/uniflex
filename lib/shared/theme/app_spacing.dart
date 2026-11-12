@@ -34,18 +34,37 @@ abstract final class AppSpacing {
 
   // ── Floating glass nav bar ──────────────────────────────────────────
   static const double navBarHeight = 68;
-  static const double navBarBottomGap = 22;
   static const double navBarSideGap = 16;
 
-  /// Bar height + the gap under it: the part of the bottom clearance that is
-  /// the same on every phone. Add the device's bottom safe area for the full
-  /// figure — use [navClearanceOf].
-  static const double navClearance = navBarHeight + navBarBottomGap;
+  /// NAV_BOTTOM_GAP_PT — points from the PHYSICAL bottom edge of the screen
+  /// to the bottom edge of the bar, on phones with a home indicator. The
+  /// safe-area inset is NOT added on top. The owner may tune this one
+  /// number after comparing with the WhatsApp tab bar on their iPhone.
+  static const double navBottomGap = 20;
+
+  /// Same gap on phones without a home indicator (bottom inset 0).
+  static const double navBottomGapNoIndicator = 12;
+
+  /// Space kept between the bar's top edge and the last scrolled item.
+  static const double navBreathing = 12;
+
+  /// The gap for this device: [navBottomGap] with a home indicator,
+  /// [navBottomGapNoIndicator] without one.
+  static double navBottomGapOf(BuildContext context) =>
+      MediaQuery.paddingOf(context).bottom > 0
+          ? navBottomGap
+          : navBottomGapNoIndicator;
+
+  /// Bar height + gap + breathing room on a phone with a home indicator
+  /// (68 + 20 + 12 = 100). Use [navClearanceOf] in widgets.
+  static const double navClearance = navBarHeight + navBottomGap + navBreathing;
 
   /// Bottom padding a scrollable needs so its last item is never hidden
-  /// under the floating bar: bar height + 22 + the safe-area bottom.
+  /// under the floating bar: bar height + this device's gap + 12. Measured
+  /// from the physical bottom of the screen (the glass shell's body extends
+  /// to it).
   static double navClearanceOf(BuildContext context) =>
-      navClearance + MediaQuery.paddingOf(context).bottom;
+      navBarHeight + navBottomGapOf(context) + navBreathing;
 }
 
 abstract final class AppRadius {

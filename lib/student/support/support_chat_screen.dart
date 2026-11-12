@@ -579,6 +579,7 @@ class _SendButton extends StatelessWidget {
         shape: const CircleBorder(),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
+          customBorder: const CircleBorder(),
           onTap: isSending ? null : onPressed,
           child: SizedBox(
             width: 44,

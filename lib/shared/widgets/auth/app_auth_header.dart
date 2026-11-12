@@ -342,6 +342,7 @@ class _GlassBackButton extends StatelessWidget {
               ),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
+                customBorder: RoundedRectangleBorder(borderRadius: radius),
                 onTap: onPressed,
                 child: Center(
                   child: Icon(icon,

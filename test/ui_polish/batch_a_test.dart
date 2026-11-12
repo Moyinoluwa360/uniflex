@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:uniflex/shared/state/balance_visibility.dart';
 import 'package:uniflex/shared/theme/app_colors.dart';
 import 'package:uniflex/shared/theme/app_icons.dart';
 import 'package:uniflex/shared/widgets/buttons/promo_cart_button.dart';
@@ -11,6 +12,10 @@ import 'ui_harness.dart';
 
 void main() {
   group('Home header pieces', () {
+    // These checks are about the shown amount; hidden is covered in
+    // test/pack1/part1_test.dart.
+    setUp(() => BalanceVisibility.visible.value = true);
+    tearDown(BalanceVisibility.reset);
     forEachVariant('wallet panel, bell, avatar render without overflow',
         (tester, dark, scale) async {
       await pumpUi(

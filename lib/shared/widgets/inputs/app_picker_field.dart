@@ -6,6 +6,7 @@ import '../../theme/app_spacing.dart';
 import '../../theme/app_typography.dart';
 import '../sheets/app_sheet.dart';
 import 'app_text_field.dart';
+import '../buttons/app_tappable.dart';
 
 /// A tappable box that looks exactly like a large [AppTextField] but opens
 /// something else (a date picker, a sheet) instead of the keyboard.
@@ -120,7 +121,7 @@ class AppDropdownField<T> extends StatelessWidget {
               child: Text(label, style: AppTypography.title(c)),
             ),
             for (final i in items)
-              InkWell(
+              AppTappable(
                 key: ValueKey('dropdown-row-${i.label}'),
                 onTap: () => Navigator.of(ctx).pop(i.value),
                 child: ConstrainedBox(

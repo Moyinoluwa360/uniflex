@@ -39,6 +39,7 @@ class _PromoCartButtonState extends State<PromoCartButton> {
                 borderRadius: BorderRadius.circular(20),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
                   onTap: () => _guard.run(widget.onTap),
                   child: const Center(
                     child:

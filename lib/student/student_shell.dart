@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../shared/services/notifications/notification_service.dart';
+import '../shared/state/balance_visibility.dart';
 import '../shared/widgets/navigation/app_bottom_nav_shell.dart';
 import 'home/student_home_screen.dart';
 import 'notifications/notification_router.dart';
@@ -31,6 +32,8 @@ class _StudentShellState extends ConsumerState<StudentShell> {
   @override
   void initState() {
     super.initState();
+    // Balance starts hidden for every signed-in session (Pack 1 / 1.3).
+    BalanceVisibility.reset();
     NotificationService.pendingNavigation.addListener(_onPendingNavigation);
     // A tap that launched the app (cold start) was stored before this
     // shell existed.
@@ -40,6 +43,8 @@ class _StudentShellState extends ConsumerState<StudentShell> {
   @override
   void dispose() {
     NotificationService.pendingNavigation.removeListener(_onPendingNavigation);
+    // Logout (or a role switch) disposes the shell: hide the balance again.
+    BalanceVisibility.reset();
     super.dispose();
   }
 

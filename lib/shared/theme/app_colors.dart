@@ -47,7 +47,6 @@ class AppColors extends ThemeExtension<AppColors> {
     required this.promoOrangeBadge,
     required this.glassFill,
     required this.glassBorder,
-    required this.glassHighlight,
     required this.navCapsule,
     required this.onNavCapsule,
     required this.navShadow,
@@ -112,17 +111,14 @@ class AppColors extends ThemeExtension<AppColors> {
   // ── Glass + floating nav ────────────────────────────────────────────
   final Color glassFill;
   final Color glassBorder;
-  final Color glassHighlight;
   final Color navCapsule;
   final Color onNavCapsule;
   final List<BoxShadow> navShadow;
 
-  /// Soft white-to-clear sheen drawn across the top of the glass bar.
-  Gradient get glassSheen => const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [Color(0x29FFFFFF), Color(0x00FFFFFF)],
-      );
+  /// Pressed-state overlay for every tappable (AppTappable and the theme's
+  /// InkWell highlight): white 8% in dark, #0E1210 6% in light. No ripple.
+  Color get pressOverlay =>
+      isDark ? const Color(0x14FFFFFF) : const Color(0x0F0E1210);
 
   /// Card shadow: none in dark, a hairline in light.
   final List<BoxShadow> cardShadow;
@@ -289,7 +285,6 @@ class AppColors extends ThemeExtension<AppColors> {
     promoOrangeBadge: Color(0xFFC2410C),
     glassFill: Color(0x8528302C), // rgba(40,48,44,.52)
     glassBorder: Color(0x24FFFFFF), // white 14%
-    glassHighlight: Color(0x3DFFFFFF), // white 24%
     navCapsule: Color(0x29FFFFFF), // white 16%
     onNavCapsule: Color(0xFFFFFFFF),
     navShadow: [
@@ -338,7 +333,6 @@ class AppColors extends ThemeExtension<AppColors> {
     promoOrangeBadge: Color(0xFFC2410C),
     glassFill: Color(0x94FFFFFF), // rgba(255,255,255,.58)
     glassBorder: Color(0xD9FFFFFF), // white 85%
-    glassHighlight: Color(0xFFFFFFFF),
     navCapsule: Color(0xFF0E1210),
     onNavCapsule: Color(0xFFFFFFFF),
     navShadow: [
@@ -402,7 +396,6 @@ class AppColors extends ThemeExtension<AppColors> {
       promoOrangeBadge: promoOrangeBadge,
       glassFill: glassFill,
       glassBorder: glassBorder,
-      glassHighlight: glassHighlight,
       navCapsule: navCapsule,
       onNavCapsule: onNavCapsule,
       navShadow: navShadow,
@@ -452,7 +445,6 @@ class AppColors extends ThemeExtension<AppColors> {
       promoOrangeBadge: l(promoOrangeBadge, other.promoOrangeBadge),
       glassFill: l(glassFill, other.glassFill),
       glassBorder: l(glassBorder, other.glassBorder),
-      glassHighlight: l(glassHighlight, other.glassHighlight),
       navCapsule: l(navCapsule, other.navCapsule),
       onNavCapsule: l(onNavCapsule, other.onNavCapsule),
       navShadow: near.navShadow,

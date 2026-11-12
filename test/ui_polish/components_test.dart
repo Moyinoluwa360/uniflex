@@ -501,14 +501,17 @@ void main() {
       }
     }
 
-    testWidgets('is 68 high, 16 from the sides, 22 above the bottom',
+    testWidgets(
+        'is 68 high, 16 from the sides, 12 above the bottom (no home indicator)',
         (tester) async {
       await pumpBar(tester, 0, (_) {});
       final r = tester.getRect(find.byKey(const ValueKey('glass-nav')));
       expect(r.height, 68);
       expect(r.left, 16);
       expect(r.right, 390 - 16);
-      expect(844 - r.bottom, 22);
+      // Pack 1 / 1.1: measured from the physical bottom; 20 with a home
+      // indicator (test/pack1/part1_test.dart), 12 without one.
+      expect(844 - r.bottom, 12);
     });
 
     testWidgets('tapping an item calls back with its index', (tester) async {

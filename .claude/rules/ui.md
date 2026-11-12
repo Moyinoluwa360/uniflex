@@ -39,6 +39,8 @@ logic, models, SQL, Edge Functions, payment/PIN or fee logic, or status values.
   `AppAccordionCard`, `AppTextField`, `AppGlassNavBar`.
 - Scrollables under the glass nav bar pad their bottom with
   `AppSpacing.navClearanceOf(context)`.
+- Anything rounded and tappable uses `AppTappable` (or an `InkWell` with
+  `borderRadius`/`customBorder`); `test/pack1/part1_test.dart` enforces it.
 
 ## Helpers
 - Money: `Money.format/hero/minus/plus/signed`, `MoneyText`, `MoneyHero`.

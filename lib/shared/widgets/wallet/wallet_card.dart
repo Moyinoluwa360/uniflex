@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../state/balance_visibility.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_icons.dart';
 import '../../theme/app_spacing.dart';
@@ -13,9 +14,10 @@ import '../format/money.dart';
 /// virtual-account strip with its copy button, all in one `surface` card
 /// (radius 24, padding 20/22/18). No gradient, no coloured fill.
 ///
-/// Presentation only. Hiding the balance is local UI state — it never
-/// touches the wallet data, and the account number stays visible so it can
-/// be copied.
+/// Presentation only. The balance is hidden by default and shares ONE
+/// in-memory show/hide flag with the Home wallet panel
+/// ([BalanceVisibility]); it never touches the wallet data, and the account
+/// number stays visible so it can be copied.
 class WalletCard extends StatefulWidget {
   const WalletCard({
     super.key,
@@ -54,10 +56,15 @@ class WalletCard extends StatefulWidget {
 }
 
 class _WalletCardState extends State<WalletCard> {
-  bool _hidden = false;
-
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: BalanceVisibility.visible,
+      builder: (context, visible, _) => _build(context, hidden: !visible),
+    );
+  }
+
+  Widget _build(BuildContext context, {required bool hidden}) {
     final c = context.colors;
     final Widget balance;
     if (widget.isLoading) {
@@ -88,13 +95,11 @@ class _WalletCardState extends State<WalletCard> {
             ),
         ],
       );
-    } else if (_hidden) {
-      balance = Text(
-        '₦ ••••••',
-        key: const ValueKey('balance-hidden'),
-        style: AppTypography.balanceHero(c.textPrimary),
-        maxLines: 1,
-      );
+    } else if (hidden) {
+      // Always exactly four dots, whatever the amount; same style (and so
+      // the same line height) as the real figure.
+      balance =
+          HiddenBalanceText(style: AppTypography.balanceHero(c.textPrimary));
     } else {
       balance =
           MoneyHero(widget.balance!, key: const ValueKey('balance-shown'));
@@ -115,12 +120,7 @@ class _WalletCardState extends State<WalletCard> {
                 child: Text('Available Balance',
                     style: AppTypography.sectionLabel(c)),
               ),
-              AppIconButton(
-                key: const ValueKey('balance-eye'),
-                icon: _hidden ? AppIcons.eyeOff : AppIcons.eye,
-                semanticLabel: _hidden ? 'Show balance' : 'Hide balance',
-                onPressed: () => setState(() => _hidden = !_hidden),
-              ),
+              BalanceEyeButton(color: c.textSecondary),
             ],
           ),
           const SizedBox(height: 2),

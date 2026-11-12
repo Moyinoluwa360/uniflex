@@ -7,6 +7,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_typography.dart';
 import 'app_bottom_nav_shell.dart';
+import '../buttons/app_tappable.dart';
 
 /// One item of the [AppGlassNavBar].
 class AppGlassNavItem {
@@ -26,10 +27,11 @@ class AppGlassNavItem {
   final int badgeCount;
 }
 
-/// The floating glass navigation bar: a rounded capsule 22px above the bottom
-/// safe area and 16px from the sides, 68px tall (radius 34), with a blurred
-/// "glass" fill, a 1px glass border, an inner top highlight, a soft sheen and
-/// a drop shadow. The active item has a filled capsule that SLIDES between
+/// The floating glass navigation bar: a rounded capsule whose bottom edge is
+/// [AppSpacing.navBottomGap] (20) above the physical bottom of the screen (12
+/// on phones without a home indicator), 16px from the sides, 68px tall
+/// (radius 34), with a blurred "glass" fill, ONE uniform 1px glass border and
+/// a drop shadow painted outside the capsule only. The active item has a filled capsule that SLIDES between
 /// tabs (≈280 ms, easeOutCubic; instant when the OS asks for reduced motion).
 ///
 /// It takes the same data the shells already have — a current index and an
@@ -55,7 +57,6 @@ class AppGlassNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final safeBottom = MediaQuery.paddingOf(context).bottom;
     final reduce = MediaQuery.disableAnimationsOf(context);
     final radius = BorderRadius.circular(AppRadius.nav);
     final n = items.length;
@@ -66,7 +67,9 @@ class AppGlassNavBar extends StatelessWidget {
         AppSpacing.navBarSideGap,
         0,
         AppSpacing.navBarSideGap,
-        AppSpacing.navBarBottomGap + safeBottom,
+        // Measured from the physical bottom of the screen; the safe-area
+        // inset is deliberately NOT added (Pack 1 / 1.1).
+        AppSpacing.navBottomGapOf(context),
       ),
       child: RepaintBoundary(
         child: SizedBox(
@@ -81,78 +84,61 @@ class AppGlassNavBar extends StatelessWidget {
                 filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
                 child: DecoratedBox(
                   key: const ValueKey('glass-nav'),
+                  // One 1px border, identical on all four sides. No top-only
+                  // highlight line or sheen (they made the top edge look
+                  // thicker — Pack 1 / 1.2).
                   decoration: BoxDecoration(
                     color: c.glassFill,
                     borderRadius: radius,
                     border: Border.all(color: c.glassBorder),
                   ),
-                  child: Stack(
-                    children: [
-                      // Soft top-to-clear sheen.
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(gradient: c.glassSheen),
-                          ),
-                        ),
-                      ),
-                      // Inner top highlight line.
-                      Positioned(
-                        top: 0,
-                        left: AppRadius.nav,
-                        right: AppRadius.nav,
-                        height: 1,
-                        child: ColoredBox(color: c.glassHighlight),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(_inset),
-                        child: LayoutBuilder(
-                          builder: (context, box) {
-                            final itemW = box.maxWidth / n;
-                            return Stack(
-                              children: [
-                                AnimatedPositioned(
-                                  duration: reduce
-                                      ? Duration.zero
-                                      : const Duration(milliseconds: 280),
-                                  curve: Curves.easeOutCubic,
-                                  left: current * itemW,
-                                  top: 0,
-                                  bottom: 0,
-                                  width: itemW,
-                                  child: DecoratedBox(
-                                    key: const ValueKey('nav-capsule'),
-                                    decoration: BoxDecoration(
-                                      color: c.navCapsule,
-                                      borderRadius: BorderRadius.circular(
-                                        AppRadius.nav - _inset,
-                                      ),
-                                    ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(_inset),
+                    child: LayoutBuilder(
+                      builder: (context, box) {
+                        final itemW = box.maxWidth / n;
+                        return Stack(
+                          children: [
+                            AnimatedPositioned(
+                              duration: reduce
+                                  ? Duration.zero
+                                  : const Duration(milliseconds: 280),
+                              curve: Curves.easeOutCubic,
+                              left: current * itemW,
+                              top: 0,
+                              bottom: 0,
+                              width: itemW,
+                              child: DecoratedBox(
+                                key: const ValueKey('nav-capsule'),
+                                decoration: BoxDecoration(
+                                  color: c.navCapsule,
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.nav - _inset,
                                   ),
                                 ),
-                                Row(
-                                  children: [
-                                    for (var i = 0; i < n; i++)
-                                      Expanded(
-                                        child: _NavItem(
-                                          item: items[i],
-                                          active: i == current,
-                                          onTap: () {
-                                            if (i != current) {
-                                              HapticFeedback.selectionClick();
-                                            }
-                                            onTap(i);
-                                          },
-                                        ),
-                                      ),
-                                  ],
-                                ),
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                for (var i = 0; i < n; i++)
+                                  Expanded(
+                                    child: _NavItem(
+                                      item: items[i],
+                                      active: i == current,
+                                      onTap: () {
+                                        if (i != current) {
+                                          HapticFeedback.selectionClick();
+                                        }
+                                        onTap(i);
+                                      },
+                                    ),
+                                  ),
                               ],
-                            );
-                          },
-                        ),
-                      ),
-                    ],
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
@@ -186,7 +172,7 @@ class _NavItem extends StatelessWidget {
       label: item.label,
       excludeSemantics: true,
       onTap: onTap,
-      child: InkWell(
+      child: AppTappable(
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppRadius.nav - 6),
         child: Column(

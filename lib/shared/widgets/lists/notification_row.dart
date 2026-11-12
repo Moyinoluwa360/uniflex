@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_typography.dart';
+import '../buttons/app_tappable.dart';
 
 /// One notification inside an `AppListGroup`.
 ///
@@ -81,6 +82,6 @@ class NotificationRow extends StatelessWidget {
       ),
     );
     if (onTap == null) return row;
-    return InkWell(onTap: onTap, child: row);
+    return AppTappable(onTap: onTap, child: row);
   }
 }

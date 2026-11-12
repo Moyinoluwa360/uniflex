@@ -192,6 +192,7 @@ class _AppButtonState extends State<AppButton> {
       shape: RoundedRectangleBorder(borderRadius: radius, side: side),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
+        customBorder: RoundedRectangleBorder(borderRadius: radius),
         onTap: enabled ? _tap : null,
         child: ConstrainedBox(
           constraints: BoxConstraints(minHeight: height, minWidth: 0),

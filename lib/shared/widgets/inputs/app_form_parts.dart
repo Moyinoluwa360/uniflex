@@ -88,6 +88,7 @@ class _AppChoiceChipState extends State<AppChoiceChip> {
           ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
+            borderRadius: BorderRadius.circular(AppRadius.buttonSmall),
             onTap:
                 widget.onTap == null ? null : () => _guard.run(widget.onTap!),
             child: ConstrainedBox(

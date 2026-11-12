@@ -2,6 +2,38 @@
 
 All notable changes to this project are documented here, phase by phase.
 
+## Pack 1 / Part 1 — nav gap and border, hidden balance, tap fixes (2026-11-12)
+
+**Presentation only.** No service, SQL, payment, PIN or status logic changed.
+
+- **Nav gap (1.1):** the glass bar's bottom edge now sits
+  `AppSpacing.navBottomGap` = **20 pt** above the *physical* bottom of the
+  screen (12 on phones without a home indicator); the safe-area inset is no
+  longer added on top. One constant to tune after comparing with WhatsApp.
+  `navClearanceOf` = 68 + gap + 12 (100 on a home-indicator iPhone, was 124);
+  used by Home (scroll + cart button lift), Orders, Wallet and Profile.
+- **Border (1.2):** the bar's top edge looked thicker because two layers were
+  painted at the top only: an inner 1px highlight line (`glassHighlight`,
+  white 24% in dark / pure white in light) and a white 16%→clear sheen. Both
+  removed (tokens deleted); the bar keeps one uniform 1px `glassBorder`. The
+  active capsule was already a plain fill. Home header panels and the Major
+  chip already used one uniform border — unchanged.
+- **Hidden balance (1.3):** hidden by default on Home and Wallet; one shared
+  in-memory flag (`lib/shared/state/balance_visibility.dart`), reset when the
+  student shell is created/disposed (sign-in / logout), never persisted.
+  Hidden shows exactly `₦ ••••` (was six dots on Wallet). Home gets an eye
+  button (32 visual / 44 hit). Icon: hidden = eye, shown = eye-off.
+- **Tap effects (1.4):** new `AppTappable` (own transparent `Material` with the
+  exact shape, clipped). The square highlight came from shapeless `InkWell`s
+  painting on an ancestor `Material` outside the rounded clip — every
+  `AppListRow`, accordion headers, notification rows, picker rows. Theme: no
+  ripple (`NoSplash`), soft `pressOverlay` highlight; ListTiles rounded. Guard
+  test: every `InkWell`/`InkResponse` outside `AppTappable` has a shape.
+- **Change Transaction PIN row (1.4):** the sheet waited on a network check
+  (`hasTransactionPin`) with no feedback, so taps looked ignored and repeats
+  queued extra checks. The row now shows a spinner at once and ignores repeat
+  taps until the sheet closes. The PIN flow itself is unchanged.
+
 ## Push: iOS fix + rider/admin alerts (2026-11-12)
 
 **Fixed**

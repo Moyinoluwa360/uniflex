@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../state/balance_visibility.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_icons.dart';
 import '../../theme/app_spacing.dart';
@@ -54,6 +55,7 @@ class _HeaderGlassButtonState extends State<HeaderGlassButton> {
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
+                  customBorder: RoundedRectangleBorder(borderRadius: radius),
                   onTap: () => _guard.run(widget.onTap),
                   child: Center(
                     child: Icon(widget.icon,
@@ -102,6 +104,7 @@ class HeaderAvatar extends StatelessWidget {
         shape: CircleBorder(side: BorderSide(color: c.headerPanelBorder)),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
+          customBorder: const CircleBorder(),
           onTap: onTap,
           child: SizedBox(
             width: 40,
@@ -175,16 +178,42 @@ class _HeaderWalletPanelState extends State<HeaderWalletPanel> {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    widget.balance != null
-                        ? Money.format(widget.balance!)
-                        : '${Money.symbol}--',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.tabular(
-                      AppTypography.greetingName(c.headerText)
-                          .copyWith(fontSize: 24, height: 1.15),
-                    ),
+                  // Amount + eye, vertically centred. Hidden by default and
+                  // shared with the Wallet tab (BalanceVisibility). Loading
+                  // and error stay `₦--`, as before.
+                  ValueListenableBuilder<bool>(
+                    valueListenable: BalanceVisibility.visible,
+                    builder: (context, visible, _) {
+                      final style = AppTypography.tabular(
+                        AppTypography.greetingName(c.headerText)
+                            .copyWith(fontSize: 24, height: 1.15),
+                      );
+                      final amount = widget.balance == null
+                          ? Text('${Money.symbol}--',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: style)
+                          : visible
+                              ? Text(
+                                  Money.format(widget.balance!),
+                                  key: const ValueKey('balance-shown'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: style,
+                                )
+                              : HiddenBalanceText(style: style);
+                      return Row(
+                        children: [
+                          Flexible(child: amount),
+                          if (widget.balance != null) ...[
+                            const SizedBox(width: 2),
+                            BalanceEyeButton(
+                              color: c.headerText.withValues(alpha: 0.78),
+                            ),
+                          ],
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -195,6 +224,7 @@ class _HeaderWalletPanelState extends State<HeaderWalletPanel> {
               shape: const StadiumBorder(),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
+                customBorder: const StadiumBorder(),
                 onTap: () => _guard.run(widget.onTopUp),
                 child: SizedBox(
                   height: 40,

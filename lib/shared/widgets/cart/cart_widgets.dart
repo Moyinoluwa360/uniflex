@@ -83,6 +83,7 @@ class _StepButton extends StatelessWidget {
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.buttonSmall),
           onTap: onTap,
           child: SizedBox(
             width: 32,
@@ -199,6 +200,7 @@ class CartItemRow extends StatelessWidget {
           if (onRemove != null) ...[
             const SizedBox(width: AppSpacing.xs),
             InkResponse(
+              customBorder: const CircleBorder(),
               onTap: onRemove,
               radius: 20,
               child: Padding(
@@ -268,6 +270,7 @@ class AddItemButton extends StatelessWidget {
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.iconButton),
           onTap: onTap,
           child: SizedBox(
             width: 36,

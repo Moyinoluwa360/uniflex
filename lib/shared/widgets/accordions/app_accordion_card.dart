@@ -5,6 +5,7 @@ import '../../theme/app_icons.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_typography.dart';
 import '../cards/app_card.dart';
+import '../buttons/app_tappable.dart';
 
 /// A bold, clearly-boxed accordion card — the standard collapsible section
 /// component used on the vendor page (Drinks, Others), inside each pack
@@ -71,7 +72,7 @@ class AppAccordionCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // ── Header (tap target) ────────────────────────────────────
-              InkWell(
+              AppTappable(
                 onTap: onTap,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(minHeight: 72),

@@ -5,6 +5,7 @@ import '../../theme/app_icons.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_typography.dart';
 import '../cards/app_card.dart';
+import '../buttons/app_tappable.dart';
 
 /// A card of [AppListRow]s separated by hairline dividers.
 class AppListGroup extends StatelessWidget {
@@ -108,6 +109,6 @@ class AppListRow extends StatelessWidget {
     );
 
     if (onTap == null) return row;
-    return InkWell(onTap: onTap, child: row);
+    return AppTappable(onTap: onTap, child: row);
   }
 }

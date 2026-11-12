@@ -480,6 +480,7 @@ class _PackCountButton extends StatelessWidget {
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
+          customBorder: const CircleBorder(),
           onTap: onTap,
           child: SizedBox(
             width: 52,

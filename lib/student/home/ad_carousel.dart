@@ -226,6 +226,7 @@ class PromoCard extends StatelessWidget {
       child: Material(
         color: base,
         child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.card),
           onTap: onTap,
           child: Stack(
             fit: StackFit.expand,

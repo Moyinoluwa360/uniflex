@@ -217,11 +217,7 @@ class StudentProfileScreen extends ConsumerWidget {
                           onTap: () =>
                               _push(context, const PreferencesScreen()),
                         ),
-                        AppListRow(
-                          leadingIcon: AppIcons.lock,
-                          title: 'Change Transaction PIN',
-                          onTap: () => showSetPinSheet(context, ref),
-                        ),
+                        const _ChangePinRow(),
                       ],
                     ),
 
@@ -265,5 +261,56 @@ class StudentProfileScreen extends ConsumerWidget {
     final parts = name.trim().split(' ');
     if (parts.length == 1) return parts[0][0].toUpperCase();
     return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+  }
+}
+
+/// "Change Transaction PIN" row (Pack 1 / 1.4).
+///
+/// Cause of the "slow / ignores taps" report: `showSetPinSheet` first awaits a
+/// network call (`hasTransactionPin`) before the sheet appears, and the row
+/// gave no feedback meanwhile — so on a slow connection the first tap looked
+/// ignored and further taps queued extra checks and sheets. This row shows a
+/// spinner at once and ignores repeat taps until the sheet has closed
+/// (saved, error, dismissed or back). What the PIN flow does, validates and
+/// stores is unchanged: it is the same `showSetPinSheet` call.
+class _ChangePinRow extends ConsumerStatefulWidget {
+  const _ChangePinRow();
+
+  @override
+  ConsumerState<_ChangePinRow> createState() => _ChangePinRowState();
+}
+
+class _ChangePinRowState extends ConsumerState<_ChangePinRow> {
+  bool _busy = false;
+
+  Future<void> _open() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await showSetPinSheet(context, ref);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return AppListRow(
+      key: const ValueKey('change-pin-row'),
+      leadingIcon: AppIcons.lock,
+      title: 'Change Transaction PIN',
+      trailing: _busy
+          ? SizedBox(
+              width: AppIconSize.small,
+              height: AppIconSize.small,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: c.textTertiary,
+              ),
+            )
+          : null,
+      onTap: _open,
+    );
   }
 }
