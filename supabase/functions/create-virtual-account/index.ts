@@ -15,7 +15,11 @@
 //   supabase functions deploy create-virtual-account --no-verify-jwt
 //
 // Required secrets (set in Supabase dashboard → Edge Functions → Secrets):
-//   PAYSTACK_SECRET_KEY=sk_test_...
+//   PAYSTACK_SECRET_KEY=sk_test_...   (sk_live_... in live mode)
+// Optional (live mode only; Pack 1 / Part 4):
+//   PAYSTACK_DVA_BANK=wema-bank | titan-paystack   (default wema-bank)
+// Test keys always use Paystack's "test-bank" (a live bank slug is invalid
+// on a test key, and test-bank is invalid on a live key).
 // The following are injected automatically by the Supabase runtime:
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY
 
@@ -26,6 +30,21 @@ const corsHeaders = {
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
+
+const BANK_NAMES: Record<string, string> = {
+  "test-bank": "Test Bank",
+  "wema-bank": "Wema Bank",
+  "titan-paystack": "Paystack-Titan",
+};
+
+/// Which Paystack bank to ask for, from the key's own mode.
+function dvaBank(secretKey: string): { slug: string; name: string; test: boolean } {
+  const test = secretKey.startsWith("sk_test_");
+  const slug = test ? "test-bank" : (Deno.env.get("PAYSTACK_DVA_BANK") ?? "wema-bank");
+  const base = BANK_NAMES[slug] ?? slug;
+  // A test account is labelled as such wherever it is shown.
+  return { slug, name: test ? `${base} (test mode)` : base, test };
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -81,13 +100,17 @@ Deno.serve(async (req: Request) => {
 
   const placeholderVan: string = wallet.virtual_account_number as string;
 
-  // If already a real account (not the UFX- placeholder), return it
+  const bank = dvaBank(paystackSecretKey);
+
+  // If already a real account (not the UFX- placeholder), return it.
+  // (The bank is not stored per wallet; it follows the configured mode.)
   if (!placeholderVan.startsWith("UFX-")) {
     return new Response(
       JSON.stringify({
         account_number: placeholderVan,
-        bank_name: "Wema Bank",
+        bank_name: bank.name,
         is_real_account: true,
+        is_test_mode: bank.test,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
@@ -106,7 +129,17 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
 
   const email: string = (profile?.email as string | undefined) ?? user.email ?? "";
-  const fullName: string = (profile?.full_name as string | undefined) ?? "Uniflex Student";
+  const fullName: string = ((profile?.full_name as string | undefined) ?? "").trim();
+  const phone: string = ((profile?.phone as string | undefined) ?? "").trim();
+  const nameParts = fullName.split(/\s+/).filter((p) => p.length > 0);
+
+  // Paystack needs first name, last name and phone on the customer before a
+  // bank account can be issued. Without them, stay on the pending state
+  // instead of creating a half-filled customer.
+  if (!email || nameParts.length < 2 || !phone) {
+    console.warn(`DVA skipped for ${user.id}: missing name or phone on profile`);
+    return _fallbackResponse(placeholderVan, corsHeaders);
+  }
 
   try {
     // ── Step 1: Create or retrieve a Paystack customer ────────────────
@@ -118,9 +151,9 @@ Deno.serve(async (req: Request) => {
       },
       body: JSON.stringify({
         email,
-        first_name: fullName.split(" ")[0] ?? fullName,
-        last_name: fullName.split(" ").slice(1).join(" ") || "—",
-        phone: profile?.phone ?? undefined,
+        first_name: nameParts[0],
+        last_name: nameParts.slice(1).join(" "),
+        phone,
       }),
     });
 
@@ -144,7 +177,7 @@ Deno.serve(async (req: Request) => {
       },
       body: JSON.stringify({
         customer: customerCode,
-        preferred_bank: "test-bank", // sandbox bank for Paystack test mode
+        preferred_bank: bank.slug,
       }),
     });
 
@@ -160,19 +193,30 @@ Deno.serve(async (req: Request) => {
     }
 
     const accountNumber: string = dvaData.data.account_number;
-    const bankName: string = dvaData.data.bank?.name ?? "Wema Bank";
+    const bankName: string = bank.test
+      ? `${dvaData.data.bank?.name ?? "Test Bank"} (test mode)`
+      : (dvaData.data.bank?.name ?? bank.name);
 
     // ── Step 3: Persist the real VAN in the wallets table ────────────
-    await adminClient
+    // Only replaces the placeholder: if two calls raced, the first one to
+    // land wins and the second does not overwrite it.
+    const { error: saveError } = await adminClient
       .from("wallets")
       .update({ virtual_account_number: accountNumber })
-      .eq("user_id", user.id);
+      .eq("user_id", user.id)
+      .like("virtual_account_number", "UFX-%");
+    if (saveError) {
+      // The account exists at Paystack but is not saved here; the webhook
+      // still credits transfers to it by customer email.
+      console.error("Could not save the DVA for", user.id, saveError);
+    }
 
     return new Response(
       JSON.stringify({
         account_number: accountNumber,
         bank_name: bankName,
         is_real_account: true,
+        is_test_mode: bank.test,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

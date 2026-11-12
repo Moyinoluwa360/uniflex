@@ -144,12 +144,17 @@ Deno.serve(async (req: Request) => {
 
   const payerEmail = data.customer?.email;
   if (!userId && payerEmail) {
-    const { data: profile } = await adminClient
+    // Case-insensitive EXACT match. `%`, `_` and `\` are escaped: unescaped,
+    // an email such as "a_b@x.com" was a LIKE pattern that could match
+    // (and credit) a different student (Pack 1 / Part 4).
+    const exact = payerEmail.replace(/[\\%_]/g, (c) => `\\${c}`);
+    const { data: profiles } = await adminClient
       .from("profiles")
       .select("id")
-      .ilike("email", payerEmail)
-      .maybeSingle();
-    userId = (profile?.id as string | undefined) ?? null;
+      .ilike("email", exact)
+      .limit(2);
+    // Only an unambiguous match is used; otherwise it is logged below.
+    userId = profiles?.length === 1 ? (profiles[0].id as string) : null;
   }
 
   if (!userId) {

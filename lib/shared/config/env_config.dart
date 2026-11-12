@@ -25,6 +25,11 @@ abstract final class EnvConfig {
   static String get supabaseAnonKey => dotenv.env['SUPABASE_ANON_KEY'] ?? '';
   static String get paystackPublicKey =>
       dotenv.env['PAYSTACK_PUBLIC_KEY'] ?? '';
+
+  /// True when the bundled Paystack key is a TEST key (`pk_test_…`). The app
+  /// only says "test mode" when this is true (Pack 1 / Part 4).
+  static bool get isPaystackTestMode =>
+      paystackPublicKey.startsWith('pk_test_');
   static String get firebaseApiKey => dotenv.env['FIREBASE_API_KEY'] ?? '';
   static String get firebaseProjectId =>
       dotenv.env['FIREBASE_PROJECT_ID'] ?? '';

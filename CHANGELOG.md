@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented here, phase by phase.
 
+## Pack 1 / Part 4 — wallet funding fixes and tests (2026-11-12)
+
+Audit table: `docs/wallet-funding-audit.md`.
+
+**Security (money)** — `supabase/pack1_wallet_funding_fixes.sql` + `_test.sql`
+(12/12 in a rolled-back dry run on live; **not yet applied**):
+- `credit_wallet` was executable by anon and authenticated on live (anyone
+  could credit any wallet). Now service role only. Also rejects amounts ≤ 0
+  and turns a concurrent duplicate into `DUPLICATE_REFERENCE`.
+- `_refund_order` was directly callable by app users (self-refund of a
+  delivered order). Now internal only (`update_order_status` still uses it).
+
+**Edge Functions** (code changed; **redeploy needed**):
+- `paystack-webhook`: the payer-email fallback was a LIKE pattern; now an
+  exact, escaped, unambiguous match.
+- `create-virtual-account`: bank chosen from the key's mode (`test-bank` for
+  `sk_test_`, `PAYSTACK_DVA_BANK` / `wema-bank` for live — the hard-coded test
+  bank would have failed every live request); requires full name + phone;
+  never overwrites an already-saved account; test accounts labelled
+  "(test mode)".
+
+**App**: the top-up sheet only says "Test mode — no real money is moved" when
+the bundled key is `pk_test_…`.
+
 ## Pack 1 / Part 3 — fixed-menu vendor ordering style (2026-11-12)
 
 Map and design: `docs/vendor-ordering-styles.md`.

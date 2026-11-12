@@ -221,7 +221,10 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                     style: theme.textTheme.titleMedium),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'Minimum ₦100 • Test mode — no real money is moved',
+                  // Only a test key may claim no real money moves.
+                  EnvConfig.isPaystackTestMode
+                      ? 'Minimum ₦100 • Test mode — no real money is moved'
+                      : 'Minimum ₦100',
                   style: AppTypography.meta(ctx.colors),
                 ),
                 const SizedBox(height: AppSpacing.md),
