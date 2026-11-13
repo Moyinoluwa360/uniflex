@@ -178,7 +178,6 @@ class _CategoryCard extends StatelessWidget {
             Switch(
               value: category.isActive,
               onChanged: onToggle,
-              activeThumbColor: context.colors.brand,
             ),
             PopupMenuButton<String>(
               onSelected: (v) {

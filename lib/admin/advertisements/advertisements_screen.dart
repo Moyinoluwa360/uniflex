@@ -212,7 +212,6 @@ class _AdCard extends StatelessWidget {
             Switch(
               value: ad.isActive,
               onChanged: onToggle,
-              activeThumbColor: context.colors.brand,
             ),
             PopupMenuButton<String>(
               onSelected: (v) {

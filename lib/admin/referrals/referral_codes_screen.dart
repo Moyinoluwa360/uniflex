@@ -229,7 +229,6 @@ class _CodeCard extends StatelessWidget {
                   Switch(
                     value: row.isActive,
                     onChanged: onToggle,
-                    activeThumbColor: context.colors.brand,
                   ),
                   PopupMenuButton<String>(
                     onSelected: (v) {

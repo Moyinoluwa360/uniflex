@@ -231,7 +231,6 @@ class _OnlineToggleCard extends StatelessWidget {
               : Switch(
                   value: isOnline,
                   onChanged: (_) => onToggle(),
-                  activeThumbColor: context.colors.brand,
                 ),
         ],
       ),

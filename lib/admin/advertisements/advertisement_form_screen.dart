@@ -282,7 +282,6 @@ class _AdvertisementFormScreenState
                       Switch(
                         value: _isActive,
                         onChanged: (v) => setState(() => _isActive = v),
-                        activeThumbColor: context.colors.brand,
                       ),
                     ],
                   ),

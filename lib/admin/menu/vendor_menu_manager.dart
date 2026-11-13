@@ -524,7 +524,6 @@ class MenuItemTile extends StatelessWidget {
               key: ValueKey('switch-${product.id}'),
               value: product.isAvailable,
               onChanged: onToggle,
-              activeThumbColor: context.colors.brand,
             ),
             PopupMenuButton<String>(
               onSelected: (v) {

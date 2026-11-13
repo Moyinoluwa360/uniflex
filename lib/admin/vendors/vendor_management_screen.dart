@@ -221,7 +221,6 @@ class _VendorCard extends StatelessWidget {
                 Switch(
                   value: vendor.isActive,
                   onChanged: onToggle,
-                  activeThumbColor: context.colors.brand,
                 ),
                 // More options
                 PopupMenuButton<String>(
