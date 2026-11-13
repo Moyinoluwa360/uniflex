@@ -9,6 +9,7 @@ import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/cards/app_card.dart';
 import '../../shared/widgets/text/app_section_label.dart';
 import '../services/student_providers.dart';
+import '../../shared/utils/app_error_mapper.dart';
 
 /// Badges / achievements screen. Shows earned badges prominently and
 /// unearned ones greyed-out so students know what to aim for.
@@ -41,7 +42,7 @@ class BadgesScreen extends ConsumerWidget {
       appBar: const UniflexAppBar(title: 'My Badges'),
       body: badgesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Could not load: $e')),
+        error: (e, _) => Center(child: Text('Could not load. ${AppErrorMapper.map(e)}')),
         data: (allEarned) {
           final earned =
               allEarned.where((a) => !_hiddenCodes.contains(a.code)).toList();

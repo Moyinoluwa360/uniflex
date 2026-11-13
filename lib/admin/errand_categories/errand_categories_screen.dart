@@ -10,6 +10,7 @@ import '../services/admin_providers.dart';
 import 'errand_category_form_screen.dart';
 import '../../shared/widgets/buttons/app_button.dart';
 import '../../shared/widgets/format/money.dart';
+import '../../shared/utils/app_error_mapper.dart';
 
 /// Admin management of Errand service categories — add/edit/remove the
 /// categories the Student-facing Errand flow reads dynamically.
@@ -115,7 +116,7 @@ class ErrandCategoriesScreen extends ConsumerWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Delete failed — try deactivating instead. ($e)')),
+              content: Text('Delete failed — try deactivating instead. (${AppErrorMapper.map(e)})')),
         );
       }
     }

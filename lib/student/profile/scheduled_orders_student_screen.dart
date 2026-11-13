@@ -13,6 +13,7 @@ import '../../shared/widgets/status/app_status_label.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
 import '../../shared/models/order.dart';
 import '../tracking/order_tracking_screen.dart';
+import '../../shared/utils/app_error_mapper.dart';
 
 final _scheduledOrdersProvider = FutureProvider<List<Order>>((ref) async {
   final client = ref.watch(supabaseClientProvider);
@@ -44,7 +45,7 @@ class ScheduledOrdersStudentScreen extends ConsumerWidget {
       appBar: const UniflexAppBar(title: 'Scheduled Orders'),
       body: ordersAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Could not load: $e')),
+        error: (e, _) => Center(child: Text('Could not load. ${AppErrorMapper.map(e)}')),
         data: (orders) {
           if (orders.isEmpty) {
             return Center(

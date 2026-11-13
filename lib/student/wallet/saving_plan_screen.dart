@@ -18,6 +18,7 @@ import '../../shared/widgets/format/money.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../../shared/widgets/tabs/app_segmented_tabs.dart';
 import '../../shared/widgets/text/app_section_label.dart';
+import '../../shared/utils/app_error_mapper.dart';
 
 /// Saving Plan screen — lets the student set a spending budget for a
 /// chosen period (Daily / Weekly / Monthly).
@@ -65,7 +66,7 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Saving plan saved'),
+        content: Text('Spending budget saved'),
         behavior: SnackBarBehavior.floating,
         duration: Duration(seconds: 2),
       ),
@@ -75,7 +76,7 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
   Future<void> _removePlan() async {
     final confirmed = await AppDialog.show(
       context,
-      title: 'Remove saving plan?',
+      title: 'Remove spending budget?',
       body: 'Your spending will no longer be tracked against a budget.',
       secondaryLabel: 'Cancel',
       confirmLabel: 'Remove',
@@ -88,7 +89,7 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Saving plan removed'),
+        content: Text('Spending budget removed'),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -102,12 +103,12 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
     final txAsync = ref.watch(walletTransactionsProvider);
 
     return Scaffold(
-      appBar: const UniflexAppBar(title: 'Saving Plan'),
+      appBar: const UniflexAppBar(title: 'Spending budget'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.screenGutter),
         child: planAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Error: $e')),
+          error: (e, _) => Center(child: Text(AppErrorMapper.map(e))),
           data: (plan) {
             if (plan != null) _populateFromPlan(plan);
 
@@ -179,7 +180,7 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
                   const SizedBox(height: AppSpacing.sm),
                   Center(
                     child: AppButton(
-                      label: 'Remove saving plan',
+                      label: 'Remove spending budget',
                       variant: AppButtonVariant.quietDanger,
                       size: AppButtonSize.small,
                       expand: false,
@@ -203,7 +204,7 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
                     padding: EdgeInsets.all(AppSpacing.lg),
                     child: Center(child: CircularProgressIndicator()),
                   ),
-                  error: (e, _) => Text('Could not load: $e'),
+                  error: (e, _) => Text('Could not load. ${AppErrorMapper.map(e)}'),
                   data: (txs) {
                     // Show only order-payment debits within the current period
                     final periodStart = plan?.periodStart ??
@@ -214,7 +215,7 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
                         .where(
                           (t) =>
                               t.type == WalletTxType.debit &&
-                              t.source == WalletTxSource.orderPayment &&
+                              t.source.isSpending &&
                               t.createdAt.isAfter(periodStart),
                         )
                         .toList();

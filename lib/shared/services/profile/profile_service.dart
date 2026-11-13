@@ -106,8 +106,9 @@ class ProfileService {
   /// to need no proof of the old one, so a stolen session could silently
   /// replace the PIN and then spend the wallet.
   Future<void> setTransactionPin(String pin, {String? currentPin}) async {
+    dynamic result;
     try {
-      await _client.rpc('set_transaction_pin', params: {
+      result = await _client.rpc('set_transaction_pin', params: {
         'p_pin': pin,
         if (currentPin != null) 'p_current_pin': currentPin,
       });
@@ -121,5 +122,53 @@ class ProfileService {
       }
       throw ProfileException(e.message);
     }
+    // Pack 2: a wrong / locked current PIN is RETURNED (so the server's
+    // failed-attempt counter is kept), not raised.
+    final error = result is Map ? result['error'] : null;
+    if (error == 'INVALID_CURRENT_PIN') {
+      throw ProfileException('That is not your current PIN.');
+    }
+    if (error == 'PIN_LOCKED') {
+      throw ProfileException(
+          'Too many wrong attempts — PIN is locked for 15 minutes.');
+    }
+    if (error is String && error.isNotEmpty) {
+      throw ProfileException('Could not change your PIN. Please try again.');
+    }
+  }
+
+  /// Pack 2 — deletes the signed-in student's account on the server
+  /// (`delete_my_account`): personal data removed, login made unusable,
+  /// order / wallet records kept anonymised, any balance forfeited.
+  /// Returns the forfeited amount. Throws [ProfileException] with a
+  /// friendly message when the server refuses.
+  Future<double> deleteMyAccount(String pin) async {
+    final dynamic result;
+    try {
+      result = await _client.rpc('delete_my_account', params: {'p_pin': pin});
+    } on PostgrestException {
+      throw ProfileException(
+          'Could not delete your account. Please try again.');
+    }
+    final error = result is Map ? result['error'] : null;
+    if (error is String && error.isNotEmpty) {
+      throw ProfileException(deleteAccountErrorText(error));
+    }
+    final forfeited = result is Map ? result['forfeited'] : null;
+    return forfeited is num ? forfeited.toDouble() : 0;
   }
 }
+
+/// Friendly text for a `delete_my_account` refusal code.
+String deleteAccountErrorText(String code) => switch (code) {
+      'ACTIVE_ORDERS' =>
+        'You have an order, errand or gift still in progress. Wait until it '
+            'is delivered or cancelled, then try again.',
+      'STAFF_ACCOUNT' =>
+        'Rider and admin accounts are removed by Uniflex. Please contact support.',
+      'INVALID_PIN' => 'Incorrect PIN. Please try again.',
+      'PIN_LOCKED' => 'Too many wrong attempts — PIN is locked for 15 minutes.',
+      'PIN_NOT_SET' => 'Set your transaction PIN first (Profile → Change '
+          'Transaction PIN), then try again.',
+      _ => 'Could not delete your account. Please try again.',
+    };

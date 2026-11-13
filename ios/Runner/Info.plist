@@ -46,13 +46,9 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Uniflex needs access to your photo library to upload product images.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Uniflex needs permission to save photos to your library.</string>
+	<string>Uniflex staff choose a photo from the library for a menu item or an advert.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Uniflex needs camera access to take photos for product listings.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Uniflex uses your location to help riders navigate to your delivery address.</string>
+	<string>Uniflex staff can take a photo of a menu item or an advert.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

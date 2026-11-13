@@ -6,6 +6,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_spacing.dart';
 import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/app_button.dart';
+import '../../shared/utils/app_error_mapper.dart';
 
 class RiderProfileScreen extends ConsumerWidget {
   const RiderProfileScreen({super.key});
@@ -19,7 +20,7 @@ class RiderProfileScreen extends ConsumerWidget {
       appBar: const UniflexAppBar(title: 'Profile'),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => Center(child: Text(AppErrorMapper.map(e))),
         data: (profile) {
           final initials = _initials(profile?.fullName);
           return ListView(

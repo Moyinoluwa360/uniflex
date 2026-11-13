@@ -10,6 +10,7 @@ import '../../shared/widgets/buttons/app_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../../student/ordering/order_repository.dart';
 import '../../shared/widgets/format/money.dart';
+import '../../shared/utils/app_error_mapper.dart';
 
 /// Admin provider for ALL delivery locations (including inactive ones).
 final adminDeliveryLocationsProvider =
@@ -46,7 +47,7 @@ class DeliverySettingsScreen extends ConsumerWidget {
       ),
       body: locsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => Center(child: Text(AppErrorMapper.map(e))),
         data: (locs) {
           if (locs.isEmpty) {
             return Center(
@@ -111,7 +112,7 @@ class DeliverySettingsScreen extends ConsumerWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Failed: $e'), behavior: SnackBarBehavior.floating),
+              content: Text('Failed. ${AppErrorMapper.map(e)}'), behavior: SnackBarBehavior.floating),
         );
       }
     }
@@ -265,7 +266,7 @@ class _DeliveryLocationFormScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed: $e'),
+            content: Text('Failed. ${AppErrorMapper.map(e)}'),
             behavior: SnackBarBehavior.floating,
           ),
         );

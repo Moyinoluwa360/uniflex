@@ -379,13 +379,30 @@ class AdminService {
   /// Emits an initial fetch immediately, then subscribes to Supabase
   /// Realtime for live updates. If Realtime hangs or fails the initial
   /// data still shows.
+  static const _kitchenStatuses = [
+    'being_sourced', // commitment fee paid — kitchen starts here
+    'placed',
+    'preparing',
+    'awaiting_final_payment', // kitchen marked ready — student pays food cost
+    'ready',
+    'ready_for_pickup',
+    'out_for_delivery',
+  ];
+
   Stream<List<KitchenOrder>> streamKitchenOrders() async* {
     // Helper: fetch active kitchen orders via a one-shot REST query.
     Future<List<KitchenOrder>> fetchKitchenOrders() async {
+      // Pack 2: filter on the server (same rules as below) instead of
+      // downloading every order ever placed on each refresh.
       final rows = await _client
           .from('orders')
           .select()
-          .order('created_at', ascending: false);
+          .eq('type', 'food')
+          .isFilter('delivery_group_id', null)
+          .eq('delivery_type', 'pickup')
+          .inFilter('status', _kitchenStatuses)
+          .order('created_at', ascending: false)
+          .limit(500);
 
       final now = DateTime.now();
       final active = rows.where((m) {
@@ -395,15 +412,7 @@ class AdminService {
         // (marking one 'ready' used to push the whole group along).
         if (m['delivery_group_id'] != null) return false;
         if (m['delivery_type'] != 'pickup') return false;
-        if (!const [
-          'being_sourced', // commitment fee paid — kitchen starts here
-          'placed',
-          'preparing',
-          'awaiting_final_payment', // kitchen marked ready — student pays food cost
-          'ready',
-          'ready_for_pickup',
-          'out_for_delivery',
-        ].contains(m['status'])) {
+        if (!_kitchenStatuses.contains(m['status'])) {
           return false;
         }
         final scheduledFor = m['scheduled_for'] as String?;
@@ -741,10 +750,13 @@ class AdminService {
   /// The screen applies Active / Completed / Cancelled filtering client-side.
   Stream<List<AdminDeliveryGroupRow>> streamAllDeliveryGroups() async* {
     Future<List<AdminDeliveryGroupRow>> fetch() async {
+      // Pack 2: newest 500 only — an unbounded list hits the server's row
+      // cap and the URL length of the `in (...)` lookups below.
       final rows = await _client
           .from('delivery_groups')
           .select()
-          .order('created_at', ascending: false);
+          .order('created_at', ascending: false)
+          .limit(500);
 
       if (rows.isEmpty) return [];
 
@@ -801,8 +813,13 @@ class AdminService {
   /// from errand_requests. The screen applies status filtering client-side.
   Stream<List<AdminErrandRow>> streamErrandOrders() async* {
     Future<List<AdminErrandRow>> fetch() async {
-      final rows = await _client.from('orders').select().inFilter(
-          'type', ['errand', 'around']).order('created_at', ascending: false);
+      // Pack 2: newest 500 only (see streamAllDeliveryGroups).
+      final rows = await _client
+          .from('orders')
+          .select()
+          .inFilter('type', ['errand', 'around'])
+          .order('created_at', ascending: false)
+          .limit(500);
 
       if (rows.isEmpty) return [];
 

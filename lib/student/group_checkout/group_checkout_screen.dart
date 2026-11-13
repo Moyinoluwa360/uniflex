@@ -18,6 +18,7 @@ import '../ordering/cart_provider.dart';
 import '../ordering/order_confirmation_screen.dart';
 import '../services/student_providers.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
+import '../../shared/utils/app_error_mapper.dart';
 
 /// Join an existing group order by ID.
 class JoinGroupScreen extends ConsumerStatefulWidget {
@@ -58,7 +59,7 @@ class _JoinGroupScreenState extends ConsumerState<JoinGroupScreen> {
             ? 'Group not found. Check the code.'
             : raw.contains('GROUP_CLOSED')
                 ? 'This group is no longer accepting members.'
-                : 'Could not join: $e';
+                : 'Could not join. ${AppErrorMapper.map(e)}';
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(msg)));
       }
@@ -195,7 +196,7 @@ class _GroupCheckoutScreenState extends ConsumerState<GroupCheckoutScreen> {
             ? 'Insufficient wallet balance.'
             : raw.contains('ALREADY_CHECKED_OUT')
                 ? 'You already checked out of this group.'
-                : 'Checkout failed: $e';
+                : 'Checkout failed. ${AppErrorMapper.map(e)}';
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(msg)));
       }

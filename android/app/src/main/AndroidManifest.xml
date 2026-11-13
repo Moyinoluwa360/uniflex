@@ -1,20 +1,20 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Required for Supabase, Paystack WebView checkout, and HTTP calls -->
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- Required for admin product image picker (gallery) -->
-    <!-- Android ≤12: READ_EXTERNAL_STORAGE; Android 13+: READ_MEDIA_IMAGES -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
-    <!-- Required for geolocator (rider active-delivery position fetch only) -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- Pack 2: no storage / photo / location permissions. The admin image
+         picker uses the system photo picker (no permission needed), and no
+         feature reads the device location (Google Maps starts from "Your
+         location" by itself). Keeps Play's photo + location declarations
+         and Apple's location warning away. -->
     <!-- Required for FCM push notifications on Android 13+ -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="Uniflex"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules">
         <activity
             android:name=".MainActivity"
             android:exported="true"

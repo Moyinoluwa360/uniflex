@@ -314,7 +314,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                         children: [
                           AppListRow(
                             leadingIcon: AppIcons.savings,
-                            title: 'Saving Plan',
+                            title: 'Spending budget',
                             subtitle:
                                 'Set a daily, weekly, or monthly spending budget',
                             onTap: () => Navigator.of(context).push(

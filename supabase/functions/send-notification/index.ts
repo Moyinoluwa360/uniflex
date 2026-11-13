@@ -25,6 +25,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { serviceKey, allServiceKeys } from "../_shared/keys.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -113,7 +114,7 @@ serve(async (req: Request) => {
     // checks that the caller may contact that customer and resolves the
     // token itself. Previously there was NO auth check here at all, so
     // anyone holding a device token could push to it.
-    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    const svcKey = serviceKey() ?? ''
     const presented = (req.headers.get('Authorization') ?? '')
       .replace(/^Bearer\s+/i, '')
       .trim()
@@ -122,7 +123,7 @@ serve(async (req: Request) => {
     const triggerSecret = Deno.env.get('PUSH_TRIGGER_SECRET') ?? ''
     const ok =
       presented !== '' &&
-      ((serviceKey !== '' && presented === serviceKey) ||
+      (allServiceKeys().includes(presented) ||
         (triggerSecret !== '' && presented === triggerSecret))
     if (!ok) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -190,8 +191,8 @@ serve(async (req: Request) => {
       try {
         const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2')
         const supabaseUrl  = Deno.env.get('SUPABASE_URL')      ?? ''
-        const serviceKey   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-        const admin = createClient(supabaseUrl, serviceKey)
+        const svcKey   = serviceKey() ?? ''
+        const admin = createClient(supabaseUrl, svcKey)
         await admin
           .from('profiles')
           .update({ fcm_token: null })

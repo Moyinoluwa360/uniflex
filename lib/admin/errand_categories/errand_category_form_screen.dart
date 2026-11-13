@@ -8,6 +8,7 @@ import '../../shared/widgets/app_bar/uniflex_app_bar.dart';
 import '../../shared/widgets/buttons/app_button.dart';
 import '../../shared/widgets/inputs/app_text_field.dart';
 import '../services/admin_providers.dart';
+import '../../shared/utils/app_error_mapper.dart';
 
 /// Add or edit an Errand category. [category] is null when adding a new
 /// one. Returns `true` via `Navigator.pop` on save so the caller can
@@ -93,7 +94,7 @@ class _ErrandCategoryFormScreenState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Save failed: $e')),
+          SnackBar(content: Text('Save failed. ${AppErrorMapper.map(e)}')),
         );
         setState(() => _isSaving = false);
       }

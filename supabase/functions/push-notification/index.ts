@@ -30,6 +30,7 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { serviceKey, allServiceKeys } from "../_shared/keys.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -60,7 +61,7 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
 
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  const svcKey = serviceKey() ?? ''
   const presented = (req.headers.get('Authorization') ?? '')
     .replace(/^Bearer\s+/i, '')
     .trim()
@@ -69,13 +70,13 @@ Deno.serve(async (req: Request) => {
   const triggerSecret = Deno.env.get('PUSH_TRIGGER_SECRET') ?? ''
   const authorised =
     presented !== '' &&
-    ((serviceKey !== '' && presented === serviceKey) ||
+    (allServiceKeys().includes(presented) ||
       (triggerSecret !== '' && presented === triggerSecret))
   if (!authorised) {
     return json({ error: 'Unauthorized' }, 401)
   }
   // Key used for our own calls: prefer the secret key when one is configured.
-  const callKey = triggerSecret || serviceKey
+  const callKey = triggerSecret || svcKey
 
   let payload: Row & { record?: Row }
   try {

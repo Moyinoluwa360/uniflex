@@ -8,6 +8,7 @@ import '../../shared/models/order.dart';
 import '../../shared/order_breakdown/order_breakdown_provider.dart';
 import '../../shared/order_breakdown/order_breakdown_widget.dart';
 import '../../shared/utils/local_time.dart';
+import '../../shared/utils/rpc_result.dart';
 import '../../shared/services/auth/auth_providers.dart';
 import '../../shared/services/supabase/supabase_providers.dart';
 import '../../shared/services/wallet/wallet_providers.dart';
@@ -80,10 +81,11 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
 
     try {
       final client = ref.read(supabaseClientProvider);
-      await client.rpc('pay_final_amount', params: {
+      // A wrong / locked PIN comes back as {"error": …} (Pack 2).
+      throwIfRpcError(await client.rpc('pay_final_amount', params: {
         'p_order_id': o.id,
         'p_pin': pin,
-      });
+      }));
 
       ref.invalidate(walletBalanceProvider);
       ref.invalidate(walletInfoProvider);
@@ -134,10 +136,11 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
 
     try {
       final client = ref.read(supabaseClientProvider);
-      await client.rpc('pay_group_final_amount', params: {
+      // A wrong / locked PIN comes back as {"error": …} (Pack 2).
+      throwIfRpcError(await client.rpc('pay_group_final_amount', params: {
         'p_group_id': g.id,
         'p_pin': pin,
-      });
+      }));
 
       ref.invalidate(walletBalanceProvider);
       ref.invalidate(walletInfoProvider);

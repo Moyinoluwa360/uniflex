@@ -7,6 +7,7 @@ import '../../shared/theme/app_spacing.dart';
 import '../jobs/active_jobs_screen.dart';
 import '../jobs/rider_job.dart';
 import '../services/rider_providers.dart';
+import '../../shared/utils/app_error_mapper.dart';
 
 class RiderDashboardScreen extends ConsumerStatefulWidget {
   const RiderDashboardScreen({super.key});
@@ -27,7 +28,7 @@ class _RiderDashboardScreenState extends ConsumerState<RiderDashboardScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not update status: $e')),
+          SnackBar(content: Text('Could not update status. ${AppErrorMapper.map(e)}')),
         );
       }
     } finally {

@@ -24,6 +24,7 @@
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serviceKey, publishableKey } from "../_shared/keys.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -68,11 +69,11 @@ Deno.serve(async (req: Request) => {
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const serviceRoleKey = serviceKey() ?? "";
   const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY") ?? "";
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
-  const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") ?? "", {
+  const userClient = createClient(supabaseUrl, publishableKey() ?? "", {
     global: { headers: { Authorization: authHeader } },
   });
 
