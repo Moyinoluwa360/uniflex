@@ -25,6 +25,7 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { serviceKey, allServiceKeys } from "../_shared/keys.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -50,11 +51,11 @@ Deno.serve(async (req: Request) => {
 
   // This function is only called by the database trigger or webhook,
   // both of which supply the service-role key.
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  const svcKey = serviceKey() ?? ''
   const presented = (req.headers.get('Authorization') ?? '')
     .replace(/^Bearer\s+/i, '')
     .trim()
-  if (!serviceKey || presented !== serviceKey) {
+  if (!allServiceKeys().includes(presented)) {
     return json({ error: 'Unauthorized' }, 401)
   }
 
@@ -84,7 +85,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-  const admin = createClient(supabaseUrl, serviceKey)
+  const admin = createClient(supabaseUrl, svcKey)
 
   // Resolve notification content.
   const title = senderRole === 'admin'
@@ -138,7 +139,7 @@ Deno.serve(async (req: Request) => {
       const res = await fetch(`${supabaseUrl}/functions/v1/send-notification`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${serviceKey}`,
+          Authorization: `Bearer ${svcKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ token, title, body: preview, data }),

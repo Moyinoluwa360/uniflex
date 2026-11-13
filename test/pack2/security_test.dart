@@ -128,4 +128,25 @@ void main() {
           isTrue);
     });
   });
+
+  test('S-11 Edge Functions read keys through _shared/keys.ts (new keys first)',
+      () {
+    final dir = Directory('supabase/functions');
+    for (final f in dir.listSync(recursive: true).whereType<File>()) {
+      if (!f.path.endsWith('index.ts')) continue;
+      final src = f.readAsStringSync();
+      expect(
+          RegExp(r"""Deno\.env\.get\(['"]SUPABASE_(SERVICE_ROLE|ANON)_KEY['"]\)""")
+              .hasMatch(src),
+          isFalse,
+          reason: '${f.path} reads a legacy key directly');
+      // A local named like the helper would shadow it (runtime crash).
+      expect(RegExp(r'\b(const|let)\s+(serviceKey|publishableKey)\b').hasMatch(src),
+          isFalse,
+          reason: '${f.path} shadows a key helper');
+    }
+    final keys = File('supabase/functions/_shared/keys.ts').readAsStringSync();
+    expect(keys.contains('SUPABASE_SECRET_KEYS'), isTrue);
+    expect(keys.contains('SUPABASE_PUBLISHABLE_KEYS'), isTrue);
+  });
 }

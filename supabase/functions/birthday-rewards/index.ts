@@ -26,6 +26,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { serviceKey, allServiceKeys } from "../_shared/keys.ts";
 
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -36,7 +37,7 @@ serve(async (req: Request) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const svcKey = serviceKey()!
 
     // This endpoint credits wallets, so it must prove the caller is the
     // scheduler and not a passer-by. It previously performed NO auth check
@@ -44,14 +45,14 @@ serve(async (req: Request) => {
     // required — anyone who knew the URL could trigger payouts.
     const authHeader = req.headers.get('Authorization') ?? ''
     const presented = authHeader.replace(/^Bearer\s+/i, '').trim()
-    if (presented !== serviceKey) {
+    if (!allServiceKeys().includes(presented)) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' },
       })
     }
 
-    const supabase = createClient(supabaseUrl, serviceKey)
+    const supabase = createClient(supabaseUrl, svcKey)
 
     const { error } = await supabase.rpc('process_birthday_rewards')
 

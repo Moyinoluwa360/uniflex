@@ -31,6 +31,7 @@
 //          the app sends its anon key, which is public by design.)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serviceKey } from "../_shared/keys.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -88,7 +89,7 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const serviceRoleKey = serviceKey() ?? "";
   const termiiKey = Deno.env.get("TERMII_API_KEY") ?? "";
   if (!supabaseUrl || !serviceRoleKey) {
     console.error("signup: Supabase env missing");

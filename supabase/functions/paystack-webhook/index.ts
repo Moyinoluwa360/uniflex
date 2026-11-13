@@ -29,6 +29,7 @@
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serviceKey } from "../_shared/keys.ts";
 
 /// Constant-time comparison, so a caller cannot narrow in on the expected
 /// signature by timing our rejections.
@@ -118,7 +119,7 @@ Deno.serve(async (req: Request) => {
 
   const adminClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    serviceKey() ?? "",
   );
 
   // ── Work out whose wallet this belongs to ───────────────────────────
