@@ -4,6 +4,28 @@ Do these in order. Each step says where, what, why, and what to tell Claude afte
 Details: `docs/security-audit.md`, `docs/store-requirements.md`,
 `docs/store-submission-answers.md`.
 
+## Status (updated 2026-11-13)
+
+Done:
+- A1 `sb_secret_` key rotated, old key deleted, push verified (S-10).
+- A2 Edge Functions on the new keys, legacy API keys **disabled** (S-11) — the
+  installed app needs the NEW build (publishable key) to connect; Codemagic
+  `ENV_FILE_CONTENTS` must have the `sb_publishable_…` value.
+- C4 public sign-ups turned off (as reported by the owner).
+- C8 Security + Performance Advisors run: **no findings**.
+- C9 3 test wallets reconciled (S-15).
+
+**Deferred by the owner — still to do (no app build needed for any of them):**
+
+| Step | What | Impact while not done |
+|---|---|---|
+| C5a | Custom SMTP (Authentication → Emails → SMTP Settings; Resend / Brevo / Mailgun), then Authentication → Rate Limits → "Emails sent per hour" ≈ 30 | **Forgot password is likely not reaching students**: the built-in sender allows 2 e-mails/hour and only delivers to the project's team-member addresses. Sign-up and login are not affected. **Do before real students use the app.** |
+| C5b | Authentication → Attack Protection → "Prevent use of leaked passwords" (Pro plan) | None today; weaker password hygiene. |
+| C6 | Authentication → Emails → Templates → Reset Password must contain `{{ .Token }}` (6-digit code) | Same as C5a: reset codes may be missing from the e-mail. Check together with C5a. |
+| C7 | Backups: upgrade to **Pro** (Organization → Billing) for daily backups; Free projects pause after ~1 week inactive | None today; nothing could be restored after a mistake. **Do before launch.** |
+
+After C5a + C6: test "Forgot password" on a student account and tell Claude.
+
 ## A. Secrets — today
 
 1. **Rotate the Supabase secret key (S-10, critical).** The 8 Nov Android release
