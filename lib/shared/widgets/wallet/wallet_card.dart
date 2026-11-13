@@ -10,9 +10,12 @@ import '../buttons/app_icon_button.dart';
 import '../cards/app_card.dart';
 import '../format/money.dart';
 
-/// The wallet card: balance (with a hide/show eye), `Fund wallet`, and the
-/// virtual-account strip with its copy button, all in one `surface` card
-/// (radius 24, padding 20/22/18). No gradient, no coloured fill.
+/// The wallet card: balance (with a hide/show eye), `Fund wallet`, and —
+/// only when account data is passed — the virtual-account strip with its
+/// copy button, all in one `surface` card (radius 24, padding 20/22/18).
+/// No gradient, no coloured fill. With no account data the strip (and its
+/// divider) is not drawn at all; the student Wallet passes none while
+/// Paystack Dedicated NUBAN is unavailable for the business.
 ///
 /// Presentation only. The balance is hidden by default and shares ONE
 /// in-memory show/hide flag with the Home wallet panel
@@ -107,6 +110,7 @@ class _WalletCardState extends State<WalletCard> {
 
     final hasAccount =
         widget.accountTitle != null && widget.accountValue != null;
+    final showAccount = widget.accountLoading || hasAccount;
 
     return AppCard(
       large: true,
@@ -131,59 +135,61 @@ class _WalletCardState extends State<WalletCard> {
             icon: AppIcons.add,
             onPressed: widget.onFund,
           ),
-          const SizedBox(height: AppSpacing.md),
-          Divider(height: 1, thickness: 1, color: c.border),
-          const SizedBox(height: AppSpacing.md - 2),
-          Row(
-            key: const ValueKey('account-strip'),
-            children: [
-              Icon(AppIcons.bank, size: 20, color: c.textSecondary),
-              const SizedBox(width: AppSpacing.sm + 4),
-              Expanded(
-                child: widget.accountLoading
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Virtual Account',
-                              style: AppTypography.caption(c)),
-                          const SizedBox(height: 4),
-                          const SizedBox(
-                            height: 14,
-                            width: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        ],
-                      )
-                    : !hasAccount
-                        ? Text('Virtual account unavailable',
-                            style: AppTypography.meta(c))
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(widget.accountTitle!,
-                                  style: AppTypography.caption(c)),
-                              const SizedBox(height: 2),
-                              Text(
-                                widget.accountValue!,
-                                style: AppTypography.tabular(
-                                  AppTypography.body(c).copyWith(
-                                    fontWeight: widget.onCopyAccount != null
-                                        ? FontWeight.w600
-                                        : FontWeight.w500,
+          if (showAccount) ...[
+            const SizedBox(height: AppSpacing.md),
+            Divider(height: 1, thickness: 1, color: c.border),
+            const SizedBox(height: AppSpacing.md - 2),
+            Row(
+              key: const ValueKey('account-strip'),
+              children: [
+                Icon(AppIcons.bank, size: 20, color: c.textSecondary),
+                const SizedBox(width: AppSpacing.sm + 4),
+                Expanded(
+                  child: widget.accountLoading
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Virtual Account',
+                                style: AppTypography.caption(c)),
+                            const SizedBox(height: 4),
+                            const SizedBox(
+                              height: 14,
+                              width: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ],
+                        )
+                      : !hasAccount
+                          ? Text('Virtual account unavailable',
+                              style: AppTypography.meta(c))
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(widget.accountTitle!,
+                                    style: AppTypography.caption(c)),
+                                const SizedBox(height: 2),
+                                Text(
+                                  widget.accountValue!,
+                                  style: AppTypography.tabular(
+                                    AppTypography.body(c).copyWith(
+                                      fontWeight: widget.onCopyAccount != null
+                                          ? FontWeight.w600
+                                          : FontWeight.w500,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-              ),
-              if (widget.onCopyAccount != null)
-                AppIconButton(
-                  icon: AppIcons.copy,
-                  semanticLabel: 'Copy account number',
-                  onPressed: widget.onCopyAccount,
+                              ],
+                            ),
                 ),
-            ],
-          ),
+                if (widget.onCopyAccount != null)
+                  AppIconButton(
+                    icon: AppIcons.copy,
+                    semanticLabel: 'Copy account number',
+                    onPressed: widget.onCopyAccount,
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );

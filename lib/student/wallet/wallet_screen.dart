@@ -27,8 +27,9 @@ import '../../shared/widgets/inputs/app_text_field.dart';
 
 /// Student wallet screen — Phase 3:
 ///   • Prominent balance card with Fund Wallet button
-///   • Virtual Account section (attempts Paystack DVA, falls back to
-///     the Phase 1 placeholder if business verification not complete)
+///   • (No bank-transfer / virtual account section: Paystack Dedicated
+///     NUBAN is not available for the business. The `create-virtual-account`
+///     Edge Function and its service call stay for later.)
 ///   • Saving Plan shortcut
 ///   • Transaction history (top-ups, order payments, refunds)
 class WalletScreen extends ConsumerStatefulWidget {
@@ -39,38 +40,6 @@ class WalletScreen extends ConsumerStatefulWidget {
 }
 
 class _WalletScreenState extends ConsumerState<WalletScreen> {
-  /// Whether we've already attempted to fetch / create the VAN this
-  /// session so we don't re-call the Edge Function on every rebuild.
-  bool _vanAttempted = false;
-  VirtualAccountResult? _van;
-  bool _vanLoading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Kick off the VAN fetch on first mount (deferred to avoid calling
-    // during build).
-    WidgetsBinding.instance.addPostFrameCallback((_) => _fetchVan());
-  }
-
-  Future<void> _fetchVan() async {
-    if (_vanAttempted || !mounted) return;
-    setState(() {
-      _vanAttempted = true;
-      _vanLoading = true;
-    });
-    try {
-      final service = ref.read(walletServiceProvider);
-      final result = await service.createVirtualAccount();
-      if (mounted) setState(() => _van = result);
-    } catch (_) {
-      // Silently fall back — the wallet screen is still fully functional
-      // without the VAN.
-    } finally {
-      if (mounted) setState(() => _vanLoading = false);
-    }
-  }
-
   /// A collision-resistant, unguessable top-up reference.
   ///
   /// This used to be `UFX-<epoch millis>`, which anyone could enumerate. The
@@ -298,11 +267,9 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                       Text('Wallet', style: theme.textTheme.headlineMedium),
                       const SizedBox(height: AppSpacing.lg),
 
-                      // ── Wallet card (balance + virtual account) ────────
+                      // ── Wallet card (balance + Fund Wallet) ────────────
                       _WalletSection(
                         infoAsync: infoAsync,
-                        van: _van,
-                        vanLoading: _vanLoading,
                         onFundTap: _openFundWallet,
                         onRetry: () => ref.invalidate(walletInfoProvider),
                       ),
@@ -413,27 +380,21 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
 
 // ── Wallet card section ───────────────────────────────────────────────────────
 
-/// Maps the wallet + virtual-account data onto the presentational
-/// [WalletCard]. Copying the account number is the only behaviour here, and it
-/// is the same clipboard call + snackbar as before.
+/// Maps the wallet data onto the presentational [WalletCard]. No account
+/// strip is passed, so none is drawn.
 class _WalletSection extends StatelessWidget {
   const _WalletSection({
     required this.infoAsync,
-    required this.van,
-    required this.vanLoading,
     required this.onFundTap,
     required this.onRetry,
   });
 
   final AsyncValue<Map<String, dynamic>?> infoAsync;
-  final VirtualAccountResult? van;
-  final bool vanLoading;
   final VoidCallback onFundTap;
   final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
-    final v = van;
     return WalletCard(
       balance: infoAsync.hasValue
           ? ((infoAsync.value?['balance'] as num?)?.toDouble() ?? 0)
@@ -442,29 +403,6 @@ class _WalletSection extends StatelessWidget {
       hasError: infoAsync.hasError && !infoAsync.hasValue,
       onRetry: onRetry,
       onFund: onFundTap,
-      accountLoading: vanLoading,
-      accountTitle: v == null
-          ? null
-          : (v.isRealAccount
-              ? v.bankName
-              : 'Virtual Account (Pending Activation)'),
-      accountValue: v == null
-          ? null
-          : (v.isRealAccount
-              ? v.accountNumber
-              : 'Awaiting Paystack business verification'),
-      onCopyAccount: v?.isRealAccount == true
-          ? () {
-              Clipboard.setData(ClipboardData(text: v!.accountNumber));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Account number copied'),
-                  behavior: SnackBarBehavior.floating,
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            }
-          : null,
     );
   }
 }
