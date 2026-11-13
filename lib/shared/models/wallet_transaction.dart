@@ -45,7 +45,13 @@ class WalletTransaction {
   String get label => switch (source) {
         WalletTxSource.topup => 'Wallet Top-up',
         WalletTxSource.orderPayment => 'Order Payment',
+        WalletTxSource.commitmentFee => 'Delivery Fee',
+        WalletTxSource.giftPayment => 'Gift Payment',
         WalletTxSource.refund => 'Refund',
+        WalletTxSource.referralBonus => 'Referral Bonus',
+        WalletTxSource.birthdayReward => 'Birthday Reward',
+        WalletTxSource.adjustment => 'Balance Adjustment',
+        WalletTxSource.accountDeleted => 'Balance Forfeited',
       };
 
   /// Positive for credits, negative for debits — useful for display.
@@ -59,14 +65,34 @@ enum WalletTxType {
   static WalletTxType fromString(String s) => s == 'credit' ? credit : debit;
 }
 
+/// `wallet_transactions.source` (Pack 2: every server value has its own
+/// label; before, anything unknown — birthday rewards, referral bonuses,
+/// delivery fees — was shown as "Order Payment", even money coming in).
 enum WalletTxSource {
   topup,
   orderPayment,
-  refund;
+  commitmentFee,
+  giftPayment,
+  refund,
+  referralBonus,
+  birthdayReward,
+  adjustment,
+  accountDeleted;
 
   static WalletTxSource fromString(String s) => switch (s) {
         'topup' => topup,
         'refund' => refund,
+        'commitment_fee' => commitmentFee,
+        'gift_payment' => giftPayment,
+        'referral_bonus' => referralBonus,
+        'birthday_reward' => birthdayReward,
+        'adjustment' => adjustment,
+        'account_deleted' => accountDeleted,
+        // order_payment, group_order_payment and anything new.
         _ => orderPayment,
       };
+
+  /// Money spent on orders — what the spending budget counts.
+  bool get isSpending =>
+      this == orderPayment || this == commitmentFee || this == giftPayment;
 }

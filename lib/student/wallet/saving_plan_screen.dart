@@ -215,7 +215,7 @@ class _SavingPlanScreenState extends ConsumerState<SavingPlanScreen> {
                         .where(
                           (t) =>
                               t.type == WalletTxType.debit &&
-                              t.source == WalletTxSource.orderPayment &&
+                              t.source.isSpending &&
                               t.createdAt.isAfter(periodStart),
                         )
                         .toList();
